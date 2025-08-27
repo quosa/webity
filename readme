@@ -6,9 +6,9 @@ export fn add(a: i32, b: i32) i32 {
     return a + b;
 }
 
-zig build-lib -target wasm32-freestanding -dynamic wasm_module.zig -O ReleaseSmall
-
-zig build-lib -target wasm32-freestanding -dynamic life.zig -O ReleaseSmall
+<!-- zig build-lib -target wasm32-freestanding -dynamic life.zig -O ReleaseSmall -->
+<!-- https://ziggit.dev/t/zig-webassembly/2550/2 -->
+zig build-exe ./wasm_module.zig -target wasm32-freestanding -fno-entry -rdynamic
 
 <!DOCTYPE html>
 <html>
