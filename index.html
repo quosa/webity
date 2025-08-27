@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Wasm + Zig Test</h1>
+    <script type="module">
+      // const wasm = await WebAssembly.instantiateStreaming(fetch("life.wasm"));
+      const wasm = await WebAssembly.instantiateStreaming(fetch("wasm_module.wasm"));
+      console.log("2 + 3 =", wasm.instance.exports.add(2, 3));
+    </script>
+  </body>
+</html>

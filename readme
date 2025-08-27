@@ -1,0 +1,143 @@
+brew install zig
+zig version
+  0.15.1
+
+export fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+zig build-lib -target wasm32-freestanding -dynamic wasm_module.zig -O ReleaseSmall
+
+zig build-lib -target wasm32-freestanding -dynamic life.zig -O ReleaseSmall
+
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Wasm + Zig Test</h1>
+    <script type="module">
+      // const wasm = await WebAssembly.instantiateStreaming(fetch("life.wasm"));
+      const wasm = await WebAssembly.instantiateStreaming(fetch("life.a"));
+      console.log("2 + 3 =", wasm.instance.exports.add(2, 3));
+    </script>
+  </body>
+</html>
+
+python3 -m http.server 8080
+
+
+
+
+
+➜  wasm git:(main) ✗ source cc.sh
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                                                      │
+│ Do you trust the files in this folder?                                                                                                                               │
+│                                                                                                                                                                      │
+│ /opt/UnitySrc/personal/web/wasm                                                                                                                                      │
+│                                                                                                                                                                      │
+│ Claude Code may read, write, or execute files contained in this directory. This can pose security risks, so only use files from trusted sources.                     │
+│                                                                                                                                                                      │
+│ Learn more ( https://docs.anthropic.com/s/claude-code-security )                                                                                                     │
+│                                                                                                                                                                      │
+│ ❯ 1. Yes, proceed                                                                                                                                                    │
+│   2. No, exit                                                                                                                                                        │
+│                                                                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+   Enter to confirm · Esc to exit
+╭───────────────────────────────────────────────────╮
+│ ✻ Welcome to Claude Code!                         │
+│                                                   │
+│   /help for help, /status for your current setup  │
+│                                                   │
+│   cwd: /opt/UnitySrc/personal/web/wasm            │
+│                                                   │
+│   ─────────────────────────────────────────────── │
+│                                                   │
+│   Overrides (via env):                            │
+│                                                   │
+│   • API Base URL:                                 │
+│   https://uai-litellm.internal.unity.com          │
+╰───────────────────────────────────────────────────╯
+
+ Tips for getting started:
+
+  Run /init to create a CLAUDE.md file with instructions for Claude
+  Use Claude to help with file analysis, editing, bash commands and git
+  Be as specific as you would with another engineer for the best results
+  ✔ Run /terminal-setup to set up terminal integration
+
+ ● Claude command not found at /Users/jussiku/.local/bin/claude
+
+ ● ~/.local/bin is not in your PATH
+
+ ● Add it by running: export PATH="~/.local/bin:$PATH"
+
+> help
+
+⏺ Here are the available commands and features in Claude Code:
+
+  Getting Help
+
+  - /help - Get help with using Claude Code
+  - Report issues at https://github.com/anthropics/claude-code/issues
+
+  Available Tools
+
+  I have access to tools for:
+  - File Operations: Read, Write, Edit files
+  - Search: Grep for text patterns, Glob for file patterns
+  - Shell Commands: Execute bash commands
+  - Web Access: Fetch web content and search
+  - Task Management: TodoWrite for tracking complex tasks
+  - Git Operations: Status, commits, pull requests
+  - Specialized Agents: For complex multi-step tasks
+
+  Usage Tips
+
+  - I can read and modify files in your current directory
+  - I follow your existing code conventions and patterns
+  - I can run tests and builds to verify changes
+  - Use specific file paths when referencing code
+  - I work best with clear, specific requests
+
+  What would you like help with?
+
+> /doctor
+  ⎿  (no content)
+
+> /doctor
+  ⎿  (no content)
+
+> /status
+
+ Claude Code v1.0.93
+  L Session ID: 38e4305c-b348-448a-a1fb-bef63c8133bb
+
+ Working Directory
+  L /opt/UnitySrc/personal/web/wasm
+
+ Installation
+  L Claude command not found at /Users/jussiku/.local/bin/claude
+  L ~/.local/bin is not in your PATH
+  L Add it by running: export PATH="~/.local/bin:$PATH"
+
+ System Diagnostics • /doctor
+  ⚠ Multiple installations detected (2 found)
+  ⚠ Config mismatch: running npm-global but config says native
+
+ IDE Integration • /config
+  ✔ Connected to Visual Studio Code extension
+
+ Account
+  L Auth Token: ANTHROPIC_AUTH_TOKEN
+
+ API Configuration
+  L Anthropic Base URL: https://uai-litellm.internal.unity.com
+
+ Model • /model
+  L anthropic.claude-sonnet-4-20250514-v1:0
+
+
+ Press Enter to continue…
+
+
