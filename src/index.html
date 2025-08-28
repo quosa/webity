@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebAssembly Ball Physics Demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #1a1a1a;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    
+    h1 {
+      margin-bottom: 20px;
+      color: #00ffff;
+    }
+    
+    #canvas {
+      border: 2px solid #333;
+      background: #000;
+      display: block;
+    }
+    
+    .controls {
+      margin-top: 20px;
+      text-align: center;
+    }
+    
+    .error {
+      color: #ff4444;
+      background: rgba(255, 68, 68, 0.1);
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+      max-width: 500px;
+    }
+    
+    .loading {
+      color: #ffaa00;
+      margin-top: 20px;
+    }
+    
+    .info {
+      color: #aaa;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>WebAssembly Ball Physics Demo</h1>
+  
+  <canvas id="canvas" width="800" height="600"></canvas>
+  
+  <div class="controls">
+    <p><strong>Controls:</strong> WASD to move the ball around</p>
+    <p class="info">Built with TypeScript + WebGPU + Zig WebAssembly</p>
+  </div>
+  
+  <div id="loading" class="loading" style="display: none;">
+    Loading engine...
+  </div>
+  
+  <div id="error" class="error" style="display: none;"></div>
+  
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

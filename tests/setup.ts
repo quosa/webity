@@ -1,0 +1,91 @@
+// Mock WebGPU for testing
+Object.defineProperty(globalThis, 'navigator', {
+  value: {
+    gpu: {
+      requestAdapter: jest.fn().mockResolvedValue({
+        requestDevice: jest.fn().mockResolvedValue({
+          createBuffer: jest.fn(),
+          createCommandEncoder: jest.fn(),
+          queue: {
+            submit: jest.fn(),
+            writeBuffer: jest.fn(),
+          },
+        }),
+        limits: {
+          maxBufferSize: 1024 * 1024 * 1024,
+        },
+      }),
+      getPreferredCanvasFormat: jest.fn().mockReturnValue('bgra8unorm'),
+    },
+  },
+  writable: true,
+});
+
+// Mock WebAssembly for testing
+Object.defineProperty(globalThis, 'WebAssembly', {
+  value: {
+    instantiate: jest.fn().mockResolvedValue({
+      instance: {
+        exports: {
+          memory: {
+            buffer: new ArrayBuffer(1024 * 1024),
+          },
+          init: jest.fn(),
+          update: jest.fn(),
+          set_input: jest.fn(),
+          generate_sphere_mesh: jest.fn(),
+          get_vertex_buffer_offset: jest.fn().mockReturnValue(0),
+          get_uniform_buffer_offset: jest.fn().mockReturnValue(1024),
+          get_vertex_count: jest.fn().mockReturnValue(100),
+          get_collision_state: jest.fn().mockReturnValue(0),
+          set_position: jest.fn(),
+          apply_force: jest.fn(),
+        },
+      },
+    }),
+  },
+  writable: true,
+});
+
+// Mock fetch for WASM loading
+Object.defineProperty(globalThis, 'fetch', {
+  value: jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
+  }),
+  writable: true,
+});
+
+// Mock performance.now()
+Object.defineProperty(globalThis, 'performance', {
+  value: {
+    now: jest.fn(() => Date.now()),
+  },
+  writable: true,
+});
+
+// Mock requestAnimationFrame
+Object.defineProperty(globalThis, 'requestAnimationFrame', {
+  value: jest.fn((callback: FrameRequestCallback) => {
+    setTimeout(() => callback(performance.now()), 16);
+    return 1;
+  }),
+  writable: true,
+});
+
+Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+  value: jest.fn(),
+  writable: true,
+});
+
+// Mock HTML Canvas
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  value: jest.fn().mockReturnValue({
+    configure: jest.fn(),
+    getCurrentTexture: jest.fn().mockReturnValue({
+      createView: jest.fn().mockReturnValue({}),
+    }),
+  }),
+  writable: true,
+});

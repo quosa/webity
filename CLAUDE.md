@@ -43,3 +43,4 @@ The project follows a simple client-side WebAssembly pattern:
 - Zig 0.15.1 or compatible version
 - Python 3 for development server
 - Modern web browser with WebAssembly support
+- remember to run npm run typecheck && npm run test before claiming a phase complete
