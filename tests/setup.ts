@@ -1,10 +1,34 @@
+// Mock WebGPU constants
+Object.defineProperty(globalThis, 'GPUBufferUsage', {
+  value: {
+    VERTEX: 0x20,
+    UNIFORM: 0x40,
+    COPY_DST: 0x8,
+  },
+  writable: true,
+});
+
+Object.defineProperty(globalThis, 'GPUShaderStage', {
+  value: {
+    VERTEX: 1,
+    FRAGMENT: 2,
+    COMPUTE: 4,
+  },
+  writable: true,
+});
+
 // Mock WebGPU for testing
 Object.defineProperty(globalThis, 'navigator', {
   value: {
     gpu: {
       requestAdapter: jest.fn().mockResolvedValue({
         requestDevice: jest.fn().mockResolvedValue({
-          createBuffer: jest.fn(),
+          createBuffer: jest.fn().mockReturnValue({
+            getMappedRange: jest.fn().mockReturnValue(new ArrayBuffer(1024)),
+            unmap: jest.fn(),
+            destroy: jest.fn(),
+            size: 1024,
+          }),
           createCommandEncoder: jest.fn(),
           queue: {
             submit: jest.fn(),
