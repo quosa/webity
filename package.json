@@ -13,7 +13,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
-    "build:wasm": "zig build-lib -target wasm32-freestanding -dynamic game_engine.zig -O ReleaseSmall"
+    "verify": "npm run typecheck && npm run lint && npm test",
+    "build:wasm": "zig build-exe game_engine.zig -target wasm32-freestanding -fno-entry -rdynamic -O ReleaseSmall"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

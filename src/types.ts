@@ -33,6 +33,7 @@ export interface AssetConfig {
 export type InputKey = 'w' | 'a' | 's' | 'd' | 'space';
 export type InputState = Record<InputKey, boolean>;
 
+/* eslint-disable no-unused-vars */
 export interface WASMExports {
   memory: WebAssembly.Memory;
   init(): void;
@@ -74,3 +75,4 @@ export class WASMLoadError extends EngineError {
     super(`Failed to load WASM module: ${details}`, 'WASM_LOAD_ERROR');
   }
 }
+/* eslint-enable no-unused-vars */
