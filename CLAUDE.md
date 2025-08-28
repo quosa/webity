@@ -43,4 +43,9 @@ The project follows a simple client-side WebAssembly pattern:
 - Zig 0.15.1 or compatible version
 - Python 3 for development server
 - Modern web browser with WebAssembly support
-- remember to run npm run typecheck && npm run test before claiming a phase complete
+## Important Development Notes
+
+- **ALWAYS run `npm run verify` before declaring any phase or task complete**
+- The verify command runs: `npm run typecheck && npm run lint && npm test`
+- All 38 tests must pass and there should be no TypeScript or linting errors
+- This ensures code quality and prevents regressions between development phases

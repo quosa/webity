@@ -8,14 +8,16 @@ import {
   WebGPUNotSupportedError,
   WASMLoadError 
 } from './types.js';
+import { Renderer } from './renderer.js';
+import { InputManager } from './input.js';
+// import { BufferManager } from './buffer-manager.js';
 
 export class Engine implements GameEngine {
-  // @ts-expect-error - Canvas will be used in Phase 3 for renderer initialization
   private readonly canvas: HTMLCanvasElement;
   private wasm?: WASMExports;
-  // private renderer?: any; // Will be implemented in Phase 3
-  // private input?: any; // Will be implemented in Phase 3
-  // private bufferManager?: any; // Will be implemented in Phase 1
+  private renderer?: Renderer;
+  private input?: InputManager;
+  // private _bufferManager?: BufferManager; // Will be used for advanced buffer operations
   private running = false;
   private lastTime = 0;
   private animationId: number | undefined;
@@ -40,21 +42,21 @@ export class Engine implements GameEngine {
       this.wasm = await this.loadWASM();
       this.wasm.init();
 
-      // TODO: Initialize renderer (Phase 3)
-      // this.renderer = new Renderer();
-      // await this.renderer.init(this.canvas);
+      // Initialize renderer
+      this.renderer = new Renderer();
+      await this.renderer.init(this.canvas);
 
-      // TODO: Initialize buffer manager (Phase 1)
-      // this.bufferManager = new BufferManager(
+      // Initialize buffer manager (available for advanced buffer operations)
+      // this._bufferManager = new BufferManager(
       //   this.wasm.memory,
       //   this.renderer.getDevice()
       // );
 
-      // TODO: Initialize input manager (Phase 3)
-      // this.input = new InputManager();
-      // this.input.init((key: number, pressed: boolean) => {
-      //   this.wasm?.set_input(key, pressed);
-      // });
+      // Initialize input manager
+      this.input = new InputManager();
+      this.input.init((key: number, pressed: boolean) => {
+        this.wasm?.set_input(key, pressed);
+      });
 
       // Apply config if provided
       if (config?.physics) {
@@ -79,7 +81,7 @@ export class Engine implements GameEngine {
   }
 
   start(): void {
-    if (!this.wasm) {
+    if (!this.wasm || !this.renderer) {
       throw new EngineError('Engine not initialized', 'NOT_INITIALIZED');
     }
 
@@ -98,10 +100,8 @@ export class Engine implements GameEngine {
 
   dispose(): void {
     this.stop();
-    // TODO: Clean up input manager (Phase 3)
-    // this.input?.dispose();
-    // TODO: Clean up renderer (Phase 3)
-    // this.renderer?.dispose();
+    this.input?.dispose();
+    this.renderer?.dispose();
     // Clean up any other resources
   }
 
@@ -122,17 +122,17 @@ export class Engine implements GameEngine {
         this.handleCollisions(collisionState);
       }
 
-      // TODO: Update rendering (Phase 3)
-      // const vertexOffset = this.wasm!.get_vertex_buffer_offset();
-      // const vertexCount = this.wasm!.get_vertex_count();
-      // const uniformOffset = this.wasm!.get_uniform_buffer_offset();
+      // Update rendering
+      const vertexOffset = this.wasm!.get_vertex_buffer_offset();
+      const vertexCount = this.wasm!.get_vertex_count();
+      const uniformOffset = this.wasm!.get_uniform_buffer_offset();
       
-      // this.renderer!.render(
-      //   this.wasm!.memory.buffer,
-      //   vertexOffset,
-      //   vertexCount,
-      //   uniformOffset
-      // );
+      this.renderer!.render(
+        this.wasm!.memory.buffer,
+        vertexOffset,
+        vertexCount,
+        uniformOffset
+      );
 
     } catch (error) {
       console.error('Game loop error:', error);

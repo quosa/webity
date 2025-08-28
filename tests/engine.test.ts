@@ -4,7 +4,17 @@ import { EngineError, WebGPUNotSupportedError } from '../src/types.js';
 // Mock HTML canvas element
 const mockCanvas = {
   id: 'test-canvas',
-  getContext: jest.fn(),
+  getContext: jest.fn((contextType: string) => {
+    if (contextType === 'webgpu') {
+      return {
+        configure: jest.fn(),
+        getCurrentTexture: jest.fn().mockReturnValue({
+          createView: jest.fn().mockReturnValue({}),
+        }),
+      };
+    }
+    return null;
+  }),
 } as unknown as HTMLCanvasElement;
 
 describe('Engine', () => {
@@ -29,7 +39,21 @@ describe('Engine', () => {
                 destroy: jest.fn(),
                 size: 1024,
               }),
-              createCommandEncoder: jest.fn(),
+              createCommandEncoder: jest.fn().mockReturnValue({
+                beginRenderPass: jest.fn().mockReturnValue({
+                  setPipeline: jest.fn(),
+                  setBindGroup: jest.fn(),
+                  setVertexBuffer: jest.fn(),
+                  draw: jest.fn(),
+                  end: jest.fn(),
+                }),
+                finish: jest.fn().mockReturnValue({}),
+              }),
+              createShaderModule: jest.fn().mockReturnValue({}),
+              createBindGroupLayout: jest.fn().mockReturnValue({}),
+              createBindGroup: jest.fn().mockReturnValue({}),
+              createPipelineLayout: jest.fn().mockReturnValue({}),
+              createRenderPipeline: jest.fn().mockReturnValue({}),
               queue: {
                 submit: jest.fn(),
                 writeBuffer: jest.fn(),

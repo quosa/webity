@@ -18,11 +18,16 @@
     "GPUBuffer": "readonly", 
     "GPUBufferUsage": "readonly",
     "GPUShaderStage": "readonly",
+    "GPUCanvasContext": "readonly",
+    "GPURenderPipeline": "readonly",
+    "GPUBindGroup": "readonly",
+    "GPUFeatureName": "readonly",
+    "GPUTextureFormat": "readonly",
     "WebAssembly": "readonly"
   },
   "rules": {
     "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-console": ["warn", { "allow": ["warn", "error", "log"] }],
     "prefer-const": "error",
     "no-var": "error",
     "no-duplicate-imports": "error",

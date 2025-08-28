@@ -1,0 +1,127 @@
+// Main entry point for the bouncing ball demo
+import { Engine } from './engine.js';
+import { AssetConfig } from './types.js';
+
+// Show loading indicator
+function showLoading(show: boolean): void {
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) {
+    loadingEl.style.display = show ? 'block' : 'none';
+  }
+}
+
+// Show error message
+function showError(message: string): void {
+  const errorEl = document.getElementById('error');
+  if (errorEl) {
+    errorEl.textContent = message;
+    errorEl.style.display = 'block';
+  }
+}
+
+// Hide error message
+function hideError(): void {
+  const errorEl = document.getElementById('error');
+  if (errorEl) {
+    errorEl.style.display = 'none';
+  }
+}
+
+// Main demo function
+async function startDemo(): Promise<void> {
+  try {
+    showLoading(true);
+    hideError();
+
+    console.log('Starting WebAssembly Ball Physics Demo...');
+    
+    const engine = new Engine('canvas');
+    
+    // Initialize engine with physics configuration
+    await engine.init({
+      physics: {
+        gravity: -9.8,
+        friction: 0.1,
+        bounds: { x: 5, y: 5, z: 5 }
+      }
+    });
+
+    console.log('Engine initialized successfully');
+
+    // Load ball assets
+    const assets: AssetConfig = {
+      ball: { 
+        segments: 16, // Lower segment count for better performance
+        radius: 0.5 
+      }
+    };
+
+    await engine.loadAssets(assets);
+    console.log('Assets loaded successfully');
+
+    // Start the game loop
+    engine.start();
+    console.log('Game loop started - use WASD to move the ball!');
+
+    showLoading(false);
+
+    // Handle cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      console.log('Cleaning up engine...');
+      engine.dispose();
+    });
+
+    // Handle page visibility changes to pause/resume
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        engine.stop();
+        console.log('Game paused (tab hidden)');
+      } else {
+        engine.start();
+        console.log('Game resumed (tab visible)');
+      }
+    });
+
+    // Add some helpful info to the page
+    updateControlsInfo();
+    
+  } catch (error) {
+    console.error('Failed to start demo:', error);
+    showLoading(false);
+    
+    // Show user-friendly error message
+    if (error instanceof Error) {
+      if (error.message.includes('WebGPU')) {
+        showError('WebGPU is not supported in this browser. Please use Chrome 113+, Edge 113+, or Firefox with WebGPU enabled.');
+      } else if (error.message.includes('Canvas')) {
+        showError('Canvas element not found. Make sure the HTML page has a canvas with id="canvas".');
+      } else if (error.message.includes('WASM')) {
+        showError('Failed to load WebAssembly module. Make sure game_engine.wasm is available.');
+      } else {
+        showError(`Engine initialization failed: ${error.message}`);
+      }
+    } else {
+      showError('An unknown error occurred while starting the demo.');
+    }
+  }
+}
+
+// Update controls information
+function updateControlsInfo(): void {
+  const infoElements = document.querySelectorAll('.info');
+  infoElements.forEach(el => {
+    if (el.textContent?.includes('Built with')) {
+      el.innerHTML = `
+        Built with TypeScript + WebGPU + Zig WebAssembly<br>
+        <small>Physics: Gravity, collision detection, and boundary enforcement</small>
+      `;
+    }
+  });
+}
+
+// Start demo when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startDemo);
+} else {
+  startDemo();
+}

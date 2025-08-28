@@ -20,10 +20,22 @@ describe('WASM Integration Tests', () => {
       return;
     }
 
-    // Mock HTML canvas element
+    // Mock HTML canvas element with proper WebGPU context
     const mockCanvas = {
       id: 'test-canvas',
-      getContext: jest.fn(),
+      getContext: jest.fn((contextType: string) => {
+        if (contextType === 'webgpu') {
+          return {
+            configure: jest.fn(),
+            getCurrentTexture: jest.fn().mockReturnValue({
+              createView: jest.fn().mockReturnValue({}),
+            }),
+          };
+        }
+        return null;
+      }),
+      width: 800,
+      height: 600,
     } as unknown as HTMLCanvasElement;
 
     document.getElementById = jest.fn().mockReturnValue(mockCanvas);

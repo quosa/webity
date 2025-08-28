@@ -29,7 +29,21 @@ Object.defineProperty(globalThis, 'navigator', {
             destroy: jest.fn(),
             size: 1024,
           }),
-          createCommandEncoder: jest.fn(),
+          createCommandEncoder: jest.fn().mockReturnValue({
+            beginRenderPass: jest.fn().mockReturnValue({
+              setPipeline: jest.fn(),
+              setBindGroup: jest.fn(),
+              setVertexBuffer: jest.fn(),
+              draw: jest.fn(),
+              end: jest.fn(),
+            }),
+            finish: jest.fn().mockReturnValue({}),
+          }),
+          createShaderModule: jest.fn().mockReturnValue({}),
+          createBindGroupLayout: jest.fn().mockReturnValue({}),
+          createBindGroup: jest.fn().mockReturnValue({}),
+          createPipelineLayout: jest.fn().mockReturnValue({}),
+          createRenderPipeline: jest.fn().mockReturnValue({}),
           queue: {
             submit: jest.fn(),
             writeBuffer: jest.fn(),
@@ -103,13 +117,42 @@ Object.defineProperty(globalThis, 'cancelAnimationFrame', {
   writable: true,
 });
 
-// Mock HTML Canvas
+// Mock HTML Canvas with proper WebGPU context
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-  value: jest.fn().mockReturnValue({
-    configure: jest.fn(),
-    getCurrentTexture: jest.fn().mockReturnValue({
-      createView: jest.fn().mockReturnValue({}),
-    }),
+  value: jest.fn((contextType: string) => {
+    if (contextType === 'webgpu') {
+      return {
+        configure: jest.fn(),
+        getCurrentTexture: jest.fn().mockReturnValue({
+          createView: jest.fn().mockReturnValue({}),
+        }),
+      };
+    }
+    return null;
   }),
+  writable: true,
+});
+
+// Ensure document.getElementById returns a canvas with proper mocking
+const mockCanvas = {
+  id: 'test-canvas',
+  getContext: jest.fn((contextType: string) => {
+    if (contextType === 'webgpu') {
+      return {
+        configure: jest.fn(),
+        getCurrentTexture: jest.fn().mockReturnValue({
+          createView: jest.fn().mockReturnValue({}),
+        }),
+      };
+    }
+    return null;
+  }),
+  width: 800,
+  height: 600,
+} as unknown as HTMLCanvasElement;
+
+// Mock document.getElementById to return our mock canvas
+Object.defineProperty(document, 'getElementById', {
+  value: jest.fn().mockReturnValue(mockCanvas),
   writable: true,
 });
