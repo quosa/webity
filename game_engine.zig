@@ -31,9 +31,18 @@ const Mat4 = struct {
 var vertex_buffer: [10000]f32 = undefined;
 var vertex_count: u32 = 0;
 
-var model_matrix: Mat4 = Mat4.identity();
-var view_matrix: Mat4 = Mat4.identity();
-var projection_matrix: Mat4 = Mat4.identity();
+// Uniform buffer structure to ensure contiguous memory layout
+const Uniforms = struct {
+    model: Mat4,
+    view: Mat4,
+    projection: Mat4,
+};
+
+var uniforms: Uniforms = Uniforms{
+    .model = Mat4.identity(),
+    .view = Mat4.identity(),
+    .projection = Mat4.identity(),
+};
 
 var ball_position: Vec3 = .{ .x = 0, .y = 0, .z = 2 };
 var ball_velocity: Vec3 = .{ .x = 0, .y = 0, .z = 0 };
@@ -44,11 +53,11 @@ var collision_state: u8 = 0; // Bitmask for collisions
 
 // Exports
 export fn init() void {
-    // Set up view matrix (camera at (0, 0, 10) looking at origin) - was 0,2,5
-    view_matrix = createLookAt(Vec3{ .x = 0, .y = 0, .z = 10 }, Vec3{ .x = 0, .y = 0, .z = 0 }, Vec3{ .x = 0, .y = 1, .z = 0 });
+    // Set up view matrix (camera at (0, 0, 20) looking at ball center) - moved back for better view
+    uniforms.view = createLookAt(Vec3{ .x = 0, .y = 0, .z = 20 }, Vec3{ .x = 0, .y = 0, .z = 2 }, Vec3{ .x = 0, .y = 1, .z = 0 });
 
     // Set up projection matrix (FOV 60°, aspect 4:3, near 0.1, far 100)
-    projection_matrix = createPerspective(60.0, 1.333, 0.1, 100.0);
+    uniforms.projection = createPerspective(60.0, 1.333, 0.1, 100.0);
 }
 
 export fn update(delta_time: f32) void {
@@ -92,10 +101,10 @@ export fn update(delta_time: f32) void {
     // No collision detection in debug mode
 
     // Update model matrix with ball position
-    model_matrix = Mat4.identity();
-    model_matrix.data[12] = ball_position.x;
-    model_matrix.data[13] = ball_position.y;
-    model_matrix.data[14] = ball_position.z;
+    uniforms.model = Mat4.identity();
+    uniforms.model.data[12] = ball_position.x;
+    uniforms.model.data[13] = ball_position.y;
+    uniforms.model.data[14] = ball_position.z;
 }
 
 export fn set_input(key: u8, pressed: bool) void {
@@ -127,7 +136,7 @@ export fn get_vertex_buffer_offset() u32 {
 }
 
 export fn get_uniform_buffer_offset() u32 {
-    return @intFromPtr(&model_matrix);
+    return @intFromPtr(&uniforms);
 }
 
 export fn get_vertex_count() u32 {
@@ -273,11 +282,12 @@ fn createPerspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
     const f = 1.0 / @tan(fov * std.math.pi / 360.0);
     const range_inv = 1.0 / (near - far);
 
+    // WebGPU uses Z range [0, 1] instead of OpenGL's [-1, 1]
     return Mat4{ .data = .{
-        f / aspect, 0, 0,                            0,
-        0,          f, 0,                            0,
-        0,          0, (far + near) * range_inv,     -1,
-        0,          0, 2.0 * far * near * range_inv, 0,
+        f / aspect, 0, 0,                        0,
+        0,          f, 0,                        0,
+        0,          0, far * range_inv,          -1,
+        0,          0, far * near * range_inv,   0,
     } };
 }
 
