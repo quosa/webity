@@ -1,12 +1,12 @@
 // Main engine class with error handling and lifecycle management
-import { 
-  EngineConfig, 
-  AssetConfig, 
-  WASMExports, 
-  GameEngine, 
+import {
+  EngineConfig,
+  AssetConfig,
+  WASMExports,
+  GameEngine,
   EngineError,
   WebGPUNotSupportedError,
-  WASMLoadError 
+  WASMLoadError
 } from './types.js';
 import { Renderer } from './renderer.js';
 import { InputManager } from './input.js';
@@ -125,8 +125,16 @@ export class Engine implements GameEngine {
       // Update rendering
       const vertexOffset = this.wasm!.get_vertex_buffer_offset();
       const vertexCount = this.wasm!.get_vertex_count();
+
+      // Debug: log ball position and rendering info every few frames
+      if (Math.floor(performance.now() / 1000) !== Math.floor((performance.now() - 16) / 1000)) {
+        const x = (this.wasm as any).get_ball_position_x();
+        const y = (this.wasm as any).get_ball_position_y();
+        const z = (this.wasm as any).get_ball_position_z();
+        console.log(`🎾 Ball: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) | Camera: (0, 0, 10) → (0, 0, 0) | Vertices: ${vertexCount}`);
+      }
       const uniformOffset = this.wasm!.get_uniform_buffer_offset();
-      
+
       this.renderer!.render(
         this.wasm!.memory.buffer,
         vertexOffset,

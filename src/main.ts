@@ -51,7 +51,7 @@ async function startDemo(): Promise<void> {
     // Load ball assets
     const assets: AssetConfig = {
       ball: { 
-        segments: 16, // Lower segment count for better performance
+        segments: 8, // Very low segment count for debugging
         radius: 0.5 
       }
     };
@@ -62,6 +62,24 @@ async function startDemo(): Promise<void> {
     // Start the game loop
     engine.start();
     console.log('Game loop started - use WASD to move the ball!');
+
+    // Add stop/start button functionality
+    const stopButton = document.getElementById('stopButton') as HTMLButtonElement;
+    const startButton = document.getElementById('startButton') as HTMLButtonElement;
+    
+    stopButton?.addEventListener('click', () => {
+      engine.stop();
+      console.log('🛑 Engine stopped for debugging');
+      stopButton.style.display = 'none';
+      startButton.style.display = 'inline-block';
+    });
+    
+    startButton?.addEventListener('click', () => {
+      engine.start();
+      console.log('▶️ Engine restarted');
+      startButton.style.display = 'none';
+      stopButton.style.display = 'inline-block';
+    });
 
     showLoading(false);
 

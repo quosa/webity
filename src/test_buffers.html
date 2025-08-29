@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WebGPU Vertex Buffer Triangle</title>
+  <style>
+    canvas { border: 1px solid black; }
+  </style>
+</head>
+<body>
+  <canvas id="gfx" width="512" height="512"></canvas>
+  <script type="module">
+    async function init() {
+      if (!navigator.gpu) {
+        alert("WebGPU not supported");
+        return;
+      }
+
+      const canvas = document.getElementById("gfx");
+      const adapter = await navigator.gpu.requestAdapter();
+      const device = await adapter.requestDevice();
+      const context = canvas.getContext("webgpu");
+
+      const format = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({
+        device,
+        format,
+        alphaMode: "opaque"
+      });
+
+      // Interleaved vertex data: position(x,y) + color(r,g,b)
+      const vertexData = new Float32Array([
+        //  X,     Y,     R, G, B
+        -0.5, -0.5,   1.0, 0.0, 0.0,  // left  - red
+         0.5, -0.5,   0.0, 1.0, 0.0,  // right - green
+         0.0,  0.5,   0.0, 0.0, 1.0   // top   - blue
+      ]);
+
+      const vertexBuffer = device.createBuffer({
+        size: vertexData.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Float32Array(vertexBuffer.getMappedRange()).set(vertexData);
+      vertexBuffer.unmap();
+
+      // WGSL shaders
+      const shaderCode = `
+        struct VSOut {
+          @builtin(position) pos : vec4<f32>,
+          @location(0) color : vec3<f32>
+        };
+
+        @vertex
+        fn vs_main(@location(0) inPos: vec2<f32>,
+                   @location(1) inColor: vec3<f32>) -> VSOut {
+          var out: VSOut;
+          out.pos = vec4<f32>(inPos, 0.0, 1.0);
+          out.color = inColor;
+          return out;
+        }
+
+        @fragment
+        fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+          return vec4<f32>(in.color, 1.0);
+        }
+      `;
+
+      const shaderModule = device.createShaderModule({ code: shaderCode });
+
+      const pipeline = device.createRenderPipeline({
+        layout: "auto",
+        vertex: {
+          module: shaderModule,
+          entryPoint: "vs_main",
+          buffers: [{
+            arrayStride: 5 * 4, // 5 floats per vertex * 4 bytes
+            attributes: [
+              { shaderLocation: 0, offset: 0,              format: "float32x2" }, // position
+              { shaderLocation: 1, offset: 2 * 4,          format: "float32x3" }  // color
+            ],
+          }],
+        },
+        fragment: {
+          module: shaderModule,
+          entryPoint: "fs_main",
+          targets: [{ format }]
+        },
+        primitive: {
+          topology: "triangle-list",
+          cullMode: "none"
+        }
+      });
+
+      function frame() {
+        const encoder = device.createCommandEncoder();
+        const textureView = context.getCurrentTexture().createView();
+
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: textureView,
+            clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 },
+            loadOp: "clear",
+            storeOp: "store"
+          }]
+        });
+
+        pass.setPipeline(pipeline);
+        pass.setVertexBuffer(0, vertexBuffer);
+        pass.draw(3); // 3 vertices
+        pass.end();
+
+        device.queue.submit([encoder.finish()]);
+        requestAnimationFrame(frame);
+      }
+
+      requestAnimationFrame(frame);
+    }
+
+    init();
+  </script>
+</body>
+</html>

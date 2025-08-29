@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
+  plugins: [basicSsl()],
   root: './src',
   publicDir: '../public',
   build: {
@@ -16,7 +18,7 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
-    port: 8080,
+    port: 5173,
     host: true,
     fs: {
       allow: ['..'],

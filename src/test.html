@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WebGPU Red Triangle</title>
+  <style>
+    canvas { border: 1px solid black; }
+  </style>
+</head>
+<body>
+  <canvas id="gfx" width="512" height="512"></canvas>
+  <script type="module">
+    async function init() {
+      if (!navigator.gpu) {
+        alert("WebGPU not supported");
+        return;
+      }
+
+      const canvas = document.getElementById("gfx");
+      const adapter = await navigator.gpu.requestAdapter();
+      const device = await adapter.requestDevice();
+      const context = canvas.getContext("webgpu");
+
+      const format = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({
+        device,
+        format,
+        alphaMode: "opaque"
+      });
+
+      // WGSL shaders
+      const shaderCode = `
+        @vertex
+        fn vs_main(@builtin(vertex_index) vid: u32) -> @builtin(position) vec4<f32> {
+            var positions = array<vec2<f32>, 3>(
+                vec2<f32>(-0.5, -0.5),
+                vec2<f32>( 0.5, -0.5),
+                vec2<f32>( 0.0,  0.5)
+            );
+            return vec4<f32>(positions[vid], 0.0, 1.0);
+        }
+
+        @fragment
+        fn fs_main() -> @location(0) vec4<f32> {
+            return vec4<f32>(1.0, 0.0, 0.0, 1.0); // Red
+        }
+      `;
+
+      const shaderModule = device.createShaderModule({ code: shaderCode });
+
+      const pipeline = device.createRenderPipeline({
+        layout: "auto",
+        vertex: {
+          module: shaderModule,
+          entryPoint: "vs_main"
+        },
+        fragment: {
+          module: shaderModule,
+          entryPoint: "fs_main",
+          targets: [{ format }]
+        },
+        primitive: {
+          topology: "triangle-list",
+          cullMode: "none"
+        }
+      });
+
+      function frame() {
+        const encoder = device.createCommandEncoder();
+        const textureView = context.getCurrentTexture().createView();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: textureView,
+            clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 },
+            loadOp: "clear",
+            storeOp: "store"
+          }]
+        });
+
+        pass.setPipeline(pipeline);
+        pass.draw(3); // 3 vertices -> 1 triangle
+        pass.end();
+
+        device.queue.submit([encoder.finish()]);
+        requestAnimationFrame(frame);
+      }
+
+      requestAnimationFrame(frame);
+    }
+
+    init();
+  </script>
+</body>
+</html>

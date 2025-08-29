@@ -2,9 +2,9 @@
 const std = @import("std");
 
 // Constants
-const GRAVITY: f32 = -9.8;
+const GRAVITY: f32 = -2.0;
 const DAMPING: f32 = 0.99;
-const RESTITUTION: f32 = 0.8;
+const RESTITUTION: f32 = 0.95;
 const BOUNDS: Vec3 = .{ .x = 5.0, .y = 5.0, .z = 5.0 };
 
 // Types
@@ -35,21 +35,17 @@ var model_matrix: Mat4 = Mat4.identity();
 var view_matrix: Mat4 = Mat4.identity();
 var projection_matrix: Mat4 = Mat4.identity();
 
-var ball_position: Vec3 = .{ .x = 0, .y = 2, .z = 0 };
+var ball_position: Vec3 = .{ .x = 0, .y = 0, .z = 2 };
 var ball_velocity: Vec3 = .{ .x = 0, .y = 0, .z = 0 };
-var ball_radius: f32 = 0.5;
+var ball_radius: f32 = 5.0;
 
 var input_state: u8 = 0; // Bitmask for WASD
 var collision_state: u8 = 0; // Bitmask for collisions
 
 // Exports
 export fn init() void {
-    // Set up view matrix (camera at (0, 2, 5) looking at origin)
-    view_matrix = createLookAt(
-        Vec3{ .x = 0, .y = 2, .z = 5 },
-        Vec3{ .x = 0, .y = 0, .z = 0 },
-        Vec3{ .x = 0, .y = 1, .z = 0 }
-    );
+    // Set up view matrix (camera at (0, 0, 10) looking at origin) - was 0,2,5
+    view_matrix = createLookAt(Vec3{ .x = 0, .y = 0, .z = 10 }, Vec3{ .x = 0, .y = 0, .z = 0 }, Vec3{ .x = 0, .y = 1, .z = 0 });
 
     // Set up projection matrix (FOV 60°, aspect 4:3, near 0.1, far 100)
     projection_matrix = createPerspective(60.0, 1.333, 0.1, 100.0);
@@ -58,51 +54,42 @@ export fn init() void {
 export fn update(delta_time: f32) void {
     collision_state = 0;
 
-    // Apply input forces
-    var force = Vec3{ .x = 0, .y = 0, .z = 0 };
-    if (input_state & 0x01 != 0) force.z -= 5.0; // W
-    if (input_state & 0x02 != 0) force.x -= 5.0; // A
-    if (input_state & 0x04 != 0) force.z += 5.0; // S
-    if (input_state & 0x08 != 0) force.x += 5.0; // D
+    var position_changed = false;
+    const move_speed: f32 = 3.0;
 
-    // Apply gravity
-    force.y += GRAVITY;
-
-    // Update velocity (F = ma, assuming m = 1)
-    ball_velocity.x += force.x * delta_time;
-    ball_velocity.y += force.y * delta_time;
-    ball_velocity.z += force.z * delta_time;
-
-    // Apply damping
-    ball_velocity.x *= DAMPING;
-    ball_velocity.z *= DAMPING;
-
-    // Update position
-    ball_position.x += ball_velocity.x * delta_time;
-    ball_position.y += ball_velocity.y * delta_time;
-    ball_position.z += ball_velocity.z * delta_time;
-
-    // Collision detection and response
-    // Floor collision
-    if (ball_position.y - ball_radius < -BOUNDS.y) {
-        ball_position.y = -BOUNDS.y + ball_radius;
-        ball_velocity.y = -ball_velocity.y * RESTITUTION;
-        collision_state |= 0x01;
+    // Direct movement controls (no physics)
+    if (input_state & 0x01 != 0) { // W - move up
+        ball_position.y += move_speed * delta_time;
+        position_changed = true;
+    }
+    if (input_state & 0x02 != 0) { // A - move left
+        ball_position.x -= move_speed * delta_time;
+        position_changed = true;
+    }
+    if (input_state & 0x04 != 0) { // S - move down
+        ball_position.y -= move_speed * delta_time;
+        position_changed = true;
+    }
+    if (input_state & 0x08 != 0) { // D - move right
+        ball_position.x += move_speed * delta_time;
+        position_changed = true;
+    }
+    if (input_state & 0x10 != 0) { // + - move closer (negative Z)
+        ball_position.z -= move_speed * delta_time;
+        position_changed = true;
+    }
+    if (input_state & 0x20 != 0) { // - - move further (positive Z)
+        ball_position.z += move_speed * delta_time;
+        position_changed = true;
     }
 
-    // Wall collisions (X axis)
-    if (@abs(ball_position.x) + ball_radius > BOUNDS.x) {
-        ball_position.x = std.math.sign(ball_position.x) * (BOUNDS.x - ball_radius);
-        ball_velocity.x = -ball_velocity.x * RESTITUTION;
-        collision_state |= 0x02;
+    // Log position when it changes (for debugging)
+    if (position_changed) {
+        // Note: This won't actually print in WASM, but we can read it from JS
+        // We'll add a getter function for position debugging
     }
 
-    // Wall collisions (Z axis)
-    if (@abs(ball_position.z) + ball_radius > BOUNDS.z) {
-        ball_position.z = std.math.sign(ball_position.z) * (BOUNDS.z - ball_radius);
-        ball_velocity.z = -ball_velocity.z * RESTITUTION;
-        collision_state |= 0x02;
-    }
+    // No collision detection in debug mode
 
     // Update model matrix with ball position
     model_matrix = Mat4.identity();
@@ -117,6 +104,8 @@ export fn set_input(key: u8, pressed: bool) void {
         65 => @as(u8, 0x02), // A
         83 => @as(u8, 0x04), // S
         68 => @as(u8, 0x08), // D
+        61 => @as(u8, 0x10), // + (or =)
+        45 => @as(u8, 0x20), // -
         else => @as(u8, 0),
     };
 
@@ -128,8 +117,9 @@ export fn set_input(key: u8, pressed: bool) void {
 }
 
 export fn generate_sphere_mesh(segments: u32) void {
-    // Generate wireframe sphere
-    vertex_count = generateWireframeSphere(&vertex_buffer, segments);
+    _ = segments; // Unused in cube mode
+    // Generate simple wireframe cube for debugging
+    vertex_count = generateWireframeCube(&vertex_buffer);
 }
 
 export fn get_vertex_buffer_offset() u32 {
@@ -158,7 +148,52 @@ export fn apply_force(x: f32, y: f32, z: f32) void {
     ball_velocity.z += z;
 }
 
+export fn get_ball_position_x() f32 {
+    return ball_position.x;
+}
+
+export fn get_ball_position_y() f32 {
+    return ball_position.y;
+}
+
+export fn get_ball_position_z() f32 {
+    return ball_position.z;
+}
+
 // Helper functions
+fn generateWireframeCube(vertices: [*]f32) u32 {
+    const size: f32 = ball_radius;
+
+    // Cube vertices (8 corners)
+    const cube_verts = [_]f32{
+        -size, -size, -size, // 0
+        size, -size, -size, // 1
+        size, size, -size, // 2
+        -size, size, -size, // 3
+        -size, -size, size, // 4
+        size, -size, size, // 5
+        size, size, size, // 6
+        -size, size, size, // 7
+    };
+
+    // Wireframe edges (12 edges, 24 vertices)
+    const edges = [_]u32{
+        0, 1, 1, 2, 2, 3, 3, 0, // bottom face
+        4, 5, 5, 6, 6, 7, 7, 4, // top face
+        0, 4, 1, 5, 2, 6, 3, 7, // vertical edges
+    };
+
+    var index: u32 = 0;
+    for (edges) |vert_idx| {
+        vertices[index] = cube_verts[vert_idx * 3];
+        vertices[index + 1] = cube_verts[vert_idx * 3 + 1];
+        vertices[index + 2] = cube_verts[vert_idx * 3 + 2];
+        index += 3;
+    }
+
+    return index / 3; // Return vertex count
+}
+
 fn generateWireframeSphere(vertices: [*]f32, segments: u32) u32 {
     var index: u32 = 0;
 
@@ -227,9 +262,9 @@ fn createLookAt(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
     const u = cross(s, f);
 
     return Mat4{ .data = .{
-        s.x,  u.x,  -f.x, 0,
-        s.y,  u.y,  -f.y, 0,
-        s.z,  u.z,  -f.z, 0,
+        s.x,          u.x,          -f.x,        0,
+        s.y,          u.y,          -f.y,        0,
+        s.z,          u.z,          -f.z,        0,
         -dot(s, eye), -dot(u, eye), dot(f, eye), 1,
     } };
 }
@@ -239,9 +274,9 @@ fn createPerspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
     const range_inv = 1.0 / (near - far);
 
     return Mat4{ .data = .{
-        f / aspect, 0, 0,                      0,
-        0,          f, 0,                      0,
-        0,          0, (far + near) * range_inv, -1,
+        f / aspect, 0, 0,                            0,
+        0,          f, 0,                            0,
+        0,          0, (far + near) * range_inv,     -1,
         0,          0, 2.0 * far * near * range_inv, 0,
     } };
 }

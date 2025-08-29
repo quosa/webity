@@ -2,6 +2,13 @@ This project was to vibe a ts -> wasm/zig -> webgpu pipeline with claude code.
 
 The initial step was to have a wasm module that calculates two numbers and logs to console.
 
+TO RUN:
+
+npm run build:wasm
+cp game_engine.wasm public/
+npm run dev
+
+
 
 
 brew install zig
