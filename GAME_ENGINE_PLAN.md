@@ -176,10 +176,15 @@ public/
 
 **Verification:** ✅ All 44 TypeScript + 14 Zig tests passing, WASM builds successfully, dev server running
 
-#### Phase 6.2: Multi-Entity Architecture ⏳ PLANNED
-- [ ] **Entity Array System** - Replace single ball with `var entities: [MAX_ENTITIES]Entity` structure
-- [ ] **Ball-to-Ball Collision** - Implement sphere-sphere collision detection and response
-- [ ] **Dynamic Rendering** - Support variable entity count with efficient buffer management
+#### Phase 6.2: Multi-Entity Architecture ✅ COMPLETED
+- [x] **Entity Array System** - Replaced single ball with `var entities: [MAX_ENTITIES]Entity` structure
+- [x] **Ball-to-Ball Collision** - Implemented sphere-sphere collision detection and response with elastic collision physics
+- [x] **Dynamic Rendering** - Multi-entity rendering with per-entity uniform buffers (10 separate GPU buffers)
+- [x] **Scene Configuration API** - TypeScript methods: `engine.spawnBall()`, `engine.clearAllBalls()`, `engine.spawnMultiBallScene()`
+
+**Current Implementation:** ✅ All 4 balls visible and physics-simulated with individual transforms
+**Known Issue:** Separate uniform buffers approach doesn't scale to 1000+ entities
+**Future Optimization:** Phase 7 should implement instanced rendering or dynamic uniform offsets
 
 #### Phase 6.3: Enhanced Rendering & Scene Setup ⏳ PLANNED  
 - [ ] **Grid Floor Rendering** - Add wireframe grid floor for visual reference and depth perception

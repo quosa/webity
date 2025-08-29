@@ -93,6 +93,13 @@ async function startDemo(): Promise<void> {
       stopButton.style.display = 'inline-block';
     });
 
+    // Add multi-ball demo button functionality
+    const multiBallButton = document.getElementById('multiBallButton') as HTMLButtonElement;
+    multiBallButton?.addEventListener('click', () => {
+      engine.spawnMultiBallScene();
+      console.log(`🎾 Multi-ball scene spawned! ${engine.getEntityCount()} balls total`);
+    });
+
     showLoading(false);
 
     // Handle cleanup on page unload

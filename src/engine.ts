@@ -96,6 +96,51 @@ export class Engine implements GameEngine {
     // Clean up any other resources
   }
 
+  // Phase 6.2: Multi-entity scene management
+  spawnBall(x: number, y: number, z: number, radius = 0.5): number {
+    if (!this.wasm) {
+      throw new EngineError('Engine not initialized', 'NOT_INITIALIZED');
+    }
+    return this.wasm.spawn_entity(x, y, z, radius);
+  }
+
+  getEntityCount(): number {
+    if (!this.wasm) return 0;
+    return this.wasm.get_entity_count();
+  }
+
+  clearAllBalls(): void {
+    if (!this.wasm) return;
+    this.wasm.despawn_all_entities();
+  }
+
+  // Spawn multiple balls in a configured scene
+  spawnMultiBallScene(): void {
+    console.log(`🎾 Before clear: ${this.getEntityCount()} balls`);
+    this.clearAllBalls();
+    console.log(`🎾 After clear: ${this.getEntityCount()} balls`);
+    
+    // Spawn 4 balls closer together for collision interactions
+    const id1 = this.spawnBall(-1, 5, 0, 0.5);   // Left
+    console.log(`🎾 Spawned ball 1 (id ${id1}): ${this.getEntityCount()} balls total`);
+    const id2 = this.spawnBall(1, 6, 0, 0.5);    // Right  
+    console.log(`🎾 Spawned ball 2 (id ${id2}): ${this.getEntityCount()} balls total`);
+    const id3 = this.spawnBall(0, 7, -1, 0.5);   // Back
+    console.log(`🎾 Spawned ball 3 (id ${id3}): ${this.getEntityCount()} balls total`);
+    const id4 = this.spawnBall(0, 8, 1, 0.5);    // Front
+    console.log(`🎾 Spawned ball 4 (id ${id4}): ${this.getEntityCount()} balls total`);
+    
+    // Add some initial velocity to create interactions
+    if (this.wasm) {
+      this.wasm.set_entity_velocity(0, 0.5, 0, 0.2);   // Ball 0: slight right and forward push
+      this.wasm.set_entity_velocity(1, -0.3, 0, -0.1); // Ball 1: slight left and back push  
+      this.wasm.set_entity_velocity(2, 0.2, 0, 0.4);   // Ball 2: slight right and forward push
+      this.wasm.set_entity_velocity(3, -0.1, 0, -0.3); // Ball 3: slight left and back push
+    }
+    
+    console.log(`🎾 Final result: ${this.getEntityCount()} balls for multi-ball collision demo!`);
+  }
+
   private gameLoop = (): void => {
     if (!this.running) return;
 
@@ -113,24 +158,34 @@ export class Engine implements GameEngine {
         this.handleCollisions(collisionState);
       }
 
-      // Update rendering
+      // Update rendering for multiple entities
       const vertexOffset = this.wasm!.get_vertex_buffer_offset();
       const vertexCount = this.wasm!.get_vertex_count();
-
-      // Debug: log ball position and rendering info every few frames
-      if (Math.floor(performance.now() / 1000) !== Math.floor((performance.now() - 16) / 1000)) {
-        const x = (this.wasm as any).get_ball_position_x();
-        const y = (this.wasm as any).get_ball_position_y();
-        const z = (this.wasm as any).get_ball_position_z();
-        console.log(`🎾 Ball: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) | Camera: (0, 0, -20) → (0, 0, 2) | Vertices: ${vertexCount}`);
-      }
       const uniformOffset = this.wasm!.get_uniform_buffer_offset();
+      const entityCount = this.wasm!.get_entity_count();
 
-      this.renderer.render(
+      // Debug: log entity info every few frames
+      if (Math.floor(performance.now() / 1000) !== Math.floor((performance.now() - 16) / 1000)) {
+        console.log(`🎾 Entities: ${entityCount} | Vertices: ${vertexCount} | Camera controls: WASD`);
+        if (entityCount > 1) {
+          console.log('🎾 Multi-entity positions:');
+          for (let i = 0; i < entityCount; i++) {
+            const x = this.wasm!.get_entity_position_x(i);
+            const y = this.wasm!.get_entity_position_y(i);
+            const z = this.wasm!.get_entity_position_z(i);
+            console.log(`  Ball ${i}: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
+          }
+        }
+      }
+
+      // Render all active entities
+      this.renderer.renderMultipleEntities(
         this.wasm!.memory.buffer,
         vertexOffset,
         vertexCount,
-        uniformOffset
+        uniformOffset,
+        this.wasm!,
+        entityCount
       );
 
     } catch (error) {
@@ -146,6 +201,7 @@ export class Engine implements GameEngine {
     // Handle collision feedback (sound, particles, etc. in Phase 4)
     if (state & 0x01) console.warn('Floor collision');
     if (state & 0x02) console.warn('Wall collision');
+    if (state & 0x04) console.warn('🎾 Ball-to-ball collision!');
   }
 
   private async loadWASM(): Promise<WASMExports> {

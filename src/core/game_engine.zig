@@ -23,16 +23,57 @@ var physics_damping: f32 = 0.99;
 var physics_restitution: f32 = 0.8;
 var world_bounds: core.Vec3 = .{ .x = 8.0, .y = 8.0, .z = 8.0 };
 
-// Ball state
-var ball_position: core.Vec3 = .{ .x = 0, .y = 3, .z = 2 };
-var ball_velocity: core.Vec3 = .{ .x = 0, .y = 0, .z = 0 };
-var ball_radius: f32 = 0.5;
+// Entity system
+const MAX_ENTITIES: u32 = 10;
+
+const Entity = struct {
+    position: core.Vec3,
+    velocity: core.Vec3,
+    radius: f32,
+    active: bool,
+};
+
+var entities: [MAX_ENTITIES]Entity = undefined;
+var entity_count: u32 = 0;
 
 var input_state: u8 = 0; // Bitmask for WASD
 var collision_state: u8 = 0; // Bitmask for collisions
 
+fn initEntities() void {
+    // Initialize all entities as inactive
+    for (&entities) |*entity| {
+        entity.* = Entity{
+            .position = .{ .x = 0, .y = 0, .z = 0 },
+            .velocity = .{ .x = 0, .y = 0, .z = 0 },
+            .radius = 0.5,
+            .active = false,
+        };
+    }
+    entity_count = 0;
+    
+    // Spawn one initial ball for backward compatibility
+    _ = spawnEntity(0, 3, 2, 0.5);
+}
+
+fn spawnEntity(x: f32, y: f32, z: f32, radius: f32) u32 {
+    if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
+    
+    const index = entity_count;
+    entities[index] = Entity{
+        .position = .{ .x = x, .y = y, .z = z },
+        .velocity = .{ .x = 0, .y = 0, .z = 0 },
+        .radius = radius,
+        .active = true,
+    };
+    entity_count += 1;
+    return index;
+}
+
 // WASM Exports - thin wrappers around core functionality
 export fn init() void {
+    // Initialize entity system
+    initEntities();
+    
     // Set up initial view matrix using camera state
     updateViewMatrix();
 
@@ -86,6 +127,78 @@ fn simulatePhysicsWithConfig(position: *core.Vec3, velocity: *core.Vec3, delta_t
     }
 
     return local_collision_state;
+}
+
+fn checkEntityCollisions(delta_time: f32) void {
+    _ = delta_time; // Currently unused, but available for collision response
+    
+    // Check all pairs of active entities for collisions
+    for (0..entity_count) |i| {
+        if (!entities[i].active) continue;
+        
+        for (i + 1..entity_count) |j| {
+            if (!entities[j].active) continue;
+            
+            // Calculate distance between sphere centers
+            const dx = entities[i].position.x - entities[j].position.x;
+            const dy = entities[i].position.y - entities[j].position.y;
+            const dz = entities[i].position.z - entities[j].position.z;
+            const distance_squared = dx * dx + dy * dy + dz * dz;
+            const distance = @sqrt(distance_squared);
+            
+            const combined_radius = entities[i].radius + entities[j].radius;
+            
+            // Check if spheres are overlapping
+            if (distance < combined_radius and distance > 0.001) { // Avoid division by zero
+                // Calculate collision normal (from i to j)
+                const normal = core.Vec3{
+                    .x = dx / distance,
+                    .y = dy / distance,
+                    .z = dz / distance,
+                };
+                
+                // Separate the spheres to prevent overlap
+                const overlap = combined_radius - distance;
+                const separation = overlap * 0.5;
+                
+                entities[i].position.x += normal.x * separation;
+                entities[i].position.y += normal.y * separation;
+                entities[i].position.z += normal.z * separation;
+                
+                entities[j].position.x -= normal.x * separation;
+                entities[j].position.y -= normal.y * separation;
+                entities[j].position.z -= normal.z * separation;
+                
+                // Calculate relative velocity
+                const rel_vel = core.Vec3{
+                    .x = entities[i].velocity.x - entities[j].velocity.x,
+                    .y = entities[i].velocity.y - entities[j].velocity.y,
+                    .z = entities[i].velocity.z - entities[j].velocity.z,
+                };
+                
+                // Velocity component along collision normal
+                const vel_along_normal = core.dot(rel_vel, normal);
+                
+                // Do not resolve if velocities are separating
+                if (vel_along_normal > 0) continue;
+                
+                // Apply collision response (elastic collision, equal mass assumption)
+                const restitution = physics_restitution;
+                const impulse_scalar = -(1 + restitution) * vel_along_normal * 0.5;
+                
+                entities[i].velocity.x += impulse_scalar * normal.x;
+                entities[i].velocity.y += impulse_scalar * normal.y;
+                entities[i].velocity.z += impulse_scalar * normal.z;
+                
+                entities[j].velocity.x -= impulse_scalar * normal.x;
+                entities[j].velocity.y -= impulse_scalar * normal.y;
+                entities[j].velocity.z -= impulse_scalar * normal.z;
+                
+                // Mark collision for feedback
+                collision_state |= 0x04; // New bit for entity-entity collisions
+            }
+        }
+    }
 }
 
 export fn update(delta_time: f32) void {
@@ -155,15 +268,27 @@ export fn update(delta_time: f32) void {
         updateViewMatrix();
     }
 
-    // Simulate ball physics with gravity only (no input forces)
+    // Simulate physics for all active entities
+    collision_state = 0;
     const force = core.Vec3{ .x = 0, .y = physics_gravity, .z = 0 };
-    collision_state = simulatePhysicsWithConfig(&ball_position, &ball_velocity, delta_time, force, ball_radius);
+    
+    for (0..entity_count) |i| {
+        if (entities[i].active) {
+            const entity_collision = simulatePhysicsWithConfig(&entities[i].position, &entities[i].velocity, delta_time, force, entities[i].radius);
+            collision_state |= entity_collision;
+        }
+    }
+    
+    // Check for entity-entity collisions
+    checkEntityCollisions(delta_time);
 
-    // Update model matrix with ball position
+    // Update model matrix with first active entity position (for backward compatibility)
     uniforms.model = core.Mat4.identity();
-    uniforms.model.data[12] = ball_position.x;
-    uniforms.model.data[13] = ball_position.y;
-    uniforms.model.data[14] = ball_position.z;
+    if (entity_count > 0 and entities[0].active) {
+        uniforms.model.data[12] = entities[0].position.x;
+        uniforms.model.data[13] = entities[0].position.y;
+        uniforms.model.data[14] = entities[0].position.z;
+    }
 }
 
 export fn set_input(key: u8, pressed: bool) void {
@@ -183,8 +308,9 @@ export fn set_input(key: u8, pressed: bool) void {
 }
 
 export fn generate_sphere_mesh(segments: u32) void {
-    // Delegate mesh generation to core
-    vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, ball_radius);
+    // Use first entity's radius, or default if no entities
+    const radius = if (entity_count > 0 and entities[0].active) entities[0].radius else 0.5;
+    vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
 }
 
 export fn get_vertex_buffer_offset() u32 {
@@ -204,25 +330,31 @@ export fn get_collision_state() u8 {
 }
 
 export fn set_position(x: f32, y: f32, z: f32) void {
-    ball_position = .{ .x = x, .y = y, .z = z };
+    // Set position of first active entity for backward compatibility
+    if (entity_count > 0 and entities[0].active) {
+        entities[0].position = .{ .x = x, .y = y, .z = z };
+    }
 }
 
 export fn apply_force(x: f32, y: f32, z: f32) void {
-    ball_velocity.x += x;
-    ball_velocity.y += y;
-    ball_velocity.z += z;
+    // Apply force to first active entity for backward compatibility
+    if (entity_count > 0 and entities[0].active) {
+        entities[0].velocity.x += x;
+        entities[0].velocity.y += y;
+        entities[0].velocity.z += z;
+    }
 }
 
 export fn get_ball_position_x() f32 {
-    return ball_position.x;
+    return if (entity_count > 0 and entities[0].active) entities[0].position.x else 0;
 }
 
 export fn get_ball_position_y() f32 {
-    return ball_position.y;
+    return if (entity_count > 0 and entities[0].active) entities[0].position.y else 0;
 }
 
 export fn get_ball_position_z() f32 {
-    return ball_position.z;
+    return if (entity_count > 0 and entities[0].active) entities[0].position.z else 0;
 }
 
 // Configuration exports for Phase 6.1
@@ -256,4 +388,45 @@ export fn get_camera_position_y() f32 {
 
 export fn get_camera_position_z() f32 {
     return camera_position.z;
+}
+
+// Multi-entity exports for Phase 6.2
+export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
+    return spawnEntity(x, y, z, radius);
+}
+
+export fn get_entity_count() u32 {
+    return entity_count;
+}
+
+export fn despawn_all_entities() void {
+    for (&entities) |*entity| {
+        entity.active = false;
+    }
+    entity_count = 0;
+}
+
+export fn get_entity_position_x(index: u32) f32 {
+    if (index >= entity_count or !entities[index].active) return 0;
+    return entities[index].position.x;
+}
+
+export fn get_entity_position_y(index: u32) f32 {
+    if (index >= entity_count or !entities[index].active) return 0;
+    return entities[index].position.y;
+}
+
+export fn get_entity_position_z(index: u32) f32 {
+    if (index >= entity_count or !entities[index].active) return 0;
+    return entities[index].position.z;
+}
+
+export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {
+    if (index >= entity_count or !entities[index].active) return;
+    entities[index].position = .{ .x = x, .y = y, .z = z };
+}
+
+export fn set_entity_velocity(index: u32, x: f32, y: f32, z: f32) void {
+    if (index >= entity_count or !entities[index].active) return;
+    entities[index].velocity = .{ .x = x, .y = y, .z = z };
 }

@@ -57,6 +57,15 @@ export interface WASMExports {
   get_camera_position_x(): number;
   get_camera_position_y(): number;
   get_camera_position_z(): number;
+  // Phase 6.2 Multi-entity exports
+  spawn_entity(x: number, y: number, z: number, radius: number): number;
+  get_entity_count(): number;
+  despawn_all_entities(): void;
+  get_entity_position_x(index: number): number;
+  get_entity_position_y(index: number): number;
+  get_entity_position_z(index: number): number;
+  set_entity_position(index: number, x: number, y: number, z: number): void;
+  set_entity_velocity(index: number, x: number, y: number, z: number): void;
 }
 
 export interface GameEngine {

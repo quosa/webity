@@ -94,6 +94,9 @@ describe('WASM Integration Tests', () => {
       const wasm = (engine as any).wasm;
       expect(wasm).toBeDefined();
 
+      // Debug: log all available exports
+      console.log('Available WASM exports:', Object.keys(wasm));
+
       // Check all required exports exist
       expect(typeof wasm.memory).toBe('object');
       expect(typeof wasm.init).toBe('function');
@@ -106,6 +109,10 @@ describe('WASM Integration Tests', () => {
       expect(typeof wasm.set_position).toBe('function');
       expect(typeof wasm.apply_force).toBe('function');
       expect(typeof wasm.get_collision_state).toBe('function');
+      // Phase 6.2 multi-entity exports
+      expect(typeof wasm.spawn_entity).toBe('function');
+      expect(typeof wasm.get_entity_count).toBe('function');
+      expect(typeof wasm.despawn_all_entities).toBe('function');
     });
   });
 
