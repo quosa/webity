@@ -53,8 +53,8 @@ var collision_state: u8 = 0; // Bitmask for collisions
 
 // Exports
 export fn init() void {
-    // Set up view matrix (camera at (0, 0, 20) looking at ball center) - moved back for better view
-    uniforms.view = createLookAt(Vec3{ .x = 0, .y = 0, .z = 20 }, Vec3{ .x = 0, .y = 0, .z = 2 }, Vec3{ .x = 0, .y = 1, .z = 0 });
+    // Set up view matrix (camera at (0, 0, -20) looking at ball center) - behind scene for intuitive +/- controls
+    uniforms.view = createLookAt(Vec3{ .x = 0, .y = 0, .z = -20 }, Vec3{ .x = 0, .y = 0, .z = 2 }, Vec3{ .x = 0, .y = 1, .z = 0 });
 
     // Set up projection matrix (FOV 60°, aspect 4:3, near 0.1, far 100)
     uniforms.projection = createPerspective(60.0, 1.333, 0.1, 100.0);

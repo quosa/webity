@@ -131,7 +131,7 @@ export class Engine implements GameEngine {
         const x = (this.wasm as any).get_ball_position_x();
         const y = (this.wasm as any).get_ball_position_y();
         const z = (this.wasm as any).get_ball_position_z();
-        console.log(`🎾 Ball: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) | Camera: (0, 0, 10) → (0, 0, 0) | Vertices: ${vertexCount}`);
+        console.log(`🎾 Ball: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) | Camera: (0, 0, -20) → (0, 0, 2) | Vertices: ${vertexCount}`);
       }
       const uniformOffset = this.wasm!.get_uniform_buffer_offset();
 
