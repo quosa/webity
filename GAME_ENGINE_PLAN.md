@@ -29,7 +29,7 @@
 - [x] **Sphere Mesh Generation** - Wireframe sphere generation with configurable segments
 - [x] **Physics System** - Gravity, damping, restitution, and boundary collision handling
 - [x] **Input Processing** - WASD key input handling with bitmask state management
-- [x] **WASM Build Process** - Updated build command for modern Zig (`build-exe` with correct flags)
+- [x] **WASM Build Process** - Updated build command: `zig build-exe src/core/game_engine.zig ... && mv game_engine.wasm public/`
 - [x] **Integration Tests** - Comprehensive WASM/TypeScript bridge verification (9 tests)
   - WASM module loading and export validation
   - Physics simulation and collision detection testing
@@ -100,11 +100,63 @@
 
 **Verification:** ✅ `npm run verify` - All TypeScript, ESLint, and Jest tests pass
 
-### Phase 5: Restore Original Physics Demo 📋 PENDING
-- [ ] **Sphere Rendering** - Switch from `generateWireframeCube` back to `generateWireframeSphere`
-- [ ] **Physics Simulation** - Re-enable gravity, bouncing, and collision detection in update loop
-- [ ] **Configuration Sync** - Fix mismatched values between TypeScript and Zig (gravity, radius, bounds)
-- [ ] **Visual Enhancement** - Restore cyan wireframe coloring from original plan (vs current red)
+### Phase 5: Restore Original Physics Demo ✅ COMPLETED
+- [x] **Sphere Rendering** - Switched from `generateWireframeCube` back to `generateWireframeSphere`
+- [x] **Physics Simulation** - Re-enabled gravity (-9.8), bouncing, and collision detection in update loop
+- [x] **Configuration Sync** - Fixed mismatched values: ball_radius (0.5), bounds (8x8x8), proper physics constants
+- [x] **Visual Enhancement** - Restored cyan wireframe coloring (0.0, 1.0, 1.0, 1.0) from red
+- [x] **Controls Update** - Updated HTML instructions to reflect physics-based WASD force controls
+- [x] **Jest Mocks** - Fixed mock dependencies test file with proper Jest mock patterns
+
+**Key Restored Features:**
+- **Physics-Based Movement**: WASD applies forces instead of direct movement
+- **Gravity & Bouncing**: Full physics simulation with collision detection and restitution
+- **Sphere Wireframe**: Beautiful cyan wireframe sphere instead of debug cube
+- **Collision System**: Floor and wall boundary detection with proper bounce physics
+- **Accurate UI**: HTML controls now correctly describe force-based physics interaction
+
+**Verification:** ✅ All 44 tests passing including updated mock dependency tests
+**Build:** ✅ `npm run build:wasm` - Physics demo WASM compiled successfully
+
+### Phase 5.5: Clean Zig Testing Architecture ✅ COMPLETED
+- [x] **Architecture Refactoring** - Eliminated brittle comptime conditional exports approach
+- [x] **game_core.zig** - Created pure game logic module with all types, constants, and functions naturally `pub`
+- [x] **game_engine.zig** - Refactored to thin WASM wrapper (108 lines, down from 398!) that imports and delegates to core
+- [x] **game_core_test.zig** - Clean direct testing with `const core = @import("game_core.zig")` pattern
+- [x] **Eliminated Issues** - No code duplication, naming conflicts, or shadowing problems
+- [x] **Enhanced Testing** - 14 comprehensive tests (up from 12!) including physics constants validation
+
+**Key Architectural Benefits:**
+- **Single Source of Truth**: All game logic in core module, no duplication
+- **Standard Zig Patterns**: No clever hacks, just idiomatic module imports
+- **Easy Maintenance**: Add functions to core, immediately testable
+- **Clean Separation**: Pure game logic vs WASM interface concerns
+- **Reusability**: Core could be used by other frontends (native apps, etc.)
+
+**Verification:** ✅ All 44 TypeScript + 14 Zig tests passing with clean modular architecture
+
+### Phase 5.75: Professional Directory Structure ✅ COMPLETED
+- [x] **src/core/ Directory** - Moved all Zig files to proper source structure
+- [x] **Organized Layout** - `src/core/game_core.zig`, `src/core/game_core_test.zig`, `src/core/game_engine.zig`
+- [x] **Build Integration** - Updated build commands to use new paths and output WASM directly to `public/`
+- [x] **Test Configuration** - Updated test command to `zig test src/core/game_core_test.zig`
+- [x] **WASM Integration** - Fixed integration tests to load WASM from `public/game_engine.wasm`
+- [x] **Clean Structure** - Follows professional project organization standards
+
+**Final Directory Structure:**
+```
+src/
+├── core/                    # Zig source files
+│   ├── game_core.zig        # Pure game logic  
+│   ├── game_core_test.zig   # Direct core testing
+│   └── game_engine.zig      # Thin WASM wrapper
+├── *.ts                     # TypeScript source files
+└── index.html               # Main HTML entry point
+public/  
+└── game_engine.wasm         # Built WASM output
+```
+
+**Verification:** ✅ All 44 TypeScript + 14 Zig tests passing with professional structure
 
 ### Phase 6: Eliminate Data Duplication 📋 PENDING
 - [ ] **Unified Configuration** - Make Zig respect TypeScript configuration values
@@ -138,8 +190,8 @@
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
 │  │   Input     │  │   Renderer   │  │   Main Loop   │  │
 │  │  (input.ts) │  │ (renderer.ts)│  │   (main.ts)   │  │
-│  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
-├─────────┼─────────────────┼─────────────────┼─-────────┤
+│  └──────┬──────┘  └───────┬──────┘  └───────┬───────┘  │
+├─────────┼─────────────────┼─────────────────┼──────────┤
 │         ↓                 ↓                 ↓          │
 │  ┌──────────────────────────────────────────────────┐  │
 │  │         TypeScript Bridge (engine.ts)            │  │
@@ -148,9 +200,9 @@
 │         ↓                 ↑                  ↑         │
 │  ┌──────────────────────────────────────────────────┐  │
 │  │    WASM Module (game_engine.zig → .wasm)         │  │
-│  │  ┌─-───────┐     ┌────────┐     ┌─────────────┐  │  │
+│  │  ┌─────────┐     ┌────────┐     ┌─────────────┐  │  │
 │  │  │ Physics │     │ State  │     │ Matrix Math │  │  │
-│  │  └──-──────┘     └────────┘     └─────────────┘  │  │
+│  │  └─────────┘     └────────┘     └─────────────┘  │  │
 │  └──────────────────────────────────────────────────┘  │
 │         ↓ SharedArrayBuffer                            │
 │  ┌──────────────────────────────────────────────────┐  │
@@ -779,10 +831,11 @@ if (document.readyState === 'loading') {
 }
 ```
 
-## 8. Zig Implementation (Core Physics for PoC)
+## 8. Zig Implementation (Modular Architecture)
 
+### Core Game Logic Module
 ```zig
-// game_engine.zig - Focused on bouncing ball demo
+// src/core/game_core.zig - Pure game logic, no WASM exports
 const std = @import("std");
 
 // Constants
@@ -1022,4 +1075,87 @@ fn cross(a: Vec3, b: Vec3) Vec3 {
 
 fn dot(a: Vec3, b: Vec3) f32 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+```
+
+### Thin WASM Wrapper
+```zig
+// src/core/game_engine.zig - Thin WASM wrapper around game_core
+const core = @import("game_core.zig");
+
+// State (pre-allocated) - using core types
+var vertex_buffer: [10000]f32 = undefined;
+var vertex_count: u32 = 0;
+
+var uniforms: core.Uniforms = core.Uniforms{
+    .model = core.Mat4.identity(),
+    .view = core.Mat4.identity(),
+    .projection = core.Mat4.identity(),
+};
+
+var ball_position: core.Vec3 = .{ .x = 0, .y = 3, .z = 2 };
+var ball_velocity: core.Vec3 = .{ .x = 0, .y = 0, .z = 0 };
+var ball_radius: f32 = 0.5;
+
+// WASM Exports - thin wrappers around core functionality
+export fn init() void {
+    uniforms.view = core.createLookAt(core.Vec3{ .x = 0, .y = 0, .z = -20 }, core.Vec3{ .x = 0, .y = 0, .z = 2 }, core.Vec3{ .x = 0, .y = 1, .z = 0 });
+    uniforms.projection = core.createPerspective(60.0, 1.333, 0.1, 100.0);
+}
+
+export fn update(delta_time: f32) void {
+    // Calculate input forces
+    var force = core.Vec3{ .x = 0, .y = 0, .z = 0 };
+    const input_force: f32 = 8.0;
+    if (input_state & 0x01 != 0) force.z -= input_force; // W - forward
+    if (input_state & 0x02 != 0) force.x -= input_force; // A - left  
+    if (input_state & 0x04 != 0) force.z += input_force; // S - backward
+    if (input_state & 0x08 != 0) force.x += input_force; // D - right
+
+    // Delegate physics simulation to core
+    collision_state = core.simulatePhysicsStep(&ball_position, &ball_velocity, delta_time, force, ball_radius);
+
+    // Update model matrix
+    uniforms.model = core.Mat4.identity();
+    uniforms.model.data[12] = ball_position.x;
+    uniforms.model.data[13] = ball_position.y;
+    uniforms.model.data[14] = ball_position.z;
+}
+
+export fn generate_sphere_mesh(segments: u32) void {
+    vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, ball_radius);
+}
+
+// Other WASM exports...
+```
+
+### Clean Direct Testing
+```zig
+// src/core/game_core_test.zig - Direct testing of core functionality
+const std = @import("std");
+const testing = std.testing;
+const core = @import("game_core.zig");
+
+test "Vec3 normalize function" {
+    const v = core.Vec3{ .x = 3.0, .y = 4.0, .z = 0.0 };
+    const normalized = core.normalize(v);
+    const expected = core.Vec3{ .x = 0.6, .y = 0.8, .z = 0.0 };
+    
+    // Test with helper function
+    try testing.expect(Vec3TestHelper.equals(normalized, expected));
+}
+
+test "physics simulation - gravity" {
+    var position = core.Vec3{ .x = 0.0, .y = 5.0, .z = 0.0 };
+    var velocity = core.Vec3{ .x = 0.0, .y = 0.0, .z = 0.0 };
+    const delta_time: f32 = 0.016;
+    const no_input = core.Vec3{ .x = 0.0, .y = 0.0, .z = 0.0 };
+    const ball_radius: f32 = 0.5;
+    
+    const initial_y = position.y;
+    _ = core.simulatePhysicsStep(&position, &velocity, delta_time, no_input, ball_radius);
+    
+    // Ball should fall due to gravity
+    try testing.expect(position.y < initial_y);
+    try testing.expect(velocity.y < 0.0);
 }
