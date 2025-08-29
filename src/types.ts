@@ -49,6 +49,14 @@ export interface WASMExports {
   get_ball_position_x(): number;
   get_ball_position_y(): number;
   get_ball_position_z(): number;
+  // Phase 6.1 Configuration exports
+  set_camera_position(x: number, y: number, z: number): void;
+  set_camera_target(x: number, y: number, z: number): void;
+  set_physics_config(gravity: number, damping: number, restitution: number): void;
+  set_world_bounds(x: number, y: number, z: number): void;
+  get_camera_position_x(): number;
+  get_camera_position_y(): number;
+  get_camera_position_z(): number;
 }
 
 export interface GameEngine {
