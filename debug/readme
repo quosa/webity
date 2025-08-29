@@ -1,0 +1,8 @@
+All-in-one files for testing HTML/js/WebGPU:
+
+test.html - red triangle coordinates directly in shader, no buffers
+test_buffers.html - drive the coordinated from js
+
+These were used to test that we show something on the screen.
+ -> we did not store the uniforms correctly in the buffer
+ -> clip space was OpenGL -1,1 instead of WebGPU/Vulkan 0,1
