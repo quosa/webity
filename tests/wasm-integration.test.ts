@@ -21,7 +21,7 @@ describe('WASM Integration Tests', () => {
   beforeAll(() => {
     // Load the actual WASM file for integration testing
     try {
-      const wasmPath = resolve(__dirname, '../game_engine.wasm');
+      const wasmPath = resolve(__dirname, '../public/game_engine.wasm');
       const wasmBuffer = readFileSync(wasmPath);
       realWasmBytes = wasmBuffer.buffer.slice(
         wasmBuffer.byteOffset,
