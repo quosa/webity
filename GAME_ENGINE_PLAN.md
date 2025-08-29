@@ -158,11 +158,30 @@ public/
 
 **Verification:** ✅ All 44 TypeScript + 14 Zig tests passing with professional structure
 
-### Phase 6: Eliminate Data Duplication 📋 PENDING
-- [ ] **Unified Configuration** - Make Zig respect TypeScript configuration values
-- [ ] **WASM Configuration Exports** - Add `set_camera()`, `set_physics_config()`, `set_ball_properties()`
-- [ ] **Value Synchronization** - Fix ball_radius (5.0 vs 0.5), gravity (-2.0 vs -9.8), bounds coordination
-- [ ] **Remove Hardcoding** - Transform hardcoded Zig constants to TypeScript-configurable parameters
+### Phase 6: Multi-Ball Physics Demo with Camera Controls 📋 IN PROGRESS
+**🎯 MAJOR MILESTONE: Transform single-ball demo into multi-entity physics playground**
+
+#### Phase 6.1: Remove Single-Entity Hardcoding ⏳ CURRENT
+- [ ] **Configuration System** - Add WASM exports: `set_camera_position()`, `set_physics_config()`, `set_world_bounds()`
+- [ ] **Value Synchronization** - Replace hardcoded Zig constants with runtime parameters from TypeScript
+- [ ] **Camera System Refactor** - Move from hardcoded view matrix to dynamic camera state in Zig
+- [ ] **Input Routing** - Change WASD from ball forces to camera movement controls
+
+#### Phase 6.2: Multi-Entity Architecture ⏳ PLANNED
+- [ ] **Entity Array System** - Replace single ball with `var entities: [MAX_ENTITIES]Entity` structure
+- [ ] **Ball-to-Ball Collision** - Implement sphere-sphere collision detection and response
+- [ ] **Dynamic Rendering** - Support variable entity count with efficient buffer management
+
+#### Phase 6.3: Enhanced Rendering & Scene Setup ⏳ PLANNED  
+- [ ] **Grid Floor Rendering** - Add wireframe grid floor for visual reference and depth perception
+- [ ] **Multi-Entity Pipeline** - Instanced rendering for multiple spheres with per-entity transforms
+- [ ] **Scene Configuration API** - TypeScript methods: `engine.spawnBall()`, `engine.resetScene()`
+
+**Target Demo Experience:**
+- 3-5 balls spawn above grid floor, fall and collide with each other
+- WASD camera controls for flying around and observing physics from any angle
+- Press 'R' to respawn balls in random positions above floor
+- Smooth 60fps performance with real-time multi-body collision detection
 
 ### Phase 7: Entity Architecture System 📋 FUTURE
 - [ ] **Scene Management** - Create Scene, Camera, Entity, Light classes in TypeScript
