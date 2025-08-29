@@ -46,6 +46,9 @@ export interface WASMExports {
   set_position(x: number, y: number, z: number): void;
   apply_force(x: number, y: number, z: number): void;
   get_collision_state(): number; // Bitmask of collision flags
+  get_ball_position_x(): number;
+  get_ball_position_y(): number;
+  get_ball_position_z(): number;
 }
 
 export interface GameEngine {

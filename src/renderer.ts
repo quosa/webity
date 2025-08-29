@@ -1,5 +1,6 @@
 // WebGPU renderer with pipeline and shader management
 import { EngineError, WebGPUNotSupportedError } from './types.js';
+import { BufferManager } from './buffer-manager.js';
 
 export class Renderer {
   private device?: GPUDevice;
@@ -8,6 +9,10 @@ export class Renderer {
   private vertexBuffer?: GPUBuffer;
   private uniformBuffer?: GPUBuffer;
   private bindGroup?: GPUBindGroup;
+
+  constructor(private bufferManager: BufferManager) { // eslint-disable-line no-unused-vars
+    // BufferManager injected via constructor
+  }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     // Get adapter with fallback options
@@ -44,6 +49,9 @@ export class Renderer {
       alphaMode: 'opaque', // 'premultiplied', // opaque
     });
 
+    // Set device on BufferManager after device initialization
+    this.bufferManager.setDevice(this.device);
+
     await this.createPipeline(presentationFormat);
   }
 
@@ -62,7 +70,7 @@ export class Renderer {
       new Float32Array(wasmMemory.slice(vertexOffset, vertexOffset + vertexCount * 4)),
       vertexOffset, vertexCount, uniformOffset);
 
-      // Update buffers from WASM memory
+    // Update buffers from WASM memory
     this.updateBuffers(wasmMemory, vertexOffset, vertexCount, uniformOffset);
 
     const commandEncoder = this.device.createCommandEncoder({ label: 'Render Commands' });
@@ -162,21 +170,20 @@ export class Renderer {
     });
   }
 
-  private updateBuffers(wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number): void {
-    if (!this.device) return;
+  private updateBuffers(_wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number): void {
+    if (!this.device || !this.bufferManager) return;
 
-    // Read the actual WASM data first
-    const wasmVertexData = new Float32Array(wasmMemory, vertexOffset, vertexCount * 3);
+    // Use BufferManager for zero-copy data access
+    const vertexData = this.bufferManager.getVertexData(vertexOffset, vertexCount);
     
     // Debug: log what WASM is sending us
-    console.log('WASM vertex data (first 9 floats):', Array.from(wasmVertexData.slice(0, 9)));
+    console.log('WASM vertex data (first 9 floats):', Array.from(vertexData.slice(0, 9)));
     console.log(`WASM says ${vertexCount} vertices at offset ${vertexOffset}`);
     
-    // Use the original WASM vertex data - let matrices handle scaling
-    const vertexData = wasmVertexData;
-    console.log('Using original WASM vertex data:', Array.from(vertexData.slice(0, 9)));
+    console.log('Using BufferManager zero-copy vertex data:', Array.from(vertexData.slice(0, 9)));
     const vertexSize = vertexData.byteLength;
 
+    // Create or resize vertex buffer as needed
     if (!this.vertexBuffer || this.vertexBuffer.size < vertexSize) {
       this.vertexBuffer?.destroy();
       this.vertexBuffer = this.device.createBuffer({
@@ -186,16 +193,21 @@ export class Renderer {
       });
     }
 
-    // Debug log
-    console.log('Rendering hardcoded red triangle');
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexData);
+    // Write vertex data to GPU - create a regular ArrayBuffer copy for WebGPU compatibility
+    const vertexBuffer = new ArrayBuffer(vertexData.byteLength);
+    new Float32Array(vertexBuffer).set(vertexData);
+    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexBuffer);
 
-    // Update uniform buffer with matrices from WASM
-    const uniformData = new Float32Array(wasmMemory, uniformOffset, 48); // 3 matrices * 16 floats
-    console.log('Model matrix:', Array.from(uniformData.slice(0, 16)));
-    console.log('View matrix:', Array.from(uniformData.slice(16, 32)));
-    console.log('Projection matrix:', Array.from(uniformData.slice(32, 48)));
-    this.device.queue.writeBuffer(this.uniformBuffer!, 0, uniformData);
+    // Use BufferManager for uniform data updates
+    if (this.uniformBuffer) {
+      this.bufferManager.updateUniformBuffer(this.uniformBuffer, uniformOffset);
+      
+      // Debug logging
+      const uniformData = this.bufferManager.getUniformData(uniformOffset);
+      console.log('Model matrix:', Array.from(uniformData.slice(0, 16)));
+      console.log('View matrix:', Array.from(uniformData.slice(16, 32)));
+      console.log('Projection matrix:', Array.from(uniformData.slice(32, 48)));
+    }
   }
 
   private getShaderCode(): string {

@@ -1,6 +1,18 @@
 import { Engine } from '../src/engine.js';
+import { Renderer } from '../src/renderer.js';
+import { InputManager } from '../src/input.js';
+import { BufferManager } from '../src/buffer-manager.js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+
+// Helper function to create engine with all dependencies
+function createTestEngine(): Engine {
+  const mockCanvas = document.createElement('canvas');
+  const bufferManager = new BufferManager();
+  const renderer = new Renderer(bufferManager); 
+  const input = new InputManager();
+  return new Engine(mockCanvas, renderer, input, bufferManager);
+}
 
 describe('WASM Integration Tests', () => {
   let engine: Engine;
@@ -54,7 +66,7 @@ describe('WASM Integration Tests', () => {
       return;
     }
 
-    engine = new Engine('test-canvas');
+    engine = createTestEngine();
   });
 
   afterEach(() => {

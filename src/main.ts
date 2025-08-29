@@ -1,6 +1,9 @@
 // Main entry point for the bouncing ball demo
 import { Engine } from './engine.js';
-import { AssetConfig } from './types.js';
+import { Renderer } from './renderer.js';
+import { InputManager } from './input.js';
+import { BufferManager } from './buffer-manager.js';
+import { AssetConfig, EngineError } from './types.js';
 
 // Show loading indicator
 function showLoading(show: boolean): void {
@@ -35,7 +38,16 @@ async function startDemo(): Promise<void> {
 
     console.log('Starting WebAssembly Ball Physics Demo...');
     
-    const engine = new Engine('canvas');
+    // Explicit dependency graph - clear and testable during development
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+    if (!canvas) {
+      throw new EngineError('Canvas with id "canvas" not found', 'CANVAS_NOT_FOUND');
+    }
+
+    const bufferManager = new BufferManager();
+    const renderer = new Renderer(bufferManager);
+    const input = new InputManager();
+    const engine = new Engine(canvas, renderer, input, bufferManager);
     
     // Initialize engine with physics configuration
     await engine.init({

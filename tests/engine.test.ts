@@ -1,4 +1,7 @@
 import { Engine } from '../src/engine.js';
+import { Renderer } from '../src/renderer.js';
+import { InputManager } from '../src/input.js';
+import { BufferManager } from '../src/buffer-manager.js';
 import { EngineError, WebGPUNotSupportedError } from '../src/types.js';
 
 // Mock HTML canvas element
@@ -16,6 +19,14 @@ const mockCanvas = {
     return null;
   }),
 } as unknown as HTMLCanvasElement;
+
+// Helper function to create engine with all dependencies
+function createTestEngine(): Engine {
+  const bufferManager = new BufferManager();
+  const renderer = new Renderer(bufferManager);
+  const input = new InputManager();
+  return new Engine(mockCanvas as HTMLCanvasElement, renderer, input, bufferManager);
+}
 
 describe('Engine', () => {
   let engine: Engine;
@@ -79,26 +90,25 @@ describe('Engine', () => {
 
   describe('Constructor', () => {
     it('should create engine instance with valid canvas', () => {
-      engine = new Engine('test-canvas');
+      engine = createTestEngine();
       expect(engine).toBeInstanceOf(Engine);
     });
 
-    it('should throw error when canvas not found', () => {
-      document.getElementById = jest.fn().mockReturnValue(null);
+    it('should accept valid dependencies', () => {
+      const bufferManager = new BufferManager();
+      const renderer = new Renderer(bufferManager);
+      const input = new InputManager();
+      const canvas = document.createElement('canvas');
       
       expect(() => {
-        new Engine('non-existent-canvas');
-      }).toThrow(EngineError);
-      
-      expect(() => {
-        new Engine('non-existent-canvas');
-      }).toThrow('Canvas with id \'non-existent-canvas\' not found');
+        new Engine(canvas, renderer, input, bufferManager);
+      }).not.toThrow();
     });
   });
 
   describe('Initialization', () => {
     beforeEach(() => {
-      engine = new Engine('test-canvas');
+      engine = createTestEngine();
     });
 
     it('should throw WebGPUNotSupportedError when WebGPU is not available', async () => {
@@ -131,7 +141,7 @@ describe('Engine', () => {
 
   describe('Asset Loading', () => {
     beforeEach(async () => {
-      engine = new Engine('test-canvas');
+      engine = createTestEngine();
       await engine.init();
     });
 
@@ -144,7 +154,7 @@ describe('Engine', () => {
     });
 
     it('should throw error when engine not initialized', async () => {
-      const uninitializedEngine = new Engine('test-canvas');
+      const uninitializedEngine = createTestEngine();
       const assets = { ball: { segments: 32 } };
 
       await expect(uninitializedEngine.loadAssets(assets)).rejects.toThrow(EngineError);
@@ -154,7 +164,7 @@ describe('Engine', () => {
 
   describe('Game Loop', () => {
     beforeEach(async () => {
-      engine = new Engine('test-canvas');
+      engine = createTestEngine();
       await engine.init();
     });
 
@@ -164,7 +174,7 @@ describe('Engine', () => {
     });
 
     it('should throw error when starting uninitialized engine', () => {
-      const uninitializedEngine = new Engine('test-canvas');
+      const uninitializedEngine = createTestEngine();
       
       expect(() => uninitializedEngine.start()).toThrow(EngineError);
       expect(() => uninitializedEngine.start()).toThrow('Engine not initialized');
@@ -173,7 +183,7 @@ describe('Engine', () => {
 
   describe('Resource Management', () => {
     beforeEach(async () => {
-      engine = new Engine('test-canvas');
+      engine = createTestEngine();
       await engine.init();
     });
 

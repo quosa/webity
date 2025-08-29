@@ -10,25 +10,21 @@ import {
 } from './types.js';
 import { Renderer } from './renderer.js';
 import { InputManager } from './input.js';
-// import { BufferManager } from './buffer-manager.js';
+import { BufferManager } from './buffer-manager.js';
 
 export class Engine implements GameEngine {
-  private readonly canvas: HTMLCanvasElement;
   private wasm?: WASMExports;
-  private renderer?: Renderer;
-  private input?: InputManager;
-  // private _bufferManager?: BufferManager; // Will be used for advanced buffer operations
   private running = false;
   private lastTime = 0;
   private animationId: number | undefined;
 
-  constructor(canvasId: string) {
-    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-    if (!canvas) {
-      throw new EngineError(`Canvas with id '${canvasId}' not found`, 'CANVAS_NOT_FOUND');
-    }
-    this.canvas = canvas;
-    // Canvas will be used in Phase 3 for renderer initialization
+  constructor(
+    private readonly canvas: HTMLCanvasElement, // eslint-disable-line no-unused-vars
+    private readonly renderer: Renderer, // eslint-disable-line no-unused-vars
+    private readonly input: InputManager, // eslint-disable-line no-unused-vars  
+    private readonly bufferManager: BufferManager // eslint-disable-line no-unused-vars
+  ) {
+    // Dependencies injected via constructor - explicit and testable
   }
 
   async init(config?: Partial<EngineConfig>): Promise<void> {
@@ -38,22 +34,17 @@ export class Engine implements GameEngine {
         throw new WebGPUNotSupportedError();
       }
 
-      // Load WASM module
+      // 1. Load WASM module first
       this.wasm = await this.loadWASM();
       this.wasm.init();
 
-      // Initialize renderer
-      this.renderer = new Renderer();
+      // 2. Set WASM memory on BufferManager (runtime dependency)
+      this.bufferManager.setMemory(this.wasm.memory);
+
+      // 3. Initialize renderer (will set device on BufferManager)
       await this.renderer.init(this.canvas);
 
-      // Initialize buffer manager (available for advanced buffer operations)
-      // this._bufferManager = new BufferManager(
-      //   this.wasm.memory,
-      //   this.renderer.getDevice()
-      // );
-
-      // Initialize input manager
-      this.input = new InputManager();
+      // 4. Initialize input manager
       this.input.init((key: number, pressed: boolean) => {
         this.wasm?.set_input(key, pressed);
       });
@@ -81,7 +72,7 @@ export class Engine implements GameEngine {
   }
 
   start(): void {
-    if (!this.wasm || !this.renderer) {
+    if (!this.wasm) {
       throw new EngineError('Engine not initialized', 'NOT_INITIALIZED');
     }
 
@@ -100,8 +91,8 @@ export class Engine implements GameEngine {
 
   dispose(): void {
     this.stop();
-    this.input?.dispose();
-    this.renderer?.dispose();
+    this.input.dispose();
+    this.renderer.dispose();
     // Clean up any other resources
   }
 
@@ -135,7 +126,7 @@ export class Engine implements GameEngine {
       }
       const uniformOffset = this.wasm!.get_uniform_buffer_offset();
 
-      this.renderer!.render(
+      this.renderer.render(
         this.wasm!.memory.buffer,
         vertexOffset,
         vertexCount,

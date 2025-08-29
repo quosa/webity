@@ -31,7 +31,9 @@ describe('BufferManager', () => {
       },
     } as unknown as GPUDevice;
 
-    bufferManager = new BufferManager(mockMemory, mockDevice);
+    bufferManager = new BufferManager();
+    bufferManager.setMemory(mockMemory);
+    bufferManager.setDevice(mockDevice);
   });
 
   describe('Vertex Buffer Management', () => {

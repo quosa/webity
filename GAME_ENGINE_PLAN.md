@@ -18,7 +18,7 @@
 - [x] **buffer-manager.ts** - Zero-copy WASM memory management with validation
 - [x] **Unit Tests** - Comprehensive test coverage (29 tests passing)
   - Type definitions and error handling tests
-  - Engine initialization, asset loading, and lifecycle tests  
+  - Engine initialization, asset loading, and lifecycle tests
   - Buffer manager memory operations and validation tests
   - WebGPU/WASM mocking infrastructure for isolated testing
 
@@ -27,7 +27,7 @@
 ### Phase 2: WASM Integration ✅ COMPLETED
 - [x] **game_engine.zig** - Complete physics simulation with ball movement and collision detection
 - [x] **Sphere Mesh Generation** - Wireframe sphere generation with configurable segments
-- [x] **Physics System** - Gravity, damping, restitution, and boundary collision handling  
+- [x] **Physics System** - Gravity, damping, restitution, and boundary collision handling
 - [x] **Input Processing** - WASD key input handling with bitmask state management
 - [x] **WASM Build Process** - Updated build command for modern Zig (`build-exe` with correct flags)
 - [x] **Integration Tests** - Comprehensive WASM/TypeScript bridge verification (9 tests)
@@ -75,11 +75,30 @@
 
 **Demo Status:** ✅ Fully functional 3D wireframe cube demo with real-time user controls
 
-### Phase 4: Code Quality & Structural Fixes 📋 PENDING
-- [ ] **ESLint Fix** - Resolve indentation error in renderer.ts line 65
-- [ ] **BufferManager Integration** - Replace direct buffer creation with BufferManager class
-- [ ] **Type Definitions** - Add missing WASM export types for position getters
-- [ ] **Test Verification** - Ensure all 38 tests pass after structural changes
+### Phase 4: Code Quality & Structural Fixes ✅ COMPLETED
+- [x] **ESLint Fix** - Resolved indentation error in renderer.ts line 65
+- [x] **BufferManager Integration** - Successfully integrated BufferManager class into renderer.ts
+- [x] **Type Definitions** - Added missing WASM export types for position getters
+- [x] **Test Verification** - All 38 tests pass after structural changes
+
+**Verification:** ✅ `npm run verify` passes completely with zero-copy BufferManager integration
+
+### Phase 4.5: Dependency Injection Refactoring ✅ COMPLETED
+- [x] **BufferManager Pattern** - Refactored to use `setMemory()` and `setDevice()` for runtime dependencies
+- [x] **Renderer Constructor** - Updated to accept BufferManager via constructor injection
+- [x] **Engine Orchestration** - Coordinates component initialization in proper order (WASM → memory → renderer → input)
+- [x] **Explicit Dependencies** - Main.ts shows clear dependency graph during development phase
+- [x] **Test Compatibility** - All 38 tests updated and passing with new constructor patterns
+- [x] **Future User API** - Added Phase 8 plan for later Engine constructor simplification
+
+**Key Architectural Changes:**
+- **Constructor Injection**: All dependencies injected via constructors for testability
+- **Runtime Dependencies**: WASM memory and GPU device handled via setter methods
+- **Initialization Order**: Engine orchestrates proper component initialization sequence
+- **Mock-Friendly**: Easy component isolation for London school unit testing
+- **Explicit Graph**: Development-time dependency visibility in main.ts
+
+**Verification:** ✅ `npm run verify` - All TypeScript, ESLint, and Jest tests pass
 
 ### Phase 5: Restore Original Physics Demo 📋 PENDING
 - [ ] **Sphere Rendering** - Switch from `generateWireframeCube` back to `generateWireframeSphere`
@@ -95,11 +114,17 @@
 
 ### Phase 7: Entity Architecture System 📋 FUTURE
 - [ ] **Scene Management** - Create Scene, Camera, Entity, Light classes in TypeScript
-- [ ] **Component System** - Design entity-component architecture for game objects  
+- [ ] **Component System** - Design entity-component architecture for game objects
 - [ ] **File Structure** - Add `src/scene.ts` and `src/entities/` directory
 - [ ] **Configuration Objects** - Transform from hardcoded values to configurable object system
 
-### Phase 8: Demo Refinement 📋 PENDING
+### Phase 8: User-Friendly API 📋 FUTURE
+- [ ] **Simple Engine Constructor** - Hide dependency creation inside Engine class
+- [ ] **Clean User Interface** - `new Engine('canvas')` instead of explicit dependencies
+- [ ] **Backward Compatibility** - Maintain both explicit and simple APIs
+- [ ] **Documentation** - Clear examples for both development and production use
+
+### Phase 9: Demo Refinement 📋 PENDING
 - [ ] **Testing** - Comprehensive test coverage for new features
 - [ ] **Error Handling** - Enhanced graceful fallbacks and user messaging
 - [ ] **Performance** - Optimization and profiling of rendering pipeline
@@ -107,31 +132,31 @@
 ## 1. Module Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Browser Environment                  │
-├─────────────────────────────────────────────────────────┤
+┌────────────────────────────────────────────────────────┐
+│                     Browser Environment                │
+├────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
 │  │   Input     │  │   Renderer   │  │   Main Loop   │  │
 │  │  (input.ts) │  │ (renderer.ts)│  │   (main.ts)   │  │
 │  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
-├─────────┼─────────────────┼──────────────────┼──────────┤
-│         ↓                 ↓                  ↓          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │         TypeScript Bridge (engine.ts)            │   │
-│  │         Error Handling & Type Safety             │   │
-│  └──────────────────────────────────────────────────┘   │
-│         ↓                 ↑                  ↑          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │    WASM Module (game_engine.zig → .wasm)        │   │
-│  │  ┌────────┐  ┌────────┐  ┌─────────────────┐   │   │
-│  │  │Physics │  │ State  │  │ Matrix Math     │   │   │
-│  │  └────────┘  └────────┘  └─────────────────┘   │   │
-│  └──────────────────────────────────────────────────┘   │
-│         ↓ SharedArrayBuffer                             │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │           WebGPU (Direct Buffer Access)          │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+├─────────┼─────────────────┼─────────────────┼─-────────┤
+│         ↓                 ↓                 ↓          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │         TypeScript Bridge (engine.ts)            │  │
+│  │         Error Handling & Type Safety             │  │
+│  └──────────────────────────────────────────────────┘  │
+│         ↓                 ↑                  ↑         │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │    WASM Module (game_engine.zig → .wasm)         │  │
+│  │  ┌─-───────┐     ┌────────┐     ┌─────────────┐  │  │
+│  │  │ Physics │     │ State  │     │ Matrix Math │  │  │
+│  │  └──-──────┘     └────────┘     └─────────────┘  │  │
+│  └──────────────────────────────────────────────────┘  │
+│         ↓ SharedArrayBuffer                            │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │           WebGPU (Direct Buffer Access)          │  │
+│  └──────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────┘
 ```
 
 ## 2. TypeScript Type Definitions
@@ -222,12 +247,12 @@ export class WASMLoadError extends EngineError {
 export class BufferManager {
     private wasmMemory: WebAssembly.Memory;
     private device: GPUDevice;
-    
+
     constructor(wasmMemory: WebAssembly.Memory, device: GPUDevice) {
         this.wasmMemory = wasmMemory;
         this.device = device;
     }
-    
+
     createVertexBuffer(offset: number, vertexCount: number): GPUBuffer {
         try {
             const size = vertexCount * 3 * Float32Array.BYTES_PER_ELEMENT;
@@ -236,17 +261,17 @@ export class BufferManager {
                 offset,
                 vertexCount * 3
             );
-            
+
             const buffer = this.device.createBuffer({
                 label: 'Vertex Buffer',
                 size: size,
                 usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
                 mappedAtCreation: true,
             });
-            
+
             new Float32Array(buffer.getMappedRange()).set(data);
             buffer.unmap();
-            
+
             return buffer;
         } catch (error) {
             throw new EngineError(
@@ -255,7 +280,7 @@ export class BufferManager {
             );
         }
     }
-    
+
     updateUniformBuffer(buffer: GPUBuffer, offset: number): void {
         const data = new Float32Array(this.wasmMemory.buffer, offset, 48);
         this.device.queue.writeBuffer(buffer, 0, data);
@@ -299,7 +324,7 @@ export class Engine implements GameEngine {
     private running = false;
     private lastTime = 0;
     private animationId?: number;
-    
+
     constructor(canvasId: string) {
         const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
         if (!canvas) {
@@ -307,66 +332,66 @@ export class Engine implements GameEngine {
         }
         this.canvas = canvas;
     }
-    
+
     async init(config?: Partial<EngineConfig>): Promise<void> {
         try {
             // Check WebGPU support first
             if (!navigator.gpu) {
                 throw new WebGPUNotSupportedError();
             }
-            
+
             // Load WASM module
             this.wasm = await this.loadWASM();
             this.wasm.init();
-            
+
             // Initialize renderer
             this.renderer = new Renderer();
             await this.renderer.init(this.canvas);
-            
+
             // Initialize buffer manager
             this.bufferManager = new BufferManager(
                 this.wasm.memory,
                 this.renderer.getDevice()
             );
-            
+
             // Initialize input manager
             this.input = new InputManager();
             this.input.init((key: number, pressed: boolean) => {
                 this.wasm?.set_input(key, pressed);
             });
-            
+
             // Apply config if provided
             if (config?.physics) {
                 // Configure physics parameters in WASM
                 // This would require additional WASM exports
             }
-            
+
         } catch (error) {
             this.dispose();
             throw error;
         }
     }
-    
+
     async loadAssets(assets: AssetConfig): Promise<void> {
         if (!this.wasm) {
             throw new EngineError('Engine not initialized', 'NOT_INITIALIZED');
         }
-        
+
         if (assets.ball) {
             this.wasm.generate_sphere_mesh(assets.ball.segments);
         }
     }
-    
+
     start(): void {
         if (!this.wasm || !this.renderer) {
             throw new EngineError('Engine not initialized', 'NOT_INITIALIZED');
         }
-        
+
         this.running = true;
         this.lastTime = performance.now();
         this.gameLoop();
     }
-    
+
     stop(): void {
         this.running = false;
         if (this.animationId) {
@@ -374,74 +399,74 @@ export class Engine implements GameEngine {
             this.animationId = undefined;
         }
     }
-    
+
     dispose(): void {
         this.stop();
         this.input?.dispose();
         this.renderer?.dispose();
         // Clean up any other resources
     }
-    
+
     private gameLoop = (): void => {
         if (!this.running) return;
-        
+
         const currentTime = performance.now();
         const deltaTime = Math.min((currentTime - this.lastTime) / 1000.0, 0.1); // Cap at 100ms
         this.lastTime = currentTime;
-        
+
         try {
             // Update physics/game state
             this.wasm!.update(deltaTime);
-            
+
             // Check for collisions
             const collisionState = this.wasm!.get_collision_state();
             if (collisionState > 0) {
                 this.handleCollisions(collisionState);
             }
-            
+
             // Update rendering
             const vertexOffset = this.wasm!.get_vertex_buffer_offset();
             const vertexCount = this.wasm!.get_vertex_count();
             const uniformOffset = this.wasm!.get_uniform_buffer_offset();
-            
+
             this.renderer!.render(
                 this.wasm!.memory.buffer,
                 vertexOffset,
                 vertexCount,
                 uniformOffset
             );
-            
+
         } catch (error) {
             console.error('Game loop error:', error);
             this.stop();
             return;
         }
-        
+
         this.animationId = requestAnimationFrame(this.gameLoop);
     }
-    
+
     private handleCollisions(state: number): void {
         // Handle collision feedback (sound, particles, etc. in Phase II)
         if (state & 0x01) console.log('Floor collision');
         if (state & 0x02) console.log('Wall collision');
     }
-    
+
     private async loadWASM(): Promise<WASMExports> {
         try {
             const response = await fetch('game_engine.wasm');
             if (!response.ok) {
                 throw new WASMLoadError(`HTTP ${response.status}`);
             }
-            
+
             const bytes = await response.arrayBuffer();
             const { instance } = await WebAssembly.instantiate(bytes, {
                 env: {
                     // Add any imports if needed
                 }
             });
-            
+
             return instance.exports as unknown as WASMExports;
-            
+
         } catch (error) {
             throw new WASMLoadError(error instanceof Error ? error.message : 'Unknown error');
         }
@@ -459,25 +484,25 @@ export class InputManager {
     ]);
     private callback?: (key: number, pressed: boolean) => void;
     private boundHandlers: { down: any, up: any };
-    
+
     constructor() {
         this.boundHandlers = {
             down: this.handleKeyDown.bind(this),
             up: this.handleKeyUp.bind(this)
         };
     }
-    
+
     init(callback: (key: number, pressed: boolean) => void): void {
         this.callback = callback;
         window.addEventListener('keydown', this.boundHandlers.down);
         window.addEventListener('keyup', this.boundHandlers.up);
     }
-    
+
     dispose(): void {
         window.removeEventListener('keydown', this.boundHandlers.down);
         window.removeEventListener('keyup', this.boundHandlers.up);
     }
-    
+
     private handleKeyDown(e: KeyboardEvent): void {
         const keyCode = this.keyMap.get(e.key.toLowerCase());
         if (keyCode && this.callback) {
@@ -485,7 +510,7 @@ export class InputManager {
             this.callback(keyCode, true);
         }
     }
-    
+
     private handleKeyUp(e: KeyboardEvent): void {
         const keyCode = this.keyMap.get(e.key.toLowerCase());
         if (keyCode && this.callback) {
@@ -507,21 +532,21 @@ export class Renderer {
     private vertexBuffer?: GPUBuffer;
     private uniformBuffer?: GPUBuffer;
     private bindGroup?: GPUBindGroup;
-    
+
     async init(canvas: HTMLCanvasElement): Promise<void> {
         // Get adapter with fallback options
         const adapter = await navigator.gpu?.requestAdapter({
             powerPreference: 'high-performance',
             forceFallbackAdapter: false,
         });
-        
+
         if (!adapter) {
             throw new WebGPUNotSupportedError();
         }
-        
+
         // Check for required features
         const requiredFeatures: GPUFeatureName[] = [];
-        
+
         this.device = await adapter.requestDevice({
             requiredFeatures,
             requiredLimits: {
@@ -529,41 +554,41 @@ export class Renderer {
                 maxVertexBuffers: 1,
             }
         });
-        
+
         const context = canvas.getContext('webgpu');
         if (!context) {
             throw new EngineError('Failed to get WebGPU context', 'CONTEXT_ERROR');
         }
         this.context = context;
-        
+
         const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
         this.context.configure({
             device: this.device,
             format: presentationFormat,
             alphaMode: 'premultiplied',
         });
-        
+
         await this.createPipeline(presentationFormat);
     }
-    
+
     getDevice(): GPUDevice {
         if (!this.device) {
             throw new EngineError('Renderer not initialized', 'NOT_INITIALIZED');
         }
         return this.device;
     }
-    
+
     render(wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number): void {
         if (!this.device || !this.context || !this.pipeline) {
             throw new EngineError('Renderer not initialized', 'NOT_INITIALIZED');
         }
-        
+
         // Update buffers from WASM memory
         this.updateBuffers(wasmMemory, vertexOffset, vertexCount, uniformOffset);
-        
+
         const commandEncoder = this.device.createCommandEncoder();
         const textureView = this.context.getCurrentTexture().createView();
-        
+
         const renderPass = commandEncoder.beginRenderPass({
             colorAttachments: [{
                 view: textureView,
@@ -572,34 +597,34 @@ export class Renderer {
                 storeOp: 'store',
             }],
         });
-        
+
         renderPass.setPipeline(this.pipeline);
         renderPass.setBindGroup(0, this.bindGroup!);
         renderPass.setVertexBuffer(0, this.vertexBuffer!);
         renderPass.draw(vertexCount);
         renderPass.end();
-        
+
         this.device.queue.submit([commandEncoder.finish()]);
     }
-    
+
     dispose(): void {
         this.vertexBuffer?.destroy();
         this.uniformBuffer?.destroy();
         // Clean up other GPU resources
     }
-    
+
     private async createPipeline(format: GPUTextureFormat): Promise<void> {
         const shaderModule = this.device!.createShaderModule({
             label: 'Ball Shader',
             code: this.getShaderCode(),
         });
-        
+
         // Create buffers
         this.uniformBuffer = this.device!.createBuffer({
             size: 192, // 3 matrices * 16 floats * 4 bytes
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
-        
+
         // Create bind group layout
         const bindGroupLayout = this.device!.createBindGroupLayout({
             entries: [{
@@ -608,7 +633,7 @@ export class Renderer {
                 buffer: { type: 'uniform' },
             }],
         });
-        
+
         this.bindGroup = this.device!.createBindGroup({
             layout: bindGroupLayout,
             entries: [{
@@ -616,7 +641,7 @@ export class Renderer {
                 resource: { buffer: this.uniformBuffer },
             }],
         });
-        
+
         // Create pipeline
         this.pipeline = this.device!.createRenderPipeline({
             layout: this.device!.createPipelineLayout({
@@ -647,12 +672,12 @@ export class Renderer {
             },
         });
     }
-    
+
     private updateBuffers(wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number): void {
         // Create/update vertex buffer
         const vertexData = new Float32Array(wasmMemory, vertexOffset, vertexCount * 3);
         const vertexSize = vertexData.byteLength;
-        
+
         if (!this.vertexBuffer || this.vertexBuffer.size < vertexSize) {
             this.vertexBuffer?.destroy();
             this.vertexBuffer = this.device!.createBuffer({
@@ -660,14 +685,14 @@ export class Renderer {
                 usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
             });
         }
-        
+
         this.device!.queue.writeBuffer(this.vertexBuffer, 0, vertexData);
-        
+
         // Update uniform buffer
         const uniformData = new Float32Array(wasmMemory, uniformOffset, 48);
         this.device!.queue.writeBuffer(this.uniformBuffer!, 0, uniformData);
     }
-    
+
     private getShaderCode(): string {
         return `
             struct Uniforms {
@@ -675,14 +700,14 @@ export class Renderer {
                 view: mat4x4<f32>,
                 projection: mat4x4<f32>,
             }
-            
+
             @binding(0) @group(0) var<uniform> uniforms: Uniforms;
-            
+
             struct VertexOutput {
                 @builtin(position) position: vec4<f32>,
                 @location(0) world_pos: vec3<f32>,
             }
-            
+
             @vertex
             fn vs_main(@location(0) position: vec3<f32>) -> VertexOutput {
                 var out: VertexOutput;
@@ -691,7 +716,7 @@ export class Renderer {
                 out.world_pos = world_pos.xyz;
                 return out;
             }
-            
+
             @fragment
             fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 return vec4<f32>(0.0, 1.0, 1.0, 1.0); // Cyan wireframe
@@ -712,7 +737,7 @@ import { AssetConfig } from './types';
 async function startDemo(): Promise<void> {
     try {
         const engine = new Engine('canvas');
-        
+
         await engine.init({
             physics: {
                 gravity: -9.8,
@@ -720,21 +745,21 @@ async function startDemo(): Promise<void> {
                 bounds: { x: 10, y: 10, z: 10 }
             }
         });
-        
+
         await engine.loadAssets({
             ball: { segments: 32, radius: 1.0 }
         });
-        
+
         engine.start();
-        
+
         // Handle cleanup on page unload
         window.addEventListener('beforeunload', () => {
             engine.dispose();
         });
-        
+
     } catch (error) {
         console.error('Failed to start engine:', error);
-        
+
         // Show user-friendly error message
         if (error instanceof Error) {
             if (error.message.includes('WebGPU')) {
@@ -775,7 +800,7 @@ const Vec3 = struct {
 
 const Mat4 = struct {
     data: [16]f32,
-    
+
     fn identity() MateatError {
         return .{ .data = .{
             1, 0, 0, 0,
@@ -809,38 +834,38 @@ export fn init() void {
         Vec3{ .x = 0, .y = 0, .z = 0 },
         Vec3{ .x = 0, .y = 1, .z = 0 }
     );
-    
+
     // Set up projection matrix
     projection_matrix = createPerspective(60.0, 1.333, 0.1, 100.0);
 }
 
 export fn update(delta_time: f32) void {
     collision_state = 0;
-    
+
     // Apply input forces
     var force = Vec3{ .x = 0, .y = 0, .z = 0 };
     if (input_state & 0x01 != 0) force.z -= 5.0; // W
     if (input_state & 0x02 != 0) force.x -= 5.0; // A
     if (input_state & 0x04 != 0) force.z += 5.0; // S
     if (input_state & 0x08 != 0) force.x += 5.0; // D
-    
+
     // Apply gravity
     force.y += GRAVITY;
-    
+
     // Update velocity (F = ma, assuming m = 1)
     ball_velocity.x += force.x * delta_time;
     ball_velocity.y += force.y * delta_time;
     ball_velocity.z += force.z * delta_time;
-    
+
     // Apply damping
     ball_velocity.x *= DAMPING;
     ball_velocity.z *= DAMPING;
-    
+
     // Update position
     ball_position.x += ball_velocity.x * delta_time;
     ball_position.y += ball_velocity.y * delta_time;
     ball_position.z += ball_velocity.z * delta_time;
-    
+
     // Collision detection and response
     // Floor collision
     if (ball_position.y - ball_radius < -BOUNDS.y) {
@@ -848,20 +873,20 @@ export fn update(delta_time: f32) void {
         ball_velocity.y = -ball_velocity.y * RESTITUTION;
         collision_state |= 0x01;
     }
-    
+
     // Wall collisions
     if (@abs(ball_position.x) + ball_radius > BOUNDS.x) {
         ball_position.x = std.math.sign(ball_position.x) * (BOUNDS.x - ball_radius);
         ball_velocity.x = -ball_velocity.x * RESTITUTION;
         collision_state |= 0x02;
     }
-    
+
     if (@abs(ball_position.z) + ball_radius > BOUNDS.z) {
         ball_position.z = std.math.sign(ball_position.z) * (BOUNDS.z - ball_radius);
         ball_velocity.z = -ball_velocity.z * RESTITUTION;
         collision_state |= 0x02;
     }
-    
+
     // Update model matrix with ball position
     model_matrix = Mat4.identity();
     model_matrix.data[12] = ball_position.x;
@@ -877,7 +902,7 @@ export fn set_input(key: u8, pressed: bool) void {
         68 => @as(u8, 0x08), // D
         else => @as(u8, 0),
     };
-    
+
     if (pressed) {
         input_state |= key_map;
     } else {
@@ -919,33 +944,33 @@ export fn apply_force(x: f32, y: f32, z: f32) void {
 // Helper functions
 fn generateWireframeSphere(vertices: [*]f32, segments: u32) u32 {
     var index: u32 = 0;
-    
+
     // Generate latitude lines
     var lat: u32 = 0;
     while (lat <= segments) : (lat += 1) {
         const theta = @as(f32, @floatFromInt(lat)) * std.math.pi / @as(f32, @floatFromInt(segments));
         const sin_theta = @sin(theta);
         const cos_theta = @cos(theta);
-        
+
         var lon: u32 = 0;
         while (lon < segments) : (lon += 1) {
             const phi1 = @as(f32, @floatFromInt(lon)) * 2.0 * std.math.pi / @as(f32, @floatFromInt(segments));
             const phi2 = @as(f32, @floatFromInt(lon + 1)) * 2.0 * std.math.pi / @as(f32, @floatFromInt(segments));
-            
+
             // First vertex
             vertices[index] = ball_radius * @cos(phi1) * sin_theta;
             vertices[index + 1] = ball_radius * cos_theta;
             vertices[index + 2] = ball_radius * @sin(phi1) * sin_theta;
-            
+
             // Second vertex
             vertices[index + 3] = ball_radius * @cos(phi2) * sin_theta;
             vertices[index + 4] = ball_radius * cos_theta;
             vertices[index + 5] = ball_radius * @sin(phi2) * sin_theta;
-            
+
             index += 6;
         }
     }
-    
+
     return index / 3;
 }
 
@@ -957,7 +982,7 @@ fn createLookAt(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
     });
     const s = normalize(cross(f, up));
     const u = cross(s, f);
-    
+
     return Mat4{ .data = .{
         s.x, u.x, -f.x, 0,
         s.y, u.y, -f.y, 0,
@@ -969,7 +994,7 @@ fn createLookAt(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
 fn createPerspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
     const f = 1.0 / @tan(fov * std.math.pi / 360.0);
     const range_inv = 1.0 / (near - far);
-    
+
     return Mat4{ .data = .{
         f / aspect, 0, 0, 0,
         0, f, 0, 0,

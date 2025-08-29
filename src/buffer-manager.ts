@@ -2,15 +2,26 @@
 import { EngineError } from './types.js';
 
 export class BufferManager {
-  private wasmMemory: WebAssembly.Memory;
-  private device: GPUDevice;
+  private wasmMemory?: WebAssembly.Memory;
+  private device?: GPUDevice;
 
-  constructor(wasmMemory: WebAssembly.Memory, device: GPUDevice) {
+  constructor() {
+    // Empty constructor - dependencies injected via setters
+  }
+
+  setMemory(wasmMemory: WebAssembly.Memory): void {
     this.wasmMemory = wasmMemory;
+  }
+
+  setDevice(device: GPUDevice): void {
     this.device = device;
   }
 
   createVertexBuffer(offset: number, vertexCount: number): GPUBuffer {
+    if (!this.wasmMemory || !this.device) {
+      throw new EngineError('BufferManager not properly initialized', 'NOT_INITIALIZED');
+    }
+
     try {
       const size = vertexCount * 3 * Float32Array.BYTES_PER_ELEMENT;
       const data = new Float32Array(
@@ -39,6 +50,10 @@ export class BufferManager {
   }
 
   updateUniformBuffer(buffer: GPUBuffer, offset: number): void {
+    if (!this.wasmMemory || !this.device) {
+      throw new EngineError('BufferManager not properly initialized', 'NOT_INITIALIZED');
+    }
+
     try {
       const data = new Float32Array(this.wasmMemory.buffer, offset, 48); // 3 matrices * 16 floats
       this.device.queue.writeBuffer(buffer, 0, data);
@@ -51,6 +66,10 @@ export class BufferManager {
   }
 
   createUniformBuffer(): GPUBuffer {
+    if (!this.device) {
+      throw new EngineError('BufferManager device not initialized', 'NOT_INITIALIZED');
+    }
+
     try {
       return this.device.createBuffer({
         label: 'Uniform Buffer',
@@ -69,6 +88,9 @@ export class BufferManager {
    * Get a Float32Array view directly into WASM memory (zero-copy)
    */
   getVertexData(offset: number, vertexCount: number): Float32Array {
+    if (!this.wasmMemory) {
+      throw new EngineError('BufferManager memory not initialized', 'NOT_INITIALIZED');
+    }
     return new Float32Array(
       this.wasmMemory.buffer,
       offset,
@@ -80,6 +102,9 @@ export class BufferManager {
    * Get a Float32Array view directly into WASM memory for matrices (zero-copy)
    */
   getUniformData(offset: number): Float32Array {
+    if (!this.wasmMemory) {
+      throw new EngineError('BufferManager memory not initialized', 'NOT_INITIALIZED');
+    }
     return new Float32Array(this.wasmMemory.buffer, offset, 48); // 3 matrices * 16 floats
   }
 
@@ -87,6 +112,9 @@ export class BufferManager {
    * Validate that memory offsets are within bounds
    */
   validateMemoryAccess(offset: number, size: number): boolean {
+    if (!this.wasmMemory) {
+      return false;
+    }
     const bufferSize = this.wasmMemory.buffer.byteLength;
     return offset >= 0 && offset + size <= bufferSize;
   }
@@ -95,6 +123,9 @@ export class BufferManager {
    * Get memory usage statistics for debugging
    */
   getMemoryStats(): { totalSize: number; usedSize: number } {
+    if (!this.wasmMemory) {
+      return { totalSize: 0, usedSize: 0 };
+    }
     return {
       totalSize: this.wasmMemory.buffer.byteLength,
       usedSize: this.wasmMemory.buffer.byteLength // Simplified - actual tracking would be more complex
