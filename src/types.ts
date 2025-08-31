@@ -66,6 +66,10 @@ export interface WASMExports {
   get_entity_position_z(index: number): number;
   set_entity_position(index: number, x: number, y: number, z: number): void;
   set_entity_velocity(index: number, x: number, y: number, z: number): void;
+  // Phase 6.3 Grid floor exports
+  generate_grid_floor(grid_size: number): void;
+  get_grid_buffer_offset(): number;
+  get_grid_vertex_count(): number;
 }
 
 export interface GameEngine {

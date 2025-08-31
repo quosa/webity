@@ -4,18 +4,20 @@
   "description": "Simple game engine with TypeScript, WebAssembly and WebGPU",
   "type": "module",
   "scripts": {
+    "build": "npm run build:vite && npm run build:wasm",
+    "build:vite": "tsc && vite build",
+    "build:wasm": "zig build-exe src/core/game_engine.zig -target wasm32-freestanding -fno-entry -rdynamic -O ReleaseSmall && mv game_engine.wasm public/",
+    "clean": "rm -f public/game_engine.wasm dist/game_engine.wasm",
     "dev": "vite",
-    "build": "tsc && vite build",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "preview": "vite preview",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
     "test:zig": "zig test src/core/game_core_test.zig",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run test:zig",
-    "build:wasm": "zig build-exe src/core/game_engine.zig -target wasm32-freestanding -fno-entry -rdynamic -O ReleaseSmall && mv game_engine.wasm public/"
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:zig"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

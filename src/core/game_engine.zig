@@ -6,6 +6,10 @@ const core = @import("game_core.zig");
 var vertex_buffer: [10000]f32 = undefined;
 var vertex_count: u32 = 0;
 
+// Grid floor rendering
+var grid_buffer: [5000]f32 = undefined;
+var grid_vertex_count: u32 = 0;
+
 var uniforms: core.Uniforms = core.Uniforms{
     .model = core.Mat4.identity(),
     .view = core.Mat4.identity(),
@@ -34,7 +38,7 @@ const Entity = struct {
 };
 
 var entities: [MAX_ENTITIES]Entity = undefined;
-var entity_count: u32 = 0;
+pub var entity_count: u32 = 0;
 
 var input_state: u8 = 0; // Bitmask for WASD
 var collision_state: u8 = 0; // Bitmask for collisions
@@ -50,14 +54,14 @@ fn initEntities() void {
         };
     }
     entity_count = 0;
-    
+
     // Spawn one initial ball for backward compatibility
-    _ = spawnEntity(0, 3, 2, 0.5);
+    _ = spawnEntityInternal(0, 3, 2, 0.5);
 }
 
-fn spawnEntity(x: f32, y: f32, z: f32, radius: f32) u32 {
+fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32) u32 {
     if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
-    
+
     const index = entity_count;
     entities[index] = Entity{
         .position = .{ .x = x, .y = y, .z = z },
@@ -69,11 +73,11 @@ fn spawnEntity(x: f32, y: f32, z: f32, radius: f32) u32 {
     return index;
 }
 
-// WASM Exports - thin wrappers around core functionality
+// WASM exports - thin wrappers around core functionality
 export fn init() void {
     // Initialize entity system
     initEntities();
-    
+
     // Set up initial view matrix using camera state
     updateViewMatrix();
 
@@ -131,23 +135,23 @@ fn simulatePhysicsWithConfig(position: *core.Vec3, velocity: *core.Vec3, delta_t
 
 fn checkEntityCollisions(delta_time: f32) void {
     _ = delta_time; // Currently unused, but available for collision response
-    
+
     // Check all pairs of active entities for collisions
     for (0..entity_count) |i| {
         if (!entities[i].active) continue;
-        
+
         for (i + 1..entity_count) |j| {
             if (!entities[j].active) continue;
-            
+
             // Calculate distance between sphere centers
             const dx = entities[i].position.x - entities[j].position.x;
             const dy = entities[i].position.y - entities[j].position.y;
             const dz = entities[i].position.z - entities[j].position.z;
             const distance_squared = dx * dx + dy * dy + dz * dz;
             const distance = @sqrt(distance_squared);
-            
+
             const combined_radius = entities[i].radius + entities[j].radius;
-            
+
             // Check if spheres are overlapping
             if (distance < combined_radius and distance > 0.001) { // Avoid division by zero
                 // Calculate collision normal (from i to j)
@@ -156,44 +160,44 @@ fn checkEntityCollisions(delta_time: f32) void {
                     .y = dy / distance,
                     .z = dz / distance,
                 };
-                
+
                 // Separate the spheres to prevent overlap
                 const overlap = combined_radius - distance;
                 const separation = overlap * 0.5;
-                
+
                 entities[i].position.x += normal.x * separation;
                 entities[i].position.y += normal.y * separation;
                 entities[i].position.z += normal.z * separation;
-                
+
                 entities[j].position.x -= normal.x * separation;
                 entities[j].position.y -= normal.y * separation;
                 entities[j].position.z -= normal.z * separation;
-                
+
                 // Calculate relative velocity
                 const rel_vel = core.Vec3{
                     .x = entities[i].velocity.x - entities[j].velocity.x,
                     .y = entities[i].velocity.y - entities[j].velocity.y,
                     .z = entities[i].velocity.z - entities[j].velocity.z,
                 };
-                
+
                 // Velocity component along collision normal
                 const vel_along_normal = core.dot(rel_vel, normal);
-                
+
                 // Do not resolve if velocities are separating
                 if (vel_along_normal > 0) continue;
-                
+
                 // Apply collision response (elastic collision, equal mass assumption)
                 const restitution = physics_restitution;
                 const impulse_scalar = -(1 + restitution) * vel_along_normal * 0.5;
-                
+
                 entities[i].velocity.x += impulse_scalar * normal.x;
                 entities[i].velocity.y += impulse_scalar * normal.y;
                 entities[i].velocity.z += impulse_scalar * normal.z;
-                
+
                 entities[j].velocity.x -= impulse_scalar * normal.x;
                 entities[j].velocity.y -= impulse_scalar * normal.y;
                 entities[j].velocity.z -= impulse_scalar * normal.z;
-                
+
                 // Mark collision for feedback
                 collision_state |= 0x04; // New bit for entity-entity collisions
             }
@@ -271,14 +275,14 @@ export fn update(delta_time: f32) void {
     // Simulate physics for all active entities
     collision_state = 0;
     const force = core.Vec3{ .x = 0, .y = physics_gravity, .z = 0 };
-    
+
     for (0..entity_count) |i| {
         if (entities[i].active) {
             const entity_collision = simulatePhysicsWithConfig(&entities[i].position, &entities[i].velocity, delta_time, force, entities[i].radius);
             collision_state |= entity_collision;
         }
     }
-    
+
     // Check for entity-entity collisions
     checkEntityCollisions(delta_time);
 
@@ -313,8 +317,59 @@ export fn generate_sphere_mesh(segments: u32) void {
     vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
 }
 
+export fn generate_grid_floor(grid_size: u32) void {
+    grid_vertex_count = generateWireframeGrid(&grid_buffer, grid_size);
+}
+
+pub fn generateWireframeGrid(vertices: [*]f32, grid_size: u32) u32 {
+    var index: u32 = 0;
+    const grid_extent = 16.0; // Grid extends from -8 to +8 (matches world bounds)
+    const half_size = grid_extent / 2.0;
+    const step = grid_extent / @as(f32, @floatFromInt(grid_size));
+
+    // Generate horizontal lines (along X axis)
+    var z: u32 = 0;
+    while (z <= grid_size) : (z += 1) {
+        const z_pos = -half_size + @as(f32, @floatFromInt(z)) * step;
+
+        // Line from (-half_size, floor_y, z_pos) to (half_size, floor_y, z_pos)
+        vertices[index] = -half_size; // Start X
+        vertices[index + 1] = -world_bounds.y; // Floor Y
+        vertices[index + 2] = z_pos; // Z
+
+        vertices[index + 3] = half_size; // End X
+        vertices[index + 4] = -world_bounds.y; // Floor Y
+        vertices[index + 5] = z_pos; // Z
+
+        index += 6;
+    }
+
+    // Generate vertical lines (along Z axis)
+    var x: u32 = 0;
+    while (x <= grid_size) : (x += 1) {
+        const x_pos = -half_size + @as(f32, @floatFromInt(x)) * step;
+
+        // Line from (x_pos, floor_y, -half_size) to (x_pos, floor_y, half_size)
+        vertices[index] = x_pos; // X
+        vertices[index + 1] = -world_bounds.y; // Floor Y
+        vertices[index + 2] = -half_size; // Start Z
+
+        vertices[index + 3] = x_pos; // X
+        vertices[index + 4] = -world_bounds.y; // Floor Y
+        vertices[index + 5] = half_size; // End Z
+
+        index += 6;
+    }
+
+    return index / 3; // Return vertex count
+}
+
 export fn get_vertex_buffer_offset() u32 {
     return @as(u32, @intCast(@intFromPtr(&vertex_buffer)));
+}
+
+export fn get_grid_buffer_offset() u32 {
+    return @as(u32, @intCast(@intFromPtr(&grid_buffer)));
 }
 
 export fn get_uniform_buffer_offset() u32 {
@@ -323,6 +378,10 @@ export fn get_uniform_buffer_offset() u32 {
 
 export fn get_vertex_count() u32 {
     return vertex_count;
+}
+
+export fn get_grid_vertex_count() u32 {
+    return grid_vertex_count;
 }
 
 export fn get_collision_state() u8 {
@@ -392,7 +451,7 @@ export fn get_camera_position_z() f32 {
 
 // Multi-entity exports for Phase 6.2
 export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
-    return spawnEntity(x, y, z, radius);
+    return spawnEntityInternal(x, y, z, radius);
 }
 
 export fn get_entity_count() u32 {

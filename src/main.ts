@@ -93,11 +93,29 @@ async function startDemo(): Promise<void> {
       stopButton.style.display = 'inline-block';
     });
 
-    // Add multi-ball demo button functionality
+    // Add scene preset button functionality
     const multiBallButton = document.getElementById('multiBallButton') as HTMLButtonElement;
     multiBallButton?.addEventListener('click', () => {
       engine.spawnMultiBallScene();
       console.log(`🎾 Multi-ball scene spawned! ${engine.getEntityCount()} balls total`);
+    });
+
+    const gridSceneButton = document.getElementById('gridSceneButton') as HTMLButtonElement;
+    gridSceneButton?.addEventListener('click', () => {
+      engine.spawnGridScene(3, 1.5, 8);
+      console.log(`⬜ Grid formation activated! ${engine.getEntityCount()} balls total`);
+    });
+
+    const circleSceneButton = document.getElementById('circleSceneButton') as HTMLButtonElement;
+    circleSceneButton?.addEventListener('click', () => {
+      engine.spawnCircleScene(3, 6, 8);
+      console.log(`⭕ Circle formation activated! ${engine.getEntityCount()} balls total`);
+    });
+
+    const chaosSceneButton = document.getElementById('chaosSceneButton') as HTMLButtonElement;
+    chaosSceneButton?.addEventListener('click', () => {
+      engine.spawnChaosScene(8);
+      console.log(`💥 Chaos mode activated! ${engine.getEntityCount()} balls total`);
     });
 
     showLoading(false);

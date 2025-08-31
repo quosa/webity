@@ -3,29 +3,15 @@ import { Renderer } from '../src/renderer.js';
 import { InputManager } from '../src/input.js';
 import { BufferManager } from '../src/buffer-manager.js';
 import { EngineError, WebGPUNotSupportedError } from '../src/types.js';
-
-// Mock HTML canvas element
-const mockCanvas = {
-  id: 'test-canvas',
-  getContext: jest.fn((contextType: string) => {
-    if (contextType === 'webgpu') {
-      return {
-        configure: jest.fn(),
-        getCurrentTexture: jest.fn().mockReturnValue({
-          createView: jest.fn().mockReturnValue({}),
-        }),
-      };
-    }
-    return null;
-  }),
-} as unknown as HTMLCanvasElement;
+import { setupWebGPUTestEnvironment } from './utils/dom-mocks.js';
 
 // Helper function to create engine with all dependencies
 function createTestEngine(): Engine {
   const bufferManager = new BufferManager();
   const renderer = new Renderer(bufferManager);
   const input = new InputManager();
-  return new Engine(mockCanvas as HTMLCanvasElement, renderer, input, bufferManager);
+  const mockCanvas = document.createElement('canvas');
+  return new Engine(mockCanvas, renderer, input, bufferManager);
 }
 
 describe('Engine', () => {
@@ -35,50 +21,8 @@ describe('Engine', () => {
     // Reset mocks
     jest.clearAllMocks();
     
-    // Mock DOM
-    document.getElementById = jest.fn().mockReturnValue(mockCanvas);
-    
-    // Restore WebGPU mock (it's defined in setup.ts)
-    Object.defineProperty(globalThis, 'navigator', {
-      value: {
-        gpu: {
-          requestAdapter: jest.fn().mockResolvedValue({
-            requestDevice: jest.fn().mockResolvedValue({
-              createBuffer: jest.fn().mockReturnValue({
-                getMappedRange: jest.fn().mockReturnValue(new ArrayBuffer(1024)),
-                unmap: jest.fn(),
-                destroy: jest.fn(),
-                size: 1024,
-              }),
-              createCommandEncoder: jest.fn().mockReturnValue({
-                beginRenderPass: jest.fn().mockReturnValue({
-                  setPipeline: jest.fn(),
-                  setBindGroup: jest.fn(),
-                  setVertexBuffer: jest.fn(),
-                  draw: jest.fn(),
-                  end: jest.fn(),
-                }),
-                finish: jest.fn().mockReturnValue({}),
-              }),
-              createShaderModule: jest.fn().mockReturnValue({}),
-              createBindGroupLayout: jest.fn().mockReturnValue({}),
-              createBindGroup: jest.fn().mockReturnValue({}),
-              createPipelineLayout: jest.fn().mockReturnValue({}),
-              createRenderPipeline: jest.fn().mockReturnValue({}),
-              queue: {
-                submit: jest.fn(),
-                writeBuffer: jest.fn(),
-              },
-            }),
-            limits: {
-              maxBufferSize: 1024 * 1024 * 1024,
-            },
-          }),
-          getPreferredCanvasFormat: jest.fn().mockReturnValue('bgra8unorm'),
-        },
-      },
-      writable: true,
-    });
+    // Set up WebGPU test environment
+    setupWebGPUTestEnvironment();
   });
 
   afterEach(() => {

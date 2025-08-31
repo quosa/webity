@@ -1,3 +1,4 @@
+
 // Main engine class with error handling and lifecycle management
 import {
   EngineConfig,
@@ -21,7 +22,7 @@ export class Engine implements GameEngine {
   constructor(
     private readonly canvas: HTMLCanvasElement, // eslint-disable-line no-unused-vars
     private readonly renderer: Renderer, // eslint-disable-line no-unused-vars
-    private readonly input: InputManager, // eslint-disable-line no-unused-vars  
+    private readonly input: InputManager, // eslint-disable-line no-unused-vars
     private readonly bufferManager: BufferManager // eslint-disable-line no-unused-vars
   ) {
     // Dependencies injected via constructor - explicit and testable
@@ -69,6 +70,9 @@ export class Engine implements GameEngine {
     if (assets.ball) {
       this.wasm.generate_sphere_mesh(assets.ball.segments);
     }
+
+    // Generate grid floor for enhanced visual reference
+    this.wasm.generate_grid_floor(16); // 16x16 grid
   }
 
   start(): void {
@@ -119,26 +123,113 @@ export class Engine implements GameEngine {
     console.log(`🎾 Before clear: ${this.getEntityCount()} balls`);
     this.clearAllBalls();
     console.log(`🎾 After clear: ${this.getEntityCount()} balls`);
-    
-    // Spawn 4 balls closer together for collision interactions
-    const id1 = this.spawnBall(-1, 5, 0, 0.5);   // Left
+
+    // Spawn 4 balls very close together for guaranteed collision interactions
+    const id1 = this.spawnBall(-0.5, 5, 0, 0.5);   // Left - very close
     console.log(`🎾 Spawned ball 1 (id ${id1}): ${this.getEntityCount()} balls total`);
-    const id2 = this.spawnBall(1, 6, 0, 0.5);    // Right  
+    const id2 = this.spawnBall(0.5, 5.5, 0, 0.5);    // Right - very close
     console.log(`🎾 Spawned ball 2 (id ${id2}): ${this.getEntityCount()} balls total`);
-    const id3 = this.spawnBall(0, 7, -1, 0.5);   // Back
+    const id3 = this.spawnBall(0, 6, -0.5, 0.5);   // Back - very close
     console.log(`🎾 Spawned ball 3 (id ${id3}): ${this.getEntityCount()} balls total`);
-    const id4 = this.spawnBall(0, 8, 1, 0.5);    // Front
+    const id4 = this.spawnBall(0, 6.5, 0.5, 0.5);    // Front - very close
     console.log(`🎾 Spawned ball 4 (id ${id4}): ${this.getEntityCount()} balls total`);
-    
+
     // Add some initial velocity to create interactions
     if (this.wasm) {
       this.wasm.set_entity_velocity(0, 0.5, 0, 0.2);   // Ball 0: slight right and forward push
-      this.wasm.set_entity_velocity(1, -0.3, 0, -0.1); // Ball 1: slight left and back push  
+      this.wasm.set_entity_velocity(1, -0.3, 0, -0.1); // Ball 1: slight left and back push
       this.wasm.set_entity_velocity(2, 0.2, 0, 0.4);   // Ball 2: slight right and forward push
       this.wasm.set_entity_velocity(3, -0.1, 0, -0.3); // Ball 3: slight left and back push
     }
-    
+
     console.log(`🎾 Final result: ${this.getEntityCount()} balls for multi-ball collision demo!`);
+  }
+
+  // Phase 6.3: Enhanced scene configuration API
+  spawnGridScene(gridSize: number = 3, spacing: number = 1.5, height: number = 8): void {
+    console.log(`🎾 Creating ${gridSize}x${gridSize} grid scene`);
+    this.clearAllBalls();
+
+    const offset = (gridSize - 1) * spacing / 2; // Center the grid
+    let ballCount = 0;
+
+    for (let x = 0; x < gridSize; x++) {
+      for (let z = 0; z < gridSize; z++) {
+        if (ballCount >= 10) break; // MAX_ENTITIES limit
+
+        const xPos = (x * spacing) - offset;
+        const zPos = (z * spacing) - offset;
+        const yPos = height + (Math.random() * 2); // Slight height variation
+
+        this.spawnBall(xPos, yPos, zPos, 0.5);
+        ballCount++;
+      }
+    }
+
+    console.log(`🎾 Grid scene created: ${this.getEntityCount()} balls in ${gridSize}x${gridSize} formation`);
+  }
+
+  spawnCircleScene(radius: number = 3, ballCount: number = 6, height: number = 8): void {
+    console.log(`🎾 Creating circle scene with ${ballCount} balls`);
+    this.clearAllBalls();
+
+    const maxBalls = Math.min(ballCount, 10); // MAX_ENTITIES limit
+
+    for (let i = 0; i < maxBalls; i++) {
+      const angle = (i / maxBalls) * 2 * Math.PI;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const y = height + (Math.random() * 2); // Slight height variation
+
+      this.spawnBall(x, y, z, 0.5);
+
+      // Add slight inward velocity for interesting collisions
+      if (this.wasm) {
+        this.wasm.set_entity_velocity(i, -x * 0.1, 0, -z * 0.1);
+      }
+    }
+
+    console.log(`🎾 Circle scene created: ${this.getEntityCount()} balls in circular formation`);
+  }
+
+  spawnChaosScene(ballCount: number = 8): void {
+    console.log(`🎾 Creating chaos scene with ${ballCount} balls`);
+    this.clearAllBalls();
+
+    const maxBalls = Math.min(ballCount, 10); // MAX_ENTITIES limit
+
+    for (let i = 0; i < maxBalls; i++) {
+      // Random positions within bounds
+      const x = (Math.random() - 0.5) * 12; // -6 to +6
+      const y = 5 + Math.random() * 8;      // 5 to 13 height
+      const z = (Math.random() - 0.5) * 12; // -6 to +6
+
+      this.spawnBall(x, y, z, 0.5);
+
+      // Random initial velocities for chaos
+      if (this.wasm) {
+        const vx = (Math.random() - 0.5) * 4;
+        const vz = (Math.random() - 0.5) * 4;
+        this.wasm.set_entity_velocity(i, vx, 0, vz);
+      }
+    }
+
+    console.log(`🎾 Chaos scene created: ${this.getEntityCount()} balls with random positions and velocities`);
+  }
+
+  // Physics parameter controls
+  setPhysicsParameters(gravity: number = -9.8, damping: number = 0.99, restitution: number = 0.8): void {
+    if (this.wasm) {
+      this.wasm.set_physics_config(gravity, damping, restitution);
+      console.log(`🎾 Physics updated: gravity=${gravity}, damping=${damping}, restitution=${restitution}`);
+    }
+  }
+
+  setWorldSize(size: number = 8): void {
+    if (this.wasm) {
+      this.wasm.set_world_bounds(size, size, size);
+      console.log(`🎾 World bounds updated: ${size}x${size}x${size}`);
+    }
   }
 
   private gameLoop = (): void => {
@@ -178,8 +269,8 @@ export class Engine implements GameEngine {
         }
       }
 
-      // Render all active entities
-      this.renderer.renderMultipleEntities(
+      // Render using optimized instanced rendering (Phase 6.3)
+      this.renderer.renderMultipleEntitiesInstanced(
         this.wasm!.memory.buffer,
         vertexOffset,
         vertexCount,
@@ -210,7 +301,7 @@ export class Engine implements GameEngine {
       if (!response.ok) {
         throw new WASMLoadError(`HTTP ${response.status}`);
       }
-
+      
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, {
         env: {

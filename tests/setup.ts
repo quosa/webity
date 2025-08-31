@@ -1,96 +1,44 @@
-// Mock WebGPU constants
-Object.defineProperty(globalThis, 'GPUBufferUsage', {
-  value: {
-    VERTEX: 0x20,
-    UNIFORM: 0x40,
-    COPY_DST: 0x8,
-  },
-  writable: true,
-});
+// WebGPU and DOM mocks moved to tests/utils/dom-mocks.ts
+// Import and use setupWebGPUTestEnvironment() in tests that need WebGPU
 
-Object.defineProperty(globalThis, 'GPUShaderStage', {
-  value: {
-    VERTEX: 1,
-    FRAGMENT: 2,
-    COMPUTE: 4,
-  },
-  writable: true,
-});
+// WebAssembly is NOT mocked globally - let real instantiation work
+// Individual tests can mock WebAssembly if needed for error testing
 
-// Mock WebGPU for testing
-Object.defineProperty(globalThis, 'navigator', {
-  value: {
-    gpu: {
-      requestAdapter: jest.fn().mockResolvedValue({
-        requestDevice: jest.fn().mockResolvedValue({
-          createBuffer: jest.fn().mockReturnValue({
-            getMappedRange: jest.fn().mockReturnValue(new ArrayBuffer(1024)),
-            unmap: jest.fn(),
-            destroy: jest.fn(),
-            size: 1024,
-          }),
-          createCommandEncoder: jest.fn().mockReturnValue({
-            beginRenderPass: jest.fn().mockReturnValue({
-              setPipeline: jest.fn(),
-              setBindGroup: jest.fn(),
-              setVertexBuffer: jest.fn(),
-              draw: jest.fn(),
-              end: jest.fn(),
-            }),
-            finish: jest.fn().mockReturnValue({}),
-          }),
-          createShaderModule: jest.fn().mockReturnValue({}),
-          createBindGroupLayout: jest.fn().mockReturnValue({}),
-          createBindGroup: jest.fn().mockReturnValue({}),
-          createPipelineLayout: jest.fn().mockReturnValue({}),
-          createRenderPipeline: jest.fn().mockReturnValue({}),
-          queue: {
-            submit: jest.fn(),
-            writeBuffer: jest.fn(),
-          },
-        }),
-        limits: {
-          maxBufferSize: 1024 * 1024 * 1024,
-        },
-      }),
-      getPreferredCanvasFormat: jest.fn().mockReturnValue('bgra8unorm'),
-    },
-  },
-  writable: true,
-});
-
-// Mock WebAssembly for testing
-Object.defineProperty(globalThis, 'WebAssembly', {
-  value: {
-    instantiate: jest.fn().mockResolvedValue({
-      instance: {
-        exports: {
-          memory: {
-            buffer: new ArrayBuffer(1024 * 1024),
-          },
-          init: jest.fn(),
-          update: jest.fn(),
-          set_input: jest.fn(),
-          generate_sphere_mesh: jest.fn(),
-          get_vertex_buffer_offset: jest.fn().mockReturnValue(0),
-          get_uniform_buffer_offset: jest.fn().mockReturnValue(1024),
-          get_vertex_count: jest.fn().mockReturnValue(100),
-          get_collision_state: jest.fn().mockReturnValue(0),
-          set_position: jest.fn(),
-          apply_force: jest.fn(),
-        },
-      },
-    }),
-  },
-  writable: true,
-});
-
-// Mock fetch for WASM loading
+// Smart fetch mock that loads real WASM from disk
 Object.defineProperty(globalThis, 'fetch', {
-  value: jest.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(1024)),
+  value: jest.fn().mockImplementation(async (url: string) => {
+    // If it's a WASM file, load real bytes from disk
+    if (url.endsWith('.wasm') || url.includes('game_engine')) {
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const wasmPath = path.resolve(__dirname, '../public/game_engine.wasm');
+        const wasmBuffer = fs.readFileSync(wasmPath);
+        
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: () => Promise.resolve(wasmBuffer.buffer.slice(
+            wasmBuffer.byteOffset,
+            wasmBuffer.byteOffset + wasmBuffer.byteLength
+          ))
+        };
+      } catch (error) {
+        console.warn('Failed to load WASM file in test:', error);
+        return { 
+          ok: false, 
+          status: 404,
+          statusText: 'WASM file not found'
+        };
+      }
+    }
+    
+    // For non-WASM URLs, return simple mock
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(1024)),
+    };
   }),
   writable: true,
 });
@@ -105,7 +53,7 @@ Object.defineProperty(globalThis, 'performance', {
 
 // Mock requestAnimationFrame
 Object.defineProperty(globalThis, 'requestAnimationFrame', {
-  value: jest.fn((callback: FrameRequestCallback) => {
+  value: jest.fn((callback: (_time: number) => void) => {
     setTimeout(() => callback(performance.now()), 16);
     return 1;
   }),
@@ -117,42 +65,4 @@ Object.defineProperty(globalThis, 'cancelAnimationFrame', {
   writable: true,
 });
 
-// Mock HTML Canvas with proper WebGPU context
-Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-  value: jest.fn((contextType: string) => {
-    if (contextType === 'webgpu') {
-      return {
-        configure: jest.fn(),
-        getCurrentTexture: jest.fn().mockReturnValue({
-          createView: jest.fn().mockReturnValue({}),
-        }),
-      };
-    }
-    return null;
-  }),
-  writable: true,
-});
-
-// Ensure document.getElementById returns a canvas with proper mocking
-const mockCanvas = {
-  id: 'test-canvas',
-  getContext: jest.fn((contextType: string) => {
-    if (contextType === 'webgpu') {
-      return {
-        configure: jest.fn(),
-        getCurrentTexture: jest.fn().mockReturnValue({
-          createView: jest.fn().mockReturnValue({}),
-        }),
-      };
-    }
-    return null;
-  }),
-  width: 800,
-  height: 600,
-} as unknown as HTMLCanvasElement;
-
-// Mock document.getElementById to return our mock canvas
-Object.defineProperty(document, 'getElementById', {
-  value: jest.fn().mockReturnValue(mockCanvas),
-  writable: true,
-});
+// Canvas and document mocks moved to tests/utils/dom-mocks.ts

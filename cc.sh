@@ -30,5 +30,10 @@ if ! command -v claude &> /dev/null; then
     exit 1
 fi
 
+# mitm
+# export http_proxy=http://127.0.0.1:8080
+# export https_proxy=http://127.0.0.1:8080
+
+
 # Start Claude Code
 claude "$@"

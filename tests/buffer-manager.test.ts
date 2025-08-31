@@ -1,5 +1,6 @@
 import { BufferManager } from '../src/buffer-manager.js';
 import { EngineError } from '../src/types.js';
+import { mockWebGPUConstants } from './utils/dom-mocks.js';
 
 describe('BufferManager', () => {
   let bufferManager: BufferManager;
@@ -7,6 +8,9 @@ describe('BufferManager', () => {
   let mockDevice: GPUDevice;
 
   beforeEach(() => {
+    // Set up WebGPU constants for this test
+    mockWebGPUConstants();
+    
     // Create mock WebAssembly memory with sufficient space
     const buffer = new ArrayBuffer(1024 * 1024); // 1MB buffer
     // Fill with some test data

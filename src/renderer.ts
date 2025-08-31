@@ -5,12 +5,17 @@ import { BufferManager } from './buffer-manager.js';
 export class Renderer {
   private device?: GPUDevice;
   private context?: GPUCanvasContext;
-  private pipeline?: GPURenderPipeline;
   private vertexBuffer?: GPUBuffer;
   private uniformBuffer?: GPUBuffer;
-  private bindGroup?: GPUBindGroup;
-  private entityUniformBuffers: GPUBuffer[] = [];
-  private entityBindGroups: GPUBindGroup[] = [];
+  // Grid floor rendering
+  private gridPipeline?: GPURenderPipeline;
+  private gridVertexBuffer?: GPUBuffer;
+  private gridUniformBuffer?: GPUBuffer;
+  private gridBindGroup?: GPUBindGroup;
+  // Instanced rendering (Phase 6.3 optimization)
+  private instancedPipeline?: GPURenderPipeline;
+  private instanceBuffer?: GPUBuffer;
+  private instancedBindGroup?: GPUBindGroup;
 
   constructor(private bufferManager: BufferManager) { // eslint-disable-line no-unused-vars
     // BufferManager injected via constructor
@@ -48,7 +53,7 @@ export class Renderer {
     this.context.configure({
       device: this.device,
       format: presentationFormat,
-      alphaMode: 'opaque', // 'premultiplied', // opaque
+      alphaMode: 'opaque',
     });
 
     // Set device on BufferManager after device initialization
@@ -64,53 +69,32 @@ export class Renderer {
     return this.device;
   }
 
-  render(wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number): void {
-    if (!this.device || !this.context || !this.pipeline) {
-      throw new EngineError('Renderer not initialized', 'NOT_INITIALIZED');
-    }
-    console.log('render:',
-      new Float32Array(wasmMemory.slice(vertexOffset, vertexOffset + vertexCount * 4)),
-      vertexOffset, vertexCount, uniformOffset);
 
-    // Update buffers from WASM memory
-    this.updateBuffers(wasmMemory, vertexOffset, vertexCount, uniformOffset);
 
-    const commandEncoder = this.device.createCommandEncoder({ label: 'Render Commands' });
-    const textureView = this.context.getCurrentTexture().createView();
-
-    const renderPass = commandEncoder.beginRenderPass({
-      label: 'Ball Render Pass',
-      colorAttachments: [{
-        view: textureView,
-        clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 }, // Dark blue background
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-
-    renderPass.setPipeline(this.pipeline);
-    renderPass.setBindGroup(0, this.bindGroup!);
-    renderPass.setVertexBuffer(0, this.vertexBuffer!);
-    renderPass.draw(vertexCount); // Draw actual vertex count from WASM
-    renderPass.end();
-
-    this.device.queue.submit([commandEncoder.finish()]);
-  }
-
-  // Phase 6.2: Render multiple entities
-  renderMultipleEntities(wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number, wasm: any, entityCount: number): void {
-    if (!this.device || !this.context || !this.pipeline) {
-      throw new EngineError('Renderer not initialized', 'NOT_INITIALIZED');
+  // Phase 6.3: Optimized instanced rendering - single draw call for all entities
+  renderMultipleEntitiesInstanced(wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number, wasm: any, entityCount: number): void {
+    if (!this.device || !this.context || !this.instancedPipeline || entityCount === 0) {
+      return; // Skip if not ready or no entities
     }
 
-    // Update vertex buffer only (same mesh for all entities) - don't update uniforms here
+    // Update vertex buffer (shared mesh for all entities)
     this.updateVertexBufferOnly(wasmMemory, vertexOffset, vertexCount);
 
-    const commandEncoder = this.device.createCommandEncoder({ label: 'Multi-Entity Render Commands' });
+    // Update grid buffers if available
+    const gridOffset = wasm.get_grid_buffer_offset();
+    const gridVertexCount = wasm.get_grid_vertex_count();
+    if (gridVertexCount > 0) {
+      this.updateGridBuffers(wasmMemory, gridOffset, gridVertexCount, uniformOffset);
+    }
+
+    // Pack all entity transforms into instance buffer
+    this.updateInstanceBuffer(wasmMemory, uniformOffset, wasm, entityCount);
+
+    const commandEncoder = this.device.createCommandEncoder({ label: 'Instanced Render Commands' });
     const textureView = this.context.getCurrentTexture().createView();
 
     const renderPass = commandEncoder.beginRenderPass({
-      label: 'Multi-Ball Render Pass',
+      label: 'Instanced Grid + Balls Render Pass',
       colorAttachments: [{
         view: textureView,
         clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 }, // Dark blue background
@@ -119,73 +103,32 @@ export class Renderer {
       }],
     });
 
-    renderPass.setPipeline(this.pipeline);
-    renderPass.setVertexBuffer(0, this.vertexBuffer!);
-
-    // Render each entity with its own model matrix
-    for (let i = 0; i < entityCount; i++) {
-      // Get entity position from WASM
-      const x = wasm.get_entity_position_x(i);
-      const y = wasm.get_entity_position_y(i);
-      const z = wasm.get_entity_position_z(i);
-
-      console.log(`🎾 Rendering entity ${i} at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
-
-      // Create model matrix for this entity
-      const modelMatrix = new Float32Array(16);
-      // Identity matrix
-      modelMatrix[0] = 1;   modelMatrix[5] = 1;   modelMatrix[10] = 1;  modelMatrix[15] = 1;
-      // Translation
-      modelMatrix[12] = x;  modelMatrix[13] = y;  modelMatrix[14] = z;
-
-      // Update this entity's dedicated uniform buffer
-      this.updateEntityUniformsToBuffer(wasmMemory, uniformOffset, modelMatrix, i);
-      
-      // Use this entity's dedicated bind group
-      renderPass.setBindGroup(0, this.entityBindGroups[i]);
-      renderPass.draw(vertexCount);
+    // Render grid floor first (if available)
+    if (gridVertexCount > 0 && this.gridPipeline && this.gridVertexBuffer && this.gridBindGroup) {
+      renderPass.setPipeline(this.gridPipeline);
+      renderPass.setBindGroup(0, this.gridBindGroup);
+      renderPass.setVertexBuffer(0, this.gridVertexBuffer);
+      renderPass.draw(gridVertexCount);
     }
+
+    // Render all entities with single instanced draw call
+    renderPass.setPipeline(this.instancedPipeline);
+    renderPass.setBindGroup(0, this.instancedBindGroup!);
+    renderPass.setVertexBuffer(0, this.vertexBuffer!);
+    renderPass.draw(vertexCount, entityCount); // Single draw call for all entities!
 
     renderPass.end();
     this.device.queue.submit([commandEncoder.finish()]);
   }
-
-  private updateEntityUniformsToBuffer(wasmMemory: ArrayBuffer, uniformOffset: number, modelMatrix: Float32Array, entityIndex: number): void {
-    if (!this.device || entityIndex >= this.entityUniformBuffers.length) return;
-
-    // Get view and projection matrices from WASM memory (they stay the same for all entities)
-    const wasmUniforms = new Float32Array(wasmMemory, uniformOffset, 48); // 3 matrices * 16 floats
-    
-    // Create new uniform data with our custom model matrix
-    const entityUniforms = new Float32Array(48);
-    
-    // Copy our model matrix (first 16 floats)
-    entityUniforms.set(modelMatrix, 0);
-    
-    // Copy view matrix from WASM (next 16 floats)
-    entityUniforms.set(wasmUniforms.slice(16, 32), 16);
-    
-    // Copy projection matrix from WASM (last 16 floats)
-    entityUniforms.set(wasmUniforms.slice(32, 48), 32);
-    
-    // Debug: log entity-specific model matrix
-    console.log(`🔧 Entity ${entityIndex} model matrix:`, Array.from(modelMatrix.slice(0, 16)));
-    
-    // Upload to this entity's dedicated GPU buffer
-    const entityBuffer = this.entityUniformBuffers[entityIndex];
-    if (entityBuffer) {
-      this.device.queue.writeBuffer(entityBuffer, 0, entityUniforms);
-    }
-  }
-
 
   dispose(): void {
     this.vertexBuffer?.destroy();
     this.uniformBuffer?.destroy();
-    // Clean up entity buffers
-    this.entityUniformBuffers.forEach(buffer => buffer.destroy());
-    this.entityUniformBuffers = [];
-    this.entityBindGroups = [];
+    // Clean up grid resources
+    this.gridVertexBuffer?.destroy();
+    this.gridUniformBuffer?.destroy();
+    // Clean up instanced rendering resources
+    this.instanceBuffer?.destroy();
     // Other GPU resources are automatically cleaned up
   }
 
@@ -194,10 +137,6 @@ export class Renderer {
       throw new EngineError('Device not initialized', 'NOT_INITIALIZED');
     }
 
-    const shaderModule = this.device.createShaderModule({
-      label: 'Ball Shader',
-      code: this.getShaderCode(),
-    });
 
     // Create uniform buffer for matrices (main buffer for single entity rendering)
     this.uniformBuffer = this.device.createBuffer({
@@ -216,50 +155,38 @@ export class Renderer {
       }],
     });
 
-    this.bindGroup = this.device.createBindGroup({
-      label: 'Uniform Bind Group',
+
+    // Create grid floor pipeline with darker color
+    this.gridUniformBuffer = this.device.createBuffer({
+      label: 'Grid Uniform Buffer',
+      size: 192, // 3 matrices * 16 floats * 4 bytes
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    this.gridBindGroup = this.device.createBindGroup({
+      label: 'Grid Bind Group',
       layout: bindGroupLayout,
       entries: [{
         binding: 0,
-        resource: { buffer: this.uniformBuffer },
+        resource: { buffer: this.gridUniformBuffer },
       }],
     });
 
-    // Create separate uniform buffers and bind groups for multi-entity rendering
-    const MAX_ENTITIES = 10;
-    this.entityUniformBuffers = [];
-    this.entityBindGroups = [];
-    
-    for (let i = 0; i < MAX_ENTITIES; i++) {
-      const entityBuffer = this.device.createBuffer({
-        label: `Entity ${i} Uniform Buffer`,
-        size: 192, // 3 matrices * 16 floats * 4 bytes
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      });
-      
-      const entityBindGroup = this.device.createBindGroup({
-        label: `Entity ${i} Bind Group`,
-        layout: bindGroupLayout,
-        entries: [{
-          binding: 0,
-          resource: { buffer: entityBuffer },
-        }],
-      });
-      
-      this.entityUniformBuffers.push(entityBuffer);
-      this.entityBindGroups.push(entityBindGroup);
-    }
+    // Create grid shader module with darker color
+    const gridShaderModule = this.device.createShaderModule({
+      label: 'Grid Shader',
+      code: this.getGridShaderCode(),
+    });
 
-    // Create render pipeline
-    this.pipeline = this.device.createRenderPipeline({
-      label: 'Ball Render Pipeline',
+    this.gridPipeline = this.device.createRenderPipeline({
+      label: 'Grid Render Pipeline',
       layout: this.device.createPipelineLayout({
-        label: 'Ball Pipeline Layout',
+        label: 'Grid Pipeline Layout',
         bindGroupLayouts: [bindGroupLayout],
       }),
       vertex: {
-        module: shaderModule,
-        entryPoint: 'vs_main', // 'vs_debug',
+        module: gridShaderModule,
+        entryPoint: 'vs_main',
         buffers: [{
           arrayStride: 12, // 3 floats * 4 bytes per vertex
           attributes: [{
@@ -270,14 +197,97 @@ export class Renderer {
         }],
       },
       fragment: {
-        module: shaderModule,
-        entryPoint: 'fs_main', // 'fs_debug',
+        module: gridShaderModule,
+        entryPoint: 'fs_main',
         targets: [{
           format: format,
         }],
       },
       primitive: {
-        topology: 'line-list', // Wireframe rendering for cube edges
+        topology: 'line-list', // Wireframe grid lines
+        cullMode: 'none',
+      },
+    });
+
+    // Create instanced rendering pipeline for better performance
+    await this.createInstancedPipeline(format);
+  }
+
+  private async createInstancedPipeline(format: GPUTextureFormat): Promise<void> {
+    if (!this.device) return;
+
+    // Create instance buffer for entity transforms (up to 100 entities)
+    this.instanceBuffer = this.device.createBuffer({
+      label: 'Instance Transform Buffer',
+      size: 100 * 16 * 4, // 100 entities * 16 floats * 4 bytes = 6400 bytes
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Create bind group layout for instanced rendering
+    const instancedBindGroupLayout = this.device.createBindGroupLayout({
+      label: 'Instanced Bind Group Layout',
+      entries: [
+        {
+          binding: 0, // View/Projection uniforms
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'uniform' },
+        },
+        {
+          binding: 1, // Instance transforms storage buffer
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'read-only-storage' },
+        },
+      ],
+    });
+
+    this.instancedBindGroup = this.device.createBindGroup({
+      label: 'Instanced Bind Group',
+      layout: instancedBindGroupLayout,
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: this.uniformBuffer! },
+        },
+        {
+          binding: 1,
+          resource: { buffer: this.instanceBuffer },
+        },
+      ],
+    });
+
+    // Create instanced shader module
+    const instancedShaderModule = this.device.createShaderModule({
+      label: 'Instanced Ball Shader',
+      code: this.getInstancedShaderCode(),
+    });
+
+    this.instancedPipeline = this.device.createRenderPipeline({
+      label: 'Instanced Ball Render Pipeline',
+      layout: this.device.createPipelineLayout({
+        label: 'Instanced Pipeline Layout',
+        bindGroupLayouts: [instancedBindGroupLayout],
+      }),
+      vertex: {
+        module: instancedShaderModule,
+        entryPoint: 'vs_main',
+        buffers: [{
+          arrayStride: 12, // 3 floats * 4 bytes per vertex
+          attributes: [{
+            shaderLocation: 0,
+            offset: 0,
+            format: 'float32x3',
+          }],
+        }],
+      },
+      fragment: {
+        module: instancedShaderModule,
+        entryPoint: 'fs_main',
+        targets: [{
+          format: format,
+        }],
+      },
+      primitive: {
+        topology: 'line-list', // Wireframe rendering
         cullMode: 'none',
       },
     });
@@ -289,11 +299,7 @@ export class Renderer {
     // Use BufferManager for zero-copy vertex data access
     const vertexData = this.bufferManager.getVertexData(vertexOffset, vertexCount);
     
-    // Debug: log what WASM is sending us
-    console.log('WASM vertex data (first 9 floats):', Array.from(vertexData.slice(0, 9)));
-    console.log(`WASM says ${vertexCount} vertices at offset ${vertexOffset}`);
-    
-    console.log('Using BufferManager zero-copy vertex data:', Array.from(vertexData.slice(0, 9)));
+    // Zero-copy vertex data access via BufferManager
     const vertexSize = vertexData.byteLength;
 
     // Create or resize vertex buffer as needed
@@ -312,47 +318,90 @@ export class Renderer {
     this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexBuffer);
   }
 
-  private updateBuffers(_wasmMemory: ArrayBuffer, vertexOffset: number, vertexCount: number, uniformOffset: number): void {
+  private updateInstanceBuffer(wasmMemory: ArrayBuffer, uniformOffset: number, wasm: any, entityCount: number): void {
+    if (!this.device || !this.instanceBuffer) return;
+
+    // Create array to hold all entity transform matrices
+    const instanceData = new Float32Array(entityCount * 16); // 16 floats per 4x4 matrix
+
+    // Pack all entity transforms into the buffer
+    for (let i = 0; i < entityCount; i++) {
+      const x = wasm.get_entity_position_x(i);
+      const y = wasm.get_entity_position_y(i);  
+      const z = wasm.get_entity_position_z(i);
+
+      // Create model matrix for this entity (identity + translation)
+      const offset = i * 16;
+      // Identity matrix
+      instanceData[offset + 0] = 1;  instanceData[offset + 5] = 1;   
+      instanceData[offset + 10] = 1; instanceData[offset + 15] = 1;
+      // Translation
+      instanceData[offset + 12] = x; instanceData[offset + 13] = y; instanceData[offset + 14] = z;
+    }
+
+    // Upload instance data to GPU storage buffer
+    this.device.queue.writeBuffer(this.instanceBuffer, 0, instanceData);
+
+    // Update view/projection uniforms (without model matrix)
+    if (this.uniformBuffer) {
+      const wasmUniforms = new Float32Array(wasmMemory, uniformOffset, 48); // 3 matrices * 16 floats
+      const viewProjectionUniforms = new Float32Array(32); // 2 matrices * 16 floats
+      
+      // Skip model matrix, copy view and projection only
+      viewProjectionUniforms.set(wasmUniforms.slice(16, 32), 0);  // View matrix
+      viewProjectionUniforms.set(wasmUniforms.slice(32, 48), 16); // Projection matrix
+      
+      this.device.queue.writeBuffer(this.uniformBuffer, 0, viewProjectionUniforms);
+    }
+  }
+
+  private updateGridBuffers(wasmMemory: ArrayBuffer, gridOffset: number, gridVertexCount: number, uniformOffset: number): void {
     if (!this.device || !this.bufferManager) return;
 
-    // Use BufferManager for zero-copy data access
-    const vertexData = this.bufferManager.getVertexData(vertexOffset, vertexCount);
-    
-    // Debug: log what WASM is sending us
-    console.log('WASM vertex data (first 9 floats):', Array.from(vertexData.slice(0, 9)));
-    console.log(`WASM says ${vertexCount} vertices at offset ${vertexOffset}`);
-    
-    console.log('Using BufferManager zero-copy vertex data:', Array.from(vertexData.slice(0, 9)));
-    const vertexSize = vertexData.byteLength;
+    // Use BufferManager for zero-copy grid data access
+    const gridData = new Float32Array(wasmMemory, gridOffset, gridVertexCount * 3);
+    const gridSize = gridData.byteLength;
 
-    // Create or resize vertex buffer as needed
-    if (!this.vertexBuffer || this.vertexBuffer.size < vertexSize) {
-      this.vertexBuffer?.destroy();
-      this.vertexBuffer = this.device.createBuffer({
-        label: 'Vertex Buffer',
-        size: Math.max(vertexSize, 1024), // Minimum size to avoid frequent recreations
+    // Create or resize grid vertex buffer as needed
+    if (!this.gridVertexBuffer || this.gridVertexBuffer.size < gridSize) {
+      this.gridVertexBuffer?.destroy();
+      this.gridVertexBuffer = this.device.createBuffer({
+        label: 'Grid Vertex Buffer',
+        size: Math.max(gridSize, 1024),
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       });
     }
 
-    // Write vertex data to GPU - create a regular ArrayBuffer copy for WebGPU compatibility
-    const vertexBuffer = new ArrayBuffer(vertexData.byteLength);
-    new Float32Array(vertexBuffer).set(vertexData);
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexBuffer);
+    // Write grid data to GPU
+    const gridBuffer = new ArrayBuffer(gridData.byteLength);
+    new Float32Array(gridBuffer).set(gridData);
+    this.device.queue.writeBuffer(this.gridVertexBuffer, 0, gridBuffer);
 
-    // Use BufferManager for uniform data updates
-    if (this.uniformBuffer) {
-      this.bufferManager.updateUniformBuffer(this.uniformBuffer, uniformOffset);
+    // Update grid uniform buffer with identity model matrix (grid stays at floor)
+    if (this.gridUniformBuffer) {
+      const wasmUniforms = new Float32Array(wasmMemory, uniformOffset, 48); // 3 matrices * 16 floats
+      const gridUniforms = new Float32Array(48);
       
-      // Debug logging
-      const uniformData = this.bufferManager.getUniformData(uniformOffset);
-      console.log('Model matrix:', Array.from(uniformData.slice(0, 16)));
-      console.log('View matrix:', Array.from(uniformData.slice(16, 32)));
-      console.log('Projection matrix:', Array.from(uniformData.slice(32, 48)));
+      // Identity model matrix (grid doesn't move)
+      const identityMatrix = new Float32Array([
+        1, 0, 0, 0,
+        0, 1, 0, 0, 
+        0, 0, 1, 0,
+        0, 0, 0, 1
+      ]);
+      gridUniforms.set(identityMatrix, 0);
+      
+      // Copy view and projection matrices from WASM (camera movement)
+      gridUniforms.set(wasmUniforms.slice(16, 32), 16); // View matrix
+      gridUniforms.set(wasmUniforms.slice(32, 48), 32); // Projection matrix
+      
+      this.device.queue.writeBuffer(this.gridUniformBuffer, 0, gridUniforms);
     }
   }
 
-  private getShaderCode(): string {
+
+
+  private getGridShaderCode(): string {
     return `
       struct Uniforms {
         model: mat4x4<f32>,
@@ -371,6 +420,38 @@ export class Renderer {
       fn vs_main(@location(0) position: vec3<f32>) -> VertexOutput {
         var out: VertexOutput;
         let world_pos = uniforms.model * vec4<f32>(position, 1.0);
+        out.position = uniforms.projection * uniforms.view * world_pos;
+        out.world_pos = world_pos.xyz;
+        return out;
+      }
+
+      @fragment
+      fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+        return vec4<f32>(0.3, 0.3, 0.4, 1.0); // Dark gray grid lines
+      }
+    `;
+  }
+
+  private getInstancedShaderCode(): string {
+    return `
+      struct ViewProjectionUniforms {
+        view: mat4x4<f32>,
+        projection: mat4x4<f32>,
+      }
+
+      @binding(0) @group(0) var<uniform> uniforms: ViewProjectionUniforms;
+      @binding(1) @group(0) var<storage, read> instanceTransforms: array<mat4x4<f32>>;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) world_pos: vec3<f32>,
+      }
+
+      @vertex
+      fn vs_main(@location(0) position: vec3<f32>, @builtin(instance_index) instanceIndex: u32) -> VertexOutput {
+        var out: VertexOutput;
+        let modelMatrix = instanceTransforms[instanceIndex];
+        let world_pos = modelMatrix * vec4<f32>(position, 1.0);
         out.position = uniforms.projection * uniforms.view * world_pos;
         out.world_pos = world_pos.xyz;
         return out;

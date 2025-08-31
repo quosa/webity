@@ -4,6 +4,7 @@ import { InputManager } from '../src/input.js';
 import { BufferManager } from '../src/buffer-manager.js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { setupWebGPUTestEnvironment } from './utils/dom-mocks.js';
 
 // Helper function to create engine with all dependencies
 function createTestEngine(): Engine {
@@ -32,32 +33,11 @@ describe('WASM Integration Tests', () => {
       return;
     }
 
-    // Mock HTML canvas element with proper WebGPU context
-    const mockCanvas = {
-      id: 'test-canvas',
-      getContext: jest.fn((contextType: string) => {
-        if (contextType === 'webgpu') {
-          return {
-            configure: jest.fn(),
-            getCurrentTexture: jest.fn().mockReturnValue({
-              createView: jest.fn().mockReturnValue({}),
-            }),
-          };
-        }
-        return null;
-      }),
-      width: 800,
-      height: 600,
-    } as unknown as HTMLCanvasElement;
+    // Set up WebGPU test environment
+    setupWebGPUTestEnvironment();
 
-    document.getElementById = jest.fn().mockReturnValue(mockCanvas);
-
-    // Mock fetch to return real WASM bytes
-    (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      arrayBuffer: jest.fn().mockResolvedValue(realWasmBytes),
-    });
+    // Note: fetch is now handled by smart mock in tests/setup.ts
+    // No need to override fetch here since it will load real WASM automatically
   });
 
   beforeEach(() => {

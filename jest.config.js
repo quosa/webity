@@ -7,9 +7,6 @@ export default {
     '**/__tests__/**/*.+(ts|tsx|js)',
     '**/*.(test|spec).+(ts|tsx|js)'
   ],
-  transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest'
-  },
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
@@ -29,10 +26,10 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   extensionsToTreatAsEsm: ['.ts'],
-  globals: {
-    'ts-jest': {
+  transform: {
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
       useESM: true,
-    },
+    }],
   },
   testTimeout: 10000,
   verbose: true,
