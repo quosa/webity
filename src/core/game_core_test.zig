@@ -186,6 +186,23 @@ test "physics simulation - wall collision" {
     try testing.expect(@abs(position.x) <= 8.0);
 }
 
+test "physics simulation - z-axis wall collision" {
+    var position = core.Vec3{ .x = 0.0, .y = 0.0, .z = 9.0 }; // Beyond Z wall
+    var velocity = core.Vec3{ .x = 0.0, .y = 0.0, .z = 5.0 }; // Moving into Z wall
+    const delta_time: f32 = 0.016;
+    const no_input = core.Vec3{ .x = 0.0, .y = 0.0, .z = 0.0 };
+    const ball_radius: f32 = 0.5;
+    
+    const collision_state = core.simulatePhysicsStep(&position, &velocity, delta_time, no_input, ball_radius);
+    
+    // Should detect wall collision
+    try testing.expect((collision_state & 0x02) != 0);
+    // Ball should bounce back
+    try testing.expect(velocity.z < 0.0);
+    // Ball should be within Z bounds
+    try testing.expect(@abs(position.z) <= 8.0);
+}
+
 test "physics simulation - input forces" {
     var position = core.Vec3{ .x = 0.0, .y = 0.0, .z = 0.0 };
     var velocity = core.Vec3{ .x = 0.0, .y = 0.0, .z = 0.0 };

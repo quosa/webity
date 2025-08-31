@@ -74,7 +74,7 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32) u32 {
 }
 
 // WASM exports - thin wrappers around core functionality
-export fn init() void {
+pub export fn init() void {
     // Initialize entity system
     initEntities();
 
@@ -205,7 +205,7 @@ fn checkEntityCollisions(delta_time: f32) void {
     }
 }
 
-export fn update(delta_time: f32) void {
+pub export fn update(delta_time: f32) void {
     collision_state = 0;
 
     // Process camera movement from WASD input
@@ -295,7 +295,7 @@ export fn update(delta_time: f32) void {
     }
 }
 
-export fn set_input(key: u8, pressed: bool) void {
+pub export fn set_input(key: u8, pressed: bool) void {
     const key_map = switch (key) {
         87 => @as(u8, 0x01), // W
         65 => @as(u8, 0x02), // A
@@ -311,13 +311,13 @@ export fn set_input(key: u8, pressed: bool) void {
     }
 }
 
-export fn generate_sphere_mesh(segments: u32) void {
+pub export fn generate_sphere_mesh(segments: u32) void {
     // Use first entity's radius, or default if no entities
     const radius = if (entity_count > 0 and entities[0].active) entities[0].radius else 0.5;
     vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
 }
 
-export fn generate_grid_floor(grid_size: u32) void {
+pub export fn generate_grid_floor(grid_size: u32) void {
     grid_vertex_count = generateWireframeGrid(&grid_buffer, grid_size);
 }
 
@@ -364,38 +364,50 @@ pub fn generateWireframeGrid(vertices: [*]f32, grid_size: u32) u32 {
     return index / 3; // Return vertex count
 }
 
-export fn get_vertex_buffer_offset() u32 {
-    return @as(u32, @intCast(@intFromPtr(&vertex_buffer)));
+pub export fn get_vertex_buffer_offset() u32 {
+    if (comptime @import("builtin").target.cpu.arch == .wasm32) {
+        return @as(u32, @intCast(@intFromPtr(&vertex_buffer)));
+    } else {
+        return @truncate(@intFromPtr(&vertex_buffer));
+    }
 }
 
-export fn get_grid_buffer_offset() u32 {
-    return @as(u32, @intCast(@intFromPtr(&grid_buffer)));
+pub export fn get_grid_buffer_offset() u32 {
+    if (comptime @import("builtin").target.cpu.arch == .wasm32) {
+        return @as(u32, @intCast(@intFromPtr(&grid_buffer)));
+    } else {
+        return @truncate(@intFromPtr(&grid_buffer));
+    }
 }
 
-export fn get_uniform_buffer_offset() u32 {
-    return @as(u32, @intCast(@intFromPtr(&uniforms)));
+pub export fn get_uniform_buffer_offset() u32 {
+    if (comptime @import("builtin").target.cpu.arch == .wasm32) {
+        return @as(u32, @intCast(@intFromPtr(&uniforms)));
+    } else {
+        return @truncate(@intFromPtr(&uniforms));
+    }
 }
 
-export fn get_vertex_count() u32 {
+pub export fn get_vertex_count() u32 {
     return vertex_count;
 }
 
-export fn get_grid_vertex_count() u32 {
+pub export fn get_grid_vertex_count() u32 {
     return grid_vertex_count;
 }
 
-export fn get_collision_state() u8 {
+pub export fn get_collision_state() u8 {
     return collision_state;
 }
 
-export fn set_position(x: f32, y: f32, z: f32) void {
+pub export fn set_position(x: f32, y: f32, z: f32) void {
     // Set position of first active entity for backward compatibility
     if (entity_count > 0 and entities[0].active) {
         entities[0].position = .{ .x = x, .y = y, .z = z };
     }
 }
 
-export fn apply_force(x: f32, y: f32, z: f32) void {
+pub export fn apply_force(x: f32, y: f32, z: f32) void {
     // Apply force to first active entity for backward compatibility
     if (entity_count > 0 and entities[0].active) {
         entities[0].velocity.x += x;
@@ -404,88 +416,88 @@ export fn apply_force(x: f32, y: f32, z: f32) void {
     }
 }
 
-export fn get_ball_position_x() f32 {
+pub export fn get_ball_position_x() f32 {
     return if (entity_count > 0 and entities[0].active) entities[0].position.x else 0;
 }
 
-export fn get_ball_position_y() f32 {
+pub export fn get_ball_position_y() f32 {
     return if (entity_count > 0 and entities[0].active) entities[0].position.y else 0;
 }
 
-export fn get_ball_position_z() f32 {
+pub export fn get_ball_position_z() f32 {
     return if (entity_count > 0 and entities[0].active) entities[0].position.z else 0;
 }
 
 // Configuration exports for Phase 6.1
-export fn set_camera_position(x: f32, y: f32, z: f32) void {
+pub export fn set_camera_position(x: f32, y: f32, z: f32) void {
     camera_position = .{ .x = x, .y = y, .z = z };
     updateViewMatrix();
 }
 
-export fn set_camera_target(x: f32, y: f32, z: f32) void {
+pub export fn set_camera_target(x: f32, y: f32, z: f32) void {
     camera_target = .{ .x = x, .y = y, .z = z };
     updateViewMatrix();
 }
 
-export fn set_physics_config(gravity: f32, damping: f32, restitution: f32) void {
+pub export fn set_physics_config(gravity: f32, damping: f32, restitution: f32) void {
     physics_gravity = gravity;
     physics_damping = damping;
     physics_restitution = restitution;
 }
 
-export fn set_world_bounds(x: f32, y: f32, z: f32) void {
+pub export fn set_world_bounds(x: f32, y: f32, z: f32) void {
     world_bounds = .{ .x = x, .y = y, .z = z };
 }
 
-export fn get_camera_position_x() f32 {
+pub export fn get_camera_position_x() f32 {
     return camera_position.x;
 }
 
-export fn get_camera_position_y() f32 {
+pub export fn get_camera_position_y() f32 {
     return camera_position.y;
 }
 
-export fn get_camera_position_z() f32 {
+pub export fn get_camera_position_z() f32 {
     return camera_position.z;
 }
 
 // Multi-entity exports for Phase 6.2
-export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
+pub export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
     return spawnEntityInternal(x, y, z, radius);
 }
 
-export fn get_entity_count() u32 {
+pub export fn get_entity_count() u32 {
     return entity_count;
 }
 
-export fn despawn_all_entities() void {
+pub export fn despawn_all_entities() void {
     for (&entities) |*entity| {
         entity.active = false;
     }
     entity_count = 0;
 }
 
-export fn get_entity_position_x(index: u32) f32 {
+pub export fn get_entity_position_x(index: u32) f32 {
     if (index >= entity_count or !entities[index].active) return 0;
     return entities[index].position.x;
 }
 
-export fn get_entity_position_y(index: u32) f32 {
+pub export fn get_entity_position_y(index: u32) f32 {
     if (index >= entity_count or !entities[index].active) return 0;
     return entities[index].position.y;
 }
 
-export fn get_entity_position_z(index: u32) f32 {
+pub export fn get_entity_position_z(index: u32) f32 {
     if (index >= entity_count or !entities[index].active) return 0;
     return entities[index].position.z;
 }
 
-export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {
+pub export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {
     if (index >= entity_count or !entities[index].active) return;
     entities[index].position = .{ .x = x, .y = y, .z = z };
 }
 
-export fn set_entity_velocity(index: u32, x: f32, y: f32, z: f32) void {
+pub export fn set_entity_velocity(index: u32, x: f32, y: f32, z: f32) void {
     if (index >= entity_count or !entities[index].active) return;
     entities[index].velocity = .{ .x = x, .y = y, .z = z };
 }
