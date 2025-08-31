@@ -1,3 +1,7 @@
+# coverage zig test executables
+game_core_test*
+game_engine_test*
+
 # Dependencies
 node_modules/
 npm-debug.log*
