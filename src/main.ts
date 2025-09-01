@@ -3,7 +3,7 @@ import { Engine } from './engine.js';
 import { Renderer } from './renderer.js';
 import { InputManager } from './input.js';
 import { BufferManager } from './buffer-manager.js';
-import { AssetConfig, EngineError } from './types.js';
+import { AssetConfig, EngineError, PerformanceStats } from './types.js';
 
 // Show loading indicator
 function showLoading(show: boolean): void {
@@ -118,6 +118,40 @@ async function startDemo(): Promise<void> {
       console.log(`💥 Chaos mode activated! ${engine.getEntityCount()} balls total`);
     });
 
+    // Add rain scene controls
+    const rainIntensitySlider = document.getElementById('rainIntensity') as HTMLInputElement;
+    const rainIntensityValue = document.getElementById('rainIntensityValue') as HTMLSpanElement;
+    const startRainButton = document.getElementById('startRainButton') as HTMLButtonElement;
+    const stopRainButton = document.getElementById('stopRainButton') as HTMLButtonElement;
+
+    // Update rain intensity display
+    rainIntensitySlider?.addEventListener('input', () => {
+      const intensity = parseFloat(rainIntensitySlider.value);
+      if (rainIntensityValue) {
+        rainIntensityValue.textContent = intensity.toFixed(1);
+      }
+    });
+
+    startRainButton?.addEventListener('click', () => {
+      const intensity = parseFloat(rainIntensitySlider.value);
+      engine.startRainScene(intensity);
+      console.log(`🌧️ Rain scene started with intensity ${intensity}`);
+      startRainButton.disabled = true;
+      stopRainButton.disabled = false;
+    });
+
+    stopRainButton?.addEventListener('click', () => {
+      engine.stopRainScene();
+      console.log('🌧️ Rain scene stopped');
+      startRainButton.disabled = false;
+      stopRainButton.disabled = true;
+    });
+
+    // Set up performance monitoring
+    engine.setPerformanceCallback((stats) => {
+      updatePerformanceDisplay(stats);
+    });
+
     showLoading(false);
 
     // Handle cleanup on page unload
@@ -159,6 +193,31 @@ async function startDemo(): Promise<void> {
       showError('An unknown error occurred while starting the demo.');
     }
   }
+}
+
+// Update performance display
+function updatePerformanceDisplay(stats: PerformanceStats): void {
+  const currentFPS = document.getElementById('currentFPS');
+  const averageFPS = document.getElementById('averageFPS');
+  const frameTime = document.getElementById('frameTime');
+  const entityCount = document.getElementById('entityCount');
+  const vertexCount = document.getElementById('vertexCount');
+  const wasmTime = document.getElementById('wasmTime');
+
+  // Use average FPS for smoother display, round to whole numbers for readability
+  if (currentFPS) currentFPS.textContent = Math.round(stats.averageFPS).toString();
+  if (averageFPS) averageFPS.textContent = stats.averageFPS.toFixed(1);
+  if (frameTime) frameTime.textContent = stats.frameTime.toFixed(1);
+  if (entityCount) entityCount.textContent = stats.entityCount.toString();
+  if (vertexCount) vertexCount.textContent = stats.vertexCount.toString();
+  if (wasmTime) wasmTime.textContent = Math.round(stats.wasmTime).toString();
+
+  // Color code performance based on average FPS (more stable than instantaneous)
+  const performanceColor = stats.averageFPS >= 50 ? '#44ff44' : 
+    stats.averageFPS >= 30 ? '#ffaa00' : '#ff4444';
+  
+  if (currentFPS) currentFPS.style.color = performanceColor;
+  if (averageFPS) averageFPS.style.color = performanceColor;
 }
 
 // Update controls information

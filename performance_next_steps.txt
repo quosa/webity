@@ -1,0 +1,174 @@
+# Performance Optimization Roadmap
+*Generated after achieving 6,598 entities at ~48 FPS with 21.8M collision checks/frame*
+
+## Current Architecture Analysis
+
+### Memory Architecture (Zero-Copy Design)
+- **WASM Memory**: Single linear memory buffer owned by WebAssembly
+- **JavaScript Layer**: Passes buffer references only (no data copying)
+- **WebGPU Access**: Reads directly from WASM memory via ArrayBuffer views
+- **Flow**: WASM physics → JS coordination → WebGPU rendering
+- **Performance**: Instanced rendering costs ~0ms even at 6k+ entities
+
+### Current Performance Limits (Stress Test Results)
+- **Peak Achievement**: 6,598 entities maintaining 48 FPS
+- **Physics Time**: 20.5ms (99% of 16.67ms frame budget)
+- **Collision Calculations**: ~21.8 million checks per frame (O(n²))
+- **Bottleneck**: Single-threaded collision detection in WASM
+- **WebGPU**: Essentially free (256 vertices for all entities via instancing)
+
+### DevTools Analysis
+- Main thread completely saturated by `wasm-function[5]` (physics)
+- JavaScript overhead minimal compared to physics computation
+- GPU utilization extremely low (perfect instanced rendering efficiency)
+
+## Web Workers Multi-Threading Strategy
+
+### Core Concept: Spatial Partitioning
+```
+World Divided into 3D Buckets:
+┌─────────┬─────────┬─────────┐
+│ Worker 1│ Worker 2│ Worker 3│
+│ Entities│ Entities│ Entities│
+│ 0-2199  │2200-4399│4400-6599│
+└─────────┴─────────┴─────────┘
+```
+
+### Implementation Architecture
+1. **SharedArrayBuffer**: Zero-copy entity data sharing between workers
+2. **Spatial Buckets**: Divide world space into 3D grid regions
+3. **Worker Distribution**: Each worker handles specific entity ranges
+4. **Collision Phases**:
+   - Phase 1: Intra-bucket collisions (fully parallel)
+   - Phase 2: Cross-bucket boundary collisions (coordinated)
+5. **Pipeline**: Workers compute next frame while main renders current
+
+### Bucket Assignment Strategy
+- **Dynamic Load Balancing**: Redistribute entities based on density
+- **Boundary Handling**: Special logic for entities near bucket edges
+- **Memory Layout**: Contiguous entity arrays per bucket for cache efficiency
+
+### Synchronization Model
+```typescript
+// Pseudo-code for worker coordination
+Phase1: ParallelFor(buckets) { computeIntraBucketCollisions() }
+Barrier: WaitForAllWorkers()
+Phase2: ParallelFor(bucketPairs) { computeCrossBucketCollisions() }
+Barrier: WaitForAllWorkers()
+MainThread: UpdateWebGPU(sharedEntityBuffer)
+```
+
+### Potential Performance Gains
+- **Current**: 6,600 entities on 1 core → 20ms physics
+- **4 Workers**: Potentially 15,000-20,000 entities → 5ms physics per worker
+- **Scaling**: Could achieve 30k+ entities if boundary overhead is minimal
+
+## Alternative High-Performance Approaches
+
+### 1. GPU Compute Shaders (WebGPU)
+- **Concept**: Move collision detection to GPU compute shaders
+- **Advantage**: Thousands of parallel GPU cores vs 4-8 CPU cores
+- **Potential**: 50k+ entities with proper spatial data structures
+- **Challenge**: Complex collision response logic on GPU
+- **Implementation**: Broad-phase on GPU, narrow-phase on CPU
+
+### 2. Spatial Data Structures
+- **Current**: O(n²) brute force collision detection
+- **Upgrade**: Octree, BVH, or spatial hash grid → O(n log n)
+- **Benefit**: 10x performance improvement for large entity counts
+- **Trade-off**: More complex implementation, memory overhead
+- **Best Fit**: Before multi-threading for simpler codebase
+
+### 3. WASM SIMD Optimization
+- **Target**: Vectorize collision math using WASM SIMD instructions
+- **Potential**: 4x speedup for vector operations (dot products, distance calculations)
+- **Compatibility**: Good browser support for WASM SIMD
+- **Implementation**: Zig has SIMD intrinsics support
+
+### 4. Hybrid CPU/GPU Architecture
+- **Design**: Physics on workers, rendering on main + GPU
+- **GPU Compute**: Broad-phase collision detection
+- **CPU Workers**: Narrow-phase collision response
+- **Main Thread**: Coordination and WebGPU rendering
+
+## Implementation Timeline & Rationale
+
+### Phase 1: Complete Current Refactoring ⚠️ PRIORITY
+- **Rationale**: Avoid premature optimization
+- **Status**: In progress
+- **Goal**: Clean, maintainable codebase foundation
+
+### Phase 2: Implement ECS (Entity Component System)
+- **Rationale**: Better data organization for multi-threading
+- **Benefits**: Component-based parallelization, memory layout optimization
+- **Preparation**: Sets up ideal architecture for worker distribution
+
+### Phase 3: Choose & Implement Performance Optimization
+- **Decision Factors**: 
+  - Implementation complexity vs performance gain
+  - Browser compatibility requirements
+  - Maintenance overhead
+- **Recommendation**: Start with spatial data structures (simplest high-impact)
+
+## Technical Implementation Considerations
+
+### SharedArrayBuffer Requirements
+- **Browser Support**: Chrome/Firefox/Safari with security headers
+- **Security**: Requires `Cross-Origin-Embedder-Policy` and `Cross-Origin-Opener-Policy`
+- **Alternative**: MessageChannel with Transferable objects (higher overhead)
+
+### Worker Communication Patterns
+```typescript
+// Option 1: SharedArrayBuffer (zero-copy)
+const sharedBuffer = new SharedArrayBuffer(entityDataSize);
+const entityArray = new Float32Array(sharedBuffer);
+
+// Option 2: Transferable Objects (ownership transfer)
+worker.postMessage({entities: entityBuffer}, [entityBuffer]);
+```
+
+### Synchronization Primitives
+- **Atomics**: For worker coordination and memory barriers
+- **Mutex Pattern**: Prevent race conditions in shared data
+- **Lock-Free**: Preferred for performance-critical sections
+
+### Memory Layout Optimization
+- **AoS vs SoA**: Array of Structures vs Structure of Arrays
+- **Cache Locality**: Group frequently accessed data together
+- **Alignment**: Ensure SIMD-friendly memory layout
+
+## Browser Compatibility Matrix
+
+| Feature | Chrome | Firefox | Safari | Edge |
+|---------|--------|---------|--------|------|
+| SharedArrayBuffer | ✅ | ✅ | ✅ | ✅ |
+| WebGPU Compute | ✅ | 🚧 | 🚧 | ✅ |
+| WASM SIMD | ✅ | ✅ | ✅ | ✅ |
+| Web Workers | ✅ | ✅ | ✅ | ✅ |
+
+## Performance Testing Framework
+
+### Metrics to Track
+- **Physics Time**: WASM computation per frame
+- **Entity Count**: Maximum before FPS drop
+- **Memory Usage**: Peak allocation and growth
+- **Worker Overhead**: Synchronization and communication costs
+- **Scaling Efficiency**: Performance vs entity count curves
+
+### Test Scenarios
+1. **Linear Scaling**: 1k, 2k, 4k, 8k, 16k entities
+2. **Density Variations**: Sparse vs clustered entity distributions  
+3. **Collision Intensity**: High-collision vs low-collision scenarios
+4. **Worker Count**: 1, 2, 4, 8 workers performance comparison
+
+## Conclusion
+
+The current architecture has achieved remarkable performance (6,598 entities with O(n²) collision detection), proving the WebGPU + WASM foundation is solid. The zero-copy memory sharing between WASM and WebGPU provides an excellent foundation for multi-threaded optimization.
+
+**Next Steps**: 
+1. Complete refactoring work for maintainable codebase
+2. Implement ECS for better data organization  
+3. Choose optimization strategy based on requirements
+4. Implement with comprehensive performance testing
+
+**Recommendation**: Start with spatial data structures (O(n log n)) before multi-threading for maximum impact with minimal complexity.

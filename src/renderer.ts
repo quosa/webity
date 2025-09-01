@@ -1,5 +1,5 @@
 // WebGPU renderer with pipeline and shader management
-import { EngineError, WebGPUNotSupportedError } from './types.js';
+import { EngineError, WebGPUNotSupportedError, ENGINE_CONSTANTS } from './types.js';
 import { BufferManager } from './buffer-manager.js';
 
 export class Renderer {
@@ -216,10 +216,10 @@ export class Renderer {
   private async createInstancedPipeline(format: GPUTextureFormat): Promise<void> {
     if (!this.device) return;
 
-    // Create instance buffer for entity transforms (up to 100 entities)
+    // Create instance buffer for entity transforms 
     this.instanceBuffer = this.device.createBuffer({
       label: 'Instance Transform Buffer',
-      size: 100 * 16 * 4, // 100 entities * 16 floats * 4 bytes = 6400 bytes
+      size: ENGINE_CONSTANTS.MAX_ENTITIES * 16 * 4, // MAX_ENTITIES * 16 floats * 4 bytes
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 

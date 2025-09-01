@@ -5,9 +5,11 @@ import {
   AssetConfig,
   WASMExports,
   GameEngine,
+  PerformanceStats,
   EngineError,
   WebGPUNotSupportedError,
-  WASMLoadError
+  WASMLoadError,
+  ENGINE_CONSTANTS
 } from './types.js';
 import { Renderer } from './renderer.js';
 import { InputManager } from './input.js';
@@ -18,6 +20,16 @@ export class Engine implements GameEngine {
   private running = false;
   private lastTime = 0;
   private animationId: number | undefined;
+
+  // Performance monitoring
+  private frameTimeHistory: number[] = [];
+  private maxFrameHistory = ENGINE_CONSTANTS.DEFAULT_FRAME_HISTORY;
+  private performanceCallback?: (_stats: PerformanceStats) => void;  
+  private targetFPS = ENGINE_CONSTANTS.TARGET_FPS;
+  private frameDropThreshold = ENGINE_CONSTANTS.PERFORMANCE_THRESHOLD;
+  private lastStatsUpdate = 0;
+  private statsUpdateInterval = 1000; // Update display every 1000ms (1 second)
+  private lastWasmTime = 0; // WASM call time in microseconds
 
   constructor(
     private readonly canvas: HTMLCanvasElement, // eslint-disable-line no-unused-vars
@@ -155,7 +167,7 @@ export class Engine implements GameEngine {
 
     for (let x = 0; x < gridSize; x++) {
       for (let z = 0; z < gridSize; z++) {
-        if (ballCount >= 10) break; // MAX_ENTITIES limit
+        if (ballCount >= ENGINE_CONSTANTS.MAX_ENTITIES) break; // MAX_ENTITIES limit
 
         const xPos = (x * spacing) - offset;
         const zPos = (z * spacing) - offset;
@@ -173,7 +185,7 @@ export class Engine implements GameEngine {
     console.log(`🎾 Creating circle scene with ${ballCount} balls`);
     this.clearAllBalls();
 
-    const maxBalls = Math.min(ballCount, 10); // MAX_ENTITIES limit
+    const maxBalls = Math.min(ballCount, ENGINE_CONSTANTS.MAX_ENTITIES); // MAX_ENTITIES limit
 
     for (let i = 0; i < maxBalls; i++) {
       const angle = (i / maxBalls) * 2 * Math.PI;
@@ -196,7 +208,7 @@ export class Engine implements GameEngine {
     console.log(`🎾 Creating chaos scene with ${ballCount} balls`);
     this.clearAllBalls();
 
-    const maxBalls = Math.min(ballCount, 10); // MAX_ENTITIES limit
+    const maxBalls = Math.min(ballCount, ENGINE_CONSTANTS.MAX_ENTITIES); // MAX_ENTITIES limit
 
     for (let i = 0; i < maxBalls; i++) {
       // Random positions within bounds
@@ -217,6 +229,74 @@ export class Engine implements GameEngine {
     console.log(`🎾 Chaos scene created: ${this.getEntityCount()} balls with random positions and velocities`);
   }
 
+  // Rain scene - progressive ball spawning with performance monitoring
+  private rainActive = false;
+  private rainSpawnRate = 0.5; // balls per second
+  private rainLastSpawn = 0;
+  private rainBallSize = 0.3;
+  private maxRainBalls = ENGINE_CONSTANTS.MAX_ENTITIES;
+
+  startRainScene(intensity: number = 1.0): void {
+    console.log(`🌧️ Starting rain scene with intensity ${intensity}`);
+    this.clearAllBalls();
+    
+    this.rainActive = true;
+    this.rainSpawnRate = intensity; // balls per second
+    this.rainLastSpawn = performance.now();
+    
+    console.log(`🌧️ Rain started: ${this.rainSpawnRate} balls/sec, max ${this.maxRainBalls} balls`);
+  }
+
+  stopRainScene(): void {
+    console.log('🌧️ Stopping rain scene');
+    this.rainActive = false;
+  }
+
+  private updateRainSpawning(): void {
+    if (!this.rainActive || !this.wasm) return;
+
+    const now = performance.now();
+    const timeSinceLastSpawn = now - this.rainLastSpawn;
+    const spawnInterval = 1000 / this.rainSpawnRate; // ms between spawns
+
+    // Check if it's time to spawn a new ball
+    if (timeSinceLastSpawn >= spawnInterval) {
+      const currentCount = this.getEntityCount();
+      
+      // Check performance before spawning more balls
+      if (currentCount >= this.maxRainBalls) {
+        console.log(`🌧️ Rain hit max ball limit: ${this.maxRainBalls}`);
+        return;
+      }
+
+      if (!this.isPerformanceAcceptable()) {
+        console.log(`🌧️ Rain auto-stopped due to performance drop: ${currentCount} balls`);
+        console.log(`🌧️ Performance threshold: ${this.targetFPS * this.frameDropThreshold} FPS`);
+        this.rainActive = false;
+        return;
+      }
+
+      // Spawn a new rain ball at the top of the world
+      const x = (Math.random() - 0.5) * 14; // -7 to +7 (slightly wider than world bounds)
+      const z = (Math.random() - 0.5) * 14; // -7 to +7
+      const y = 15 + Math.random() * 5;     // High up in the sky
+      
+      this.spawnBall(x, y, z, this.rainBallSize);
+      
+      // Add slight random initial velocity for more realistic rain
+      const vx = (Math.random() - 0.5) * 1.0;
+      const vz = (Math.random() - 0.5) * 1.0;
+      this.wasm.set_entity_velocity(currentCount, vx, 0, vz);
+      
+      this.rainLastSpawn = now;
+      
+      // Log progress much less frequently to avoid DevTools bottleneck
+      if (currentCount > 0 && currentCount % 100 === 0) {
+        console.log(`🌧️ Rain progress: ${currentCount + 1} balls spawned`);
+      }
+    }
+  }
+
   // Physics parameter controls
   setPhysicsParameters(gravity: number = -9.8, damping: number = 0.99, restitution: number = 0.8): void {
     if (this.wasm) {
@@ -232,16 +312,74 @@ export class Engine implements GameEngine {
     }
   }
 
+  // Performance monitoring methods
+  setPerformanceCallback(callback: (_stats: PerformanceStats) => void): void {
+    this.performanceCallback = callback;
+  }
+
+  private updatePerformanceStats(frameTime: number, currentTime: number): PerformanceStats {
+    // Add current frame time to history
+    this.frameTimeHistory.push(frameTime);
+    if (this.frameTimeHistory.length > this.maxFrameHistory) {
+      this.frameTimeHistory.shift();
+    }
+
+    // Calculate performance metrics with smoothing
+    const fps = 1000 / frameTime;
+    const recentFrameTimes = this.frameTimeHistory.slice(-30); // Last 30 frames for average
+    const averageFPS = 1000 / (recentFrameTimes.reduce((a, b) => a + b, 0) / recentFrameTimes.length);
+    const minFPS = 1000 / Math.max(...recentFrameTimes);
+    const maxFPS = 1000 / Math.min(...recentFrameTimes);
+
+    const stats: PerformanceStats = {
+      frameTime,
+      fps,
+      averageFPS,
+      minFPS,
+      maxFPS,
+      entityCount: this.getEntityCount(),
+      vertexCount: this.wasm?.get_vertex_count() || 0,
+      wasmTime: this.lastWasmTime
+    };
+
+    // Only update display once per second to reduce visual jitter
+    if (this.performanceCallback && (currentTime - this.lastStatsUpdate >= this.statsUpdateInterval)) {
+      this.performanceCallback(stats);
+      this.lastStatsUpdate = currentTime;
+    }
+
+    return stats;
+  }
+
+  private isPerformanceAcceptable(): boolean {
+    if (this.frameTimeHistory.length < 10) return true; // Not enough data yet
+    
+    const recentFrameTimes = this.frameTimeHistory.slice(-10);
+    const averageFPS = 1000 / (recentFrameTimes.reduce((a, b) => a + b, 0) / recentFrameTimes.length);
+    
+    return averageFPS >= (this.targetFPS * this.frameDropThreshold);
+  }
+
   private gameLoop = (): void => {
     if (!this.running) return;
 
     const currentTime = performance.now();
-    const deltaTime = Math.min((currentTime - this.lastTime) / 1000.0, 0.1); // Cap at 100ms
+    const frameTime = currentTime - this.lastTime;
+    const deltaTime = Math.min(frameTime / 1000.0, 0.1); // Cap at 100ms
     this.lastTime = currentTime;
 
+    // Update performance stats (with display throttling)
+    this.updatePerformanceStats(frameTime, currentTime);
+
     try {
-      // Update physics/game state
+      // Update rain spawning (before physics update)
+      this.updateRainSpawning();
+
+      // Update physics/game state with high-precision timing
+      const wasmStartTime = performance.now();
       this.wasm!.update(deltaTime);
+      const wasmEndTime = performance.now();
+      this.lastWasmTime = (wasmEndTime - wasmStartTime) * 1000; // Convert to microseconds
 
       // Check for collisions
       const collisionState = this.wasm!.get_collision_state();
@@ -255,18 +393,9 @@ export class Engine implements GameEngine {
       const uniformOffset = this.wasm!.get_uniform_buffer_offset();
       const entityCount = this.wasm!.get_entity_count();
 
-      // Debug: log entity info every few frames
-      if (Math.floor(performance.now() / 1000) !== Math.floor((performance.now() - 16) / 1000)) {
-        console.log(`🎾 Entities: ${entityCount} | Vertices: ${vertexCount} | Camera controls: WASD`);
-        if (entityCount > 1) {
-          console.log('🎾 Multi-entity positions:');
-          for (let i = 0; i < entityCount; i++) {
-            const x = this.wasm!.get_entity_position_x(i);
-            const y = this.wasm!.get_entity_position_y(i);
-            const z = this.wasm!.get_entity_position_z(i);
-            console.log(`  Ball ${i}: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
-          }
-        }
+      // Only log entity info occasionally to avoid DevTools performance hit
+      if (entityCount % 50 === 0 && Math.floor(performance.now() / 5000) !== Math.floor((performance.now() - 16) / 5000)) {
+        console.log(`🎾 Entities: ${entityCount} | Vertices: ${vertexCount}`);
       }
 
       // Render using optimized instanced rendering (Phase 6.3)
@@ -288,11 +417,10 @@ export class Engine implements GameEngine {
     this.animationId = requestAnimationFrame(this.gameLoop);
   };
 
-  private handleCollisions(state: number): void {
+  private handleCollisions(_state: number): void {
     // Handle collision feedback (sound, particles, etc. in Phase 4)
-    if (state & 0x01) console.warn('Floor collision');
-    if (state & 0x02) console.warn('Wall collision');
-    if (state & 0x04) console.warn('🎾 Ball-to-ball collision!');
+    // Collision logging disabled for performance testing to avoid console spam
+    // Parameter prefixed with _ to indicate intentionally unused
   }
 
   private async loadWASM(): Promise<WASMExports> {

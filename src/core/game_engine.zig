@@ -28,7 +28,7 @@ var physics_restitution: f32 = 0.8;
 var world_bounds: core.Vec3 = .{ .x = 8.0, .y = 8.0, .z = 8.0 };
 
 // Entity system
-const MAX_ENTITIES: u32 = 10;
+const MAX_ENTITIES: u32 = 10000; // MAXIMUM POWER! 🚀💥
 
 const Entity = struct {
     position: core.Vec3,
@@ -87,6 +87,32 @@ pub export fn init() void {
 
 fn updateViewMatrix() void {
     uniforms.view = core.createLookAt(camera_position, camera_target, camera_up);
+}
+
+fn applyWorldBoundaryConstraints(position: *core.Vec3, velocity: *core.Vec3, radius: f32) u8 {
+    var collision_flags: u8 = 0;
+
+    // Floor collision
+    if (position.y - radius < -world_bounds.y) {
+        position.y = -world_bounds.y + radius;
+        velocity.y = -velocity.y * physics_restitution;
+        collision_flags |= 0x01;
+    }
+
+    // Wall collisions
+    if (@abs(position.x) + radius > world_bounds.x) {
+        position.x = std.math.sign(position.x) * (world_bounds.x - radius);
+        velocity.x = -velocity.x * physics_restitution;
+        collision_flags |= 0x02;
+    }
+
+    if (@abs(position.z) + radius > world_bounds.z) {
+        position.z = std.math.sign(position.z) * (world_bounds.z - radius);
+        velocity.z = -velocity.z * physics_restitution;
+        collision_flags |= 0x02;
+    }
+
+    return collision_flags;
 }
 
 fn simulatePhysicsWithConfig(position: *core.Vec3, velocity: *core.Vec3, delta_time: f32, input_force: core.Vec3, radius: f32) u8 {
@@ -276,15 +302,36 @@ pub export fn update(delta_time: f32) void {
     collision_state = 0;
     const force = core.Vec3{ .x = 0, .y = physics_gravity, .z = 0 };
 
+    // First, apply forces and update velocities/positions (but skip world boundary collisions)
     for (0..entity_count) |i| {
         if (entities[i].active) {
-            const entity_collision = simulatePhysicsWithConfig(&entities[i].position, &entities[i].velocity, delta_time, force, entities[i].radius);
-            collision_state |= entity_collision;
+            // Apply gravity and damping to velocity
+            entities[i].velocity.x += force.x * delta_time;
+            entities[i].velocity.y += force.y * delta_time;
+            entities[i].velocity.z += force.z * delta_time;
+
+            // Apply damping
+            entities[i].velocity.x *= physics_damping;
+            entities[i].velocity.y *= physics_damping;
+            entities[i].velocity.z *= physics_damping;
+
+            // Update position
+            entities[i].position.x += entities[i].velocity.x * delta_time;
+            entities[i].position.y += entities[i].velocity.y * delta_time;
+            entities[i].position.z += entities[i].velocity.z * delta_time;
         }
     }
 
-    // Check for entity-entity collisions
+    // Second, check for entity-entity collisions (this handles stacking)
     checkEntityCollisions(delta_time);
+
+    // Finally, apply world boundary constraints (after balls have settled from collisions)
+    for (0..entity_count) |i| {
+        if (entities[i].active) {
+            const entity_collision = applyWorldBoundaryConstraints(&entities[i].position, &entities[i].velocity, entities[i].radius);
+            collision_state |= entity_collision;
+        }
+    }
 
     // Update model matrix with first active entity position (for backward compatibility)
     uniforms.model = core.Mat4.identity();

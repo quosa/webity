@@ -1,5 +1,15 @@
 // Core type definitions for the game engine
 
+// Engine Configuration Constants
+export const ENGINE_CONSTANTS = {
+  MAX_ENTITIES: 10000, // Push the limits! 🚀
+  MAX_VERTEX_BUFFER_SIZE: 50000, // Scale up vertex buffer
+  MAX_GRID_BUFFER_SIZE: 5000,
+  DEFAULT_FRAME_HISTORY: 60,
+  TARGET_FPS: 60,
+  PERFORMANCE_THRESHOLD: 0.8, // 80% of target FPS
+} as const;
+
 export interface Vec3 {
   x: number;
   y: number;
@@ -78,6 +88,18 @@ export interface GameEngine {
   start(): void;
   stop(): void;
   dispose(): void;
+}
+
+export interface PerformanceStats {
+  frameTime: number;    // Current frame time in ms
+  fps: number;          // Current FPS
+  averageFPS: number;   // Average FPS over recent frames
+  minFPS: number;       // Minimum FPS in recent frames
+  maxFPS: number;       // Maximum FPS in recent frames
+  entityCount: number;  // Current number of entities
+  vertexCount: number;  // Current vertex count
+  wasmTime: number;     // WASM call time in microseconds
+  memoryUsage?: number; // Optional memory usage stats
 }
 
 // Error types for better error handling

@@ -57,6 +57,15 @@
 <body>
   <h1>WebAssembly Ball Physics Demo</h1>
   
+  <!-- Performance Stats - moved above canvas for better visibility -->
+  <div id="performanceStats" style="font-family: monospace; font-size: 16px; font-weight: bold; text-align: center; display: flex; justify-content: center; gap: 30px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333;">
+    <div style="color: #00ff00;">FPS: <span id="currentFPS">--</span> (avg: <span id="averageFPS" style="color: #88ff88;">--</span>)</div>
+    <div style="color: #ffff88;">Frame: <span id="frameTime">--</span>ms</div>
+    <div style="color: #ff8888;">🎾 Entities: <span id="entityCount" style="font-size: 18px;">--</span></div>
+    <div style="color: #8888ff;">Vertices: <span id="vertexCount">--</span></div>
+    <div style="color: #ff88ff;">WASM: <span id="wasmTime">--</span>μs</div>
+  </div>
+  
   <canvas id="canvas" width="800" height="600"></canvas>
   
   <div class="controls">
@@ -71,6 +80,17 @@
       <button id="gridSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #ff8800; color: white; border: none; border-radius: 5px; cursor: pointer;">⬜ Grid Formation</button>
       <button id="circleSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #8844ff; color: white; border: none; border-radius: 5px; cursor: pointer;">⭕ Circle Formation</button>
       <button id="chaosSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #ff4488; color: white; border: none; border-radius: 5px; cursor: pointer;">💥 Chaos Mode</button>
+    </div>
+    
+    <div style="margin: 10px 0; border-top: 1px solid #444; padding-top: 15px;">
+      <h3 style="color: #ffaa00; margin-bottom: 10px;">🌧️ Performance Testing</h3>
+      <div style="margin-bottom: 10px;">
+        <label for="rainIntensity" style="margin-right: 10px;">Rain Intensity:</label>
+        <input type="range" id="rainIntensity" min="0.1" max="25.0" step="0.5" value="15.0" style="width: 120px; margin-right: 10px;">
+        <span id="rainIntensityValue" style="color: #ffaa00;">15.0</span> balls/sec
+      </div>
+      <button id="startRainButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #006699; color: white; border: none; border-radius: 5px; cursor: pointer;">🌧️ Start Rain</button>
+      <button id="stopRainButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;" disabled>⏹️ Stop Rain</button>
     </div>
     <p class="info">Built with TypeScript + WebGPU + Zig WebAssembly</p>
   </div>
