@@ -67,11 +67,12 @@ pub fn createLookAt(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
     const s = normalize(cross(f, up));
     const u = cross(s, f);
 
+    // Fix X-axis flip only (Y and Z are correct)
     return Mat4{ .data = .{
-        s.x,          u.x,          -f.x,        0,
-        s.y,          u.y,          -f.y,        0,
-        s.z,          u.z,          -f.z,        0,
-        -dot(s, eye), -dot(u, eye), dot(f, eye), 1,
+        -s.x,         u.x,          -f.x,        0,
+        -s.y,         u.y,          -f.y,        0,
+        -s.z,         u.z,          -f.z,        0,
+        dot(s, eye), -dot(u, eye), dot(f, eye), 1,
     } };
 }
 

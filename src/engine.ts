@@ -24,12 +24,15 @@ export class Engine implements GameEngine {
   // Performance monitoring
   private frameTimeHistory: number[] = [];
   private maxFrameHistory = ENGINE_CONSTANTS.DEFAULT_FRAME_HISTORY;
-  private performanceCallback?: (_stats: PerformanceStats) => void;  
+  private performanceCallback?: (_stats: PerformanceStats) => void;
   private targetFPS = ENGINE_CONSTANTS.TARGET_FPS;
   private frameDropThreshold = ENGINE_CONSTANTS.PERFORMANCE_THRESHOLD;
   private lastStatsUpdate = 0;
   private statsUpdateInterval = 1000; // Update display every 1000ms (1 second)
   private lastWasmTime = 0; // WASM call time in microseconds
+
+  // Physics configuration
+  private physicsConfig: { entropy: number } = { entropy: 0.003 };
 
   constructor(
     private readonly canvas: HTMLCanvasElement, // eslint-disable-line no-unused-vars
@@ -64,7 +67,11 @@ export class Engine implements GameEngine {
 
       // Apply config if provided
       if (config?.physics) {
-        // TODO: Configure physics parameters in WASM
+        // Store entropy for GameObject scenes
+        if (config.physics.entropy !== undefined) {
+          this.physicsConfig.entropy = config.physics.entropy;
+        }
+        // TODO: Configure other physics parameters in WASM
         // This will require additional WASM exports
       }
 
@@ -81,6 +88,10 @@ export class Engine implements GameEngine {
 
     if (assets.ball) {
       this.wasm.generate_sphere_mesh(assets.ball.segments);
+    }
+
+    if (assets.cube) {
+      this.wasm.generate_cube_mesh(assets.cube.size);
     }
 
     // Generate grid floor for enhanced visual reference
@@ -239,11 +250,11 @@ export class Engine implements GameEngine {
   startRainScene(intensity: number = 1.0): void {
     console.log(`🌧️ Starting rain scene with intensity ${intensity}`);
     this.clearAllBalls();
-    
+
     this.rainActive = true;
     this.rainSpawnRate = intensity; // balls per second
     this.rainLastSpawn = performance.now();
-    
+
     console.log(`🌧️ Rain started: ${this.rainSpawnRate} balls/sec, max ${this.maxRainBalls} balls`);
   }
 
@@ -262,7 +273,7 @@ export class Engine implements GameEngine {
     // Check if it's time to spawn a new ball
     if (timeSinceLastSpawn >= spawnInterval) {
       const currentCount = this.getEntityCount();
-      
+
       // Check performance before spawning more balls
       if (currentCount >= this.maxRainBalls) {
         console.log(`🌧️ Rain hit max ball limit: ${this.maxRainBalls}`);
@@ -280,16 +291,16 @@ export class Engine implements GameEngine {
       const x = (Math.random() - 0.5) * 14; // -7 to +7 (slightly wider than world bounds)
       const z = (Math.random() - 0.5) * 14; // -7 to +7
       const y = 15 + Math.random() * 5;     // High up in the sky
-      
+
       this.spawnBall(x, y, z, this.rainBallSize);
-      
+
       // Add slight random initial velocity for more realistic rain
       const vx = (Math.random() - 0.5) * 1.0;
       const vz = (Math.random() - 0.5) * 1.0;
       this.wasm.set_entity_velocity(currentCount, vx, 0, vz);
-      
+
       this.rainLastSpawn = now;
-      
+
       // Log progress much less frequently to avoid DevTools bottleneck
       if (currentCount > 0 && currentCount % 100 === 0) {
         console.log(`🌧️ Rain progress: ${currentCount + 1} balls spawned`);
@@ -310,6 +321,11 @@ export class Engine implements GameEngine {
       this.wasm.set_world_bounds(size, size, size);
       console.log(`🎾 World bounds updated: ${size}x${size}x${size}`);
     }
+  }
+
+  // Physics configuration methods
+  getEntropy(): number {
+    return this.physicsConfig.entropy;
   }
 
   // Performance monitoring methods
@@ -353,10 +369,10 @@ export class Engine implements GameEngine {
 
   private isPerformanceAcceptable(): boolean {
     if (this.frameTimeHistory.length < 10) return true; // Not enough data yet
-    
+
     const recentFrameTimes = this.frameTimeHistory.slice(-10);
     const averageFPS = 1000 / (recentFrameTimes.reduce((a, b) => a + b, 0) / recentFrameTimes.length);
-    
+
     return averageFPS >= (this.targetFPS * this.frameDropThreshold);
   }
 
@@ -429,7 +445,7 @@ export class Engine implements GameEngine {
       if (!response.ok) {
         throw new WASMLoadError(`HTTP ${response.status}`);
       }
-      
+
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, {
         env: {

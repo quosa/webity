@@ -243,17 +243,25 @@ test "edge cases and error handling" {
     engine.set_entity_position(999, 1.0, 2.0, 3.0);
     engine.set_entity_velocity(999, 1.0, 2.0, 3.0);
     
-    // Test spawning maximum entities
+    // Test MAX_ENTITIES boundary condition - artificially set entity_count to near max
     engine.despawn_all_entities();
+    
+    // Artificially set entity count to 9999 (1 less than MAX_ENTITIES = 10000)
+    engine.entity_count = 9999;
+    
     var spawn_count: u32 = 0;
-    while (spawn_count < 15) { // Try to spawn more than MAX_ENTITIES (10)
+    var successful_spawns: u32 = 0;
+    while (spawn_count < 5) { // Try to spawn 5 entities, only 1 should succeed
         const result = engine.spawn_entity(0.0, 0.0, 0.0, 0.5);
+        if (result != 10000) { // 10000 (MAX_ENTITIES) is returned for failure
+            successful_spawns += 1;
+        }
         spawn_count += 1;
-        if (result == 10) break; // MAX_ENTITIES reached
     }
     
-    // Should not exceed MAX_ENTITIES
-    try testing.expect(engine.get_entity_count() <= 10);
+    // Only 1 entity should spawn successfully (bringing total to MAX_ENTITIES)
+    try testing.expect(successful_spawns == 1);
+    try testing.expect(engine.get_entity_count() == 10000); // Should hit MAX_ENTITIES limit
 }
 
 test "multi-entity collision simulation" {

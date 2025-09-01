@@ -30,10 +30,17 @@ var world_bounds: core.Vec3 = .{ .x = 8.0, .y = 8.0, .z = 8.0 };
 // Entity system
 const MAX_ENTITIES: u32 = 10000; // MAXIMUM POWER! 🚀💥
 
+// Mesh type enumeration
+const MeshType = enum(u8) {
+    SPHERE = 0,
+    CUBE = 1,
+};
+
 const Entity = struct {
     position: core.Vec3,
     velocity: core.Vec3,
     radius: f32,
+    mesh_type: MeshType,
     active: bool,
 };
 
@@ -42,6 +49,7 @@ pub var entity_count: u32 = 0;
 
 var input_state: u8 = 0; // Bitmask for WASD
 var collision_state: u8 = 0; // Bitmask for collisions
+var debug_floating_entity_index: u32 = MAX_ENTITIES; // Index of floating entity for debugging
 
 fn initEntities() void {
     // Initialize all entities as inactive
@@ -50,16 +58,14 @@ fn initEntities() void {
             .position = .{ .x = 0, .y = 0, .z = 0 },
             .velocity = .{ .x = 0, .y = 0, .z = 0 },
             .radius = 0.5,
+            .mesh_type = MeshType.SPHERE,
             .active = false,
         };
     }
     entity_count = 0;
-
-    // Spawn one initial ball for backward compatibility
-    _ = spawnEntityInternal(0, 3, 2, 0.5);
 }
 
-fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32) u32 {
+fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType) u32 {
     if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
 
     const index = entity_count;
@@ -67,6 +73,7 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32) u32 {
         .position = .{ .x = x, .y = y, .z = z },
         .velocity = .{ .x = 0, .y = 0, .z = 0 },
         .radius = radius,
+        .mesh_type = mesh_type,
         .active = true,
     };
     entity_count += 1;
@@ -302,7 +309,7 @@ pub export fn update(delta_time: f32) void {
     collision_state = 0;
     const force = core.Vec3{ .x = 0, .y = physics_gravity, .z = 0 };
 
-    // First, apply forces and update velocities/positions (but skip world boundary collisions)
+    // First, apply forces and update velocities only (no position updates yet)
     for (0..entity_count) |i| {
         if (entities[i].active) {
             // Apply gravity and damping to velocity
@@ -310,26 +317,65 @@ pub export fn update(delta_time: f32) void {
             entities[i].velocity.y += force.y * delta_time;
             entities[i].velocity.z += force.z * delta_time;
 
-            // Apply damping
+            // Apply damping to horizontal motion only (not Y, since gravity should dominate)
             entities[i].velocity.x *= physics_damping;
-            entities[i].velocity.y *= physics_damping;
             entities[i].velocity.z *= physics_damping;
+
+            // TODO: check this!!!
+            // Prevent numerical precision issues - if velocity is very small, let gravity dominate
+            // DISABLED: This was interfering with settling logic
+            // const min_velocity = 0.001;
+            // if (@abs(entities[i].velocity.y) < min_velocity and entities[i].position.y > -world_bounds.y + entities[i].radius + 1.0) {
+            //     // Entity is floating and should be falling - ensure it has some downward velocity
+            //     if (entities[i].velocity.y > -min_velocity) {
+            //         entities[i].velocity.y = -min_velocity;
+            //     }
+            // }
+        }
+    }
+
+    // Second, check for entity-entity collisions BEFORE position updates (prevents separation fighting gravity)
+    checkEntityCollisions(delta_time);
+
+    // Third, update positions after collision resolution
+    for (0..entity_count) |i| {
+        if (entities[i].active) {
+            const was_floating = entities[i].position.y > -world_bounds.y + entities[i].radius + 0.5 and @abs(entities[i].velocity.y) < 0.01;
 
             // Update position
             entities[i].position.x += entities[i].velocity.x * delta_time;
             entities[i].position.y += entities[i].velocity.y * delta_time;
             entities[i].position.z += entities[i].velocity.z * delta_time;
+
+            // Debug floating entities - export logging function for JS to use
+            if (was_floating and entities[i].position.y > -world_bounds.y + entities[i].radius + 0.5) {
+                // Mark this entity for debugging - we'll add a JS-callable debug function
+                debug_floating_entity_index = @intCast(i);
+            }
         }
     }
 
-    // Second, check for entity-entity collisions (this handles stacking)
-    checkEntityCollisions(delta_time);
-
-    // Finally, apply world boundary constraints (after balls have settled from collisions)
+    // Fourth, apply world boundary constraints (after positions are updated)
     for (0..entity_count) |i| {
         if (entities[i].active) {
             const entity_collision = applyWorldBoundaryConstraints(&entities[i].position, &entities[i].velocity, entities[i].radius);
             collision_state |= entity_collision;
+
+            // Fifth, settle entities that are very close to floor with tiny velocities
+            const floor_level = -world_bounds.y + entities[i].radius;
+            const distance_to_floor = entities[i].position.y - floor_level;
+            const settling_threshold = 0.05; // Within 0.05 units of floor (less aggressive)
+            const velocity_threshold = 0.1; // Smaller velocity threshold (less aggressive)
+
+            if (distance_to_floor < settling_threshold and @abs(entities[i].velocity.y) < velocity_threshold) {
+                // Entity is essentially resting on floor - kill micro-bounces
+                entities[i].velocity.y = 0.0;
+                entities[i].position.y = floor_level; // Snap exactly to floor
+
+                // Also dampen horizontal velocities when resting
+                if (@abs(entities[i].velocity.x) < velocity_threshold) entities[i].velocity.x = 0.0;
+                if (@abs(entities[i].velocity.z) < velocity_threshold) entities[i].velocity.z = 0.0;
+            }
         }
     }
 
@@ -362,6 +408,10 @@ pub export fn generate_sphere_mesh(segments: u32) void {
     // Use first entity's radius, or default if no entities
     const radius = if (entity_count > 0 and entities[0].active) entities[0].radius else 0.5;
     vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
+}
+
+pub export fn generate_cube_mesh(size: f32) void {
+    vertex_count = core.generateWireframeCube(&vertex_buffer, size);
 }
 
 pub export fn generate_grid_floor(grid_size: u32) void {
@@ -510,7 +560,17 @@ pub export fn get_camera_position_z() f32 {
 
 // Multi-entity exports for Phase 6.2
 pub export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
-    return spawnEntityInternal(x, y, z, radius);
+    return spawnEntityInternal(x, y, z, radius, MeshType.SPHERE);
+}
+
+// Enhanced entity spawning with mesh type support for Phase 7
+pub export fn spawn_entity_with_mesh(x: f32, y: f32, z: f32, radius: f32, mesh_type_id: u8) u32 {
+    const mesh_type: MeshType = switch (mesh_type_id) {
+        0 => MeshType.SPHERE,
+        1 => MeshType.CUBE,
+        else => MeshType.SPHERE, // Default to sphere for invalid types
+    };
+    return spawnEntityInternal(x, y, z, radius, mesh_type);
 }
 
 pub export fn get_entity_count() u32 {
@@ -525,26 +585,45 @@ pub export fn despawn_all_entities() void {
 }
 
 pub export fn get_entity_position_x(index: u32) f32 {
-    if (index >= entity_count or !entities[index].active) return 0;
+    if (index >= MAX_ENTITIES or !entities[index].active) return 0;
     return entities[index].position.x;
 }
 
 pub export fn get_entity_position_y(index: u32) f32 {
-    if (index >= entity_count or !entities[index].active) return 0;
+    if (index >= MAX_ENTITIES or !entities[index].active) return 0;
     return entities[index].position.y;
 }
 
 pub export fn get_entity_position_z(index: u32) f32 {
-    if (index >= entity_count or !entities[index].active) return 0;
+    if (index >= MAX_ENTITIES or !entities[index].active) return 0;
     return entities[index].position.z;
 }
 
 pub export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {
-    if (index >= entity_count or !entities[index].active) return;
+    if (index >= MAX_ENTITIES or !entities[index].active) return;
     entities[index].position = .{ .x = x, .y = y, .z = z };
 }
 
 pub export fn set_entity_velocity(index: u32, x: f32, y: f32, z: f32) void {
-    if (index >= entity_count or !entities[index].active) return;
+    if (index >= MAX_ENTITIES or !entities[index].active) return;
     entities[index].velocity = .{ .x = x, .y = y, .z = z };
+}
+
+pub export fn get_entity_mesh_type(index: u32) u8 {
+    if (index >= MAX_ENTITIES or !entities[index].active) return 0; // Default to SPHERE
+    return @intFromEnum(entities[index].mesh_type);
+}
+
+// Debug exports
+pub export fn get_debug_floating_entity_index() u32 {
+    return debug_floating_entity_index;
+}
+
+pub export fn get_entity_velocity_y(index: u32) f32 {
+    if (index >= MAX_ENTITIES or !entities[index].active) return 0;
+    return entities[index].velocity.y;
+}
+
+pub export fn clear_debug_floating_entity() void {
+    debug_floating_entity_index = MAX_ENTITIES;
 }

@@ -30,6 +30,18 @@ export interface EngineConfig {
     gravity?: number;
     friction?: number;
     bounds?: Vec3;
+    /**
+     * Small random offset added to GameObject positions to break perfect alignment.
+     * This prevents artificial equilibrium states in physics simulations.
+     * 
+     * Values:
+     * - 0.001: Very stable stacks, minimal movement
+     * - 0.003: Default - cinematic, realistic collapse behavior  
+     * - 0.01+: Immediate chaotic collapse
+     * 
+     * @default 0.003
+     */
+    entropy?: number;
   };
 }
 
@@ -37,6 +49,9 @@ export interface AssetConfig {
   ball?: {
     segments: number;
     radius?: number;
+  };
+  cube?: {
+    size: number;
   };
 }
 
@@ -80,6 +95,15 @@ export interface WASMExports {
   generate_grid_floor(grid_size: number): void;
   get_grid_buffer_offset(): number;
   get_grid_vertex_count(): number;
+  // Phase 7 Multi-mesh exports
+  generate_cube_mesh(size: number): void;
+  spawn_entity_with_mesh(x: number, y: number, z: number, radius: number, mesh_type: number): number;
+  get_entity_mesh_type(index: number): number;
+  
+  // Debug exports
+  get_debug_floating_entity_index(): number;
+  get_entity_velocity_y(index: number): number;
+  clear_debug_floating_entity(): void;
 }
 
 export interface GameEngine {
