@@ -11,7 +11,7 @@ export class RainSystem {
   private maxRainBalls: number = ENGINE_CONSTANTS.MAX_ENTITIES;
   private targetFPS = ENGINE_CONSTANTS.TARGET_FPS;
   private frameDropThreshold = ENGINE_CONSTANTS.PERFORMANCE_THRESHOLD;
-  private updateInterval: NodeJS.Timeout | null = null;
+  private updateInterval: number | null = null;
 
   constructor(
     private readonly scene: Scene, // eslint-disable-line no-unused-vars
@@ -27,7 +27,7 @@ export class RainSystem {
     this.lastSpawn = performance.now();
 
     // Start update interval (60 FPS update rate)
-    this.updateInterval = setInterval(() => this.update(), 1000 / 60);
+    this.updateInterval = setInterval(() => this.update(), 1000 / 60) as unknown as number;
 
     console.log(`🌧️ Rain started: ${this.spawnRate} balls/sec, max ${this.maxRainBalls} balls`);
   }

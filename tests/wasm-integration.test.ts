@@ -108,7 +108,7 @@ describe('WASM Integration Tests', () => {
       await engine.loadAssets({ ball: { segments: 16 } });
 
       const wasm = (engine as any).wasm;
-      const vertexCount = wasm.get_vertex_count();
+      const vertexCount = wasm.get_sphere_vertex_count();
 
       expect(vertexCount).toBeGreaterThan(0);
       expect(typeof vertexCount).toBe('number');
@@ -203,7 +203,7 @@ describe('WASM Integration Tests', () => {
 
       const vertexOffset = wasm.get_vertex_buffer_offset();
       const uniformOffset = wasm.get_uniform_buffer_offset();
-      const vertexCount = wasm.get_vertex_count();
+      const vertexCount = wasm.get_sphere_vertex_count();
 
       console.log('Memory offsets - Vertex:', vertexOffset, 'Uniform:', uniformOffset, 'Count:', vertexCount);
 

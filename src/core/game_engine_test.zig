@@ -6,8 +6,8 @@ const engine = @import("game_engine.zig");
 test "init function initializes engine state" {
     engine.init();
     
-    // Should have at least one entity spawned initially
-    try testing.expect(engine.get_entity_count() > 0);
+    // Should start with no entities spawned initially
+    try testing.expect(engine.get_entity_count() == 0);
     
     // Should have valid camera position
     const cam_x = engine.get_camera_position_x();
@@ -22,9 +22,9 @@ test "init function initializes engine state" {
 test "entity management functions" {
     engine.init();
     
-    // Test initial entity count
+    // Test initial entity count (should be 0)
     const initial_count = engine.get_entity_count();
-    try testing.expect(initial_count >= 1);
+    try testing.expect(initial_count == 0);
     
     // Test spawning new entity
     const entity_id = engine.spawn_entity(1.0, 2.0, 3.0, 0.8);
@@ -72,7 +72,7 @@ test "mesh generation functions" {
     
     // Test sphere mesh generation
     engine.generate_sphere_mesh(8);
-    const vertex_count = engine.get_vertex_count();
+    const vertex_count = engine.get_sphere_vertex_count();
     try testing.expect(vertex_count > 0);
     
     // Test grid floor generation
@@ -120,13 +120,14 @@ test "physics simulation with update function" {
 test "collision detection" {
     engine.init();
     
-    // Set entity below floor to trigger collision
-    engine.set_position(-10.0, -10.0, -10.0);
+    // Spawn an entity first
+    const entity_id = engine.spawn_entity(0.0, -10.0, 0.0, 0.5);
+    try testing.expect(entity_id < 10);
     
-    // Run physics update
+    // Run physics update to trigger floor collision
     engine.update(0.016);
     
-    // Should detect collision
+    // Should detect collision (entity below floor should trigger boundary collision)
     const collision_state = engine.get_collision_state();
     try testing.expect(collision_state != 0);
 }
@@ -209,6 +210,9 @@ test "physics configuration functions" {
 
 test "backward compatibility functions" {
     engine.init();
+    
+    // Spawn an entity first for legacy functions to work
+    _ = engine.spawn_entity(0.0, 0.0, 0.0, 0.5);
     
     // Test legacy ball position functions
     engine.set_position(1.0, 2.0, 3.0);

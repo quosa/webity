@@ -153,6 +153,30 @@ export class Engine implements GameEngine {
     return this.wasm.get_entity_count();
   }
 
+  private getTotalRenderedVertexCount(): number {
+    if (!this.wasm) return 0;
+    
+    // Sum up all vertices that are actually being rendered
+    let totalVertices = 0;
+    
+    // Add sphere vertices if spheres exist
+    const sphereCount = this.wasm.get_sphere_count();
+    if (sphereCount > 0) {
+      totalVertices += this.wasm.get_sphere_vertex_count();
+    }
+    
+    // Add cube vertices if cubes exist
+    const cubeCount = this.wasm.get_cube_count();
+    if (cubeCount > 0) {
+      totalVertices += this.wasm.get_cube_vertex_count();
+    }
+    
+    // Add grid vertices (always rendered)
+    totalVertices += this.wasm.get_grid_vertex_count();
+    
+    return totalVertices;
+  }
+
   getWasmEntityPosition(index: number): { x: number; y: number; z: number } | null {
     if (!this.wasm || index < 0) return null;
     
@@ -230,7 +254,7 @@ export class Engine implements GameEngine {
       minFPS,
       maxFPS,
       entityCount: this.getWasmEntityCount(),
-      vertexCount: this.wasm?.get_vertex_count() || 0,
+      vertexCount: this.getTotalRenderedVertexCount(),
       wasmTime: this.lastWasmTime
     };
 
@@ -269,7 +293,6 @@ export class Engine implements GameEngine {
       }
 
       // Update rendering for multiple entities
-      const vertexOffset = this.wasm!.get_vertex_buffer_offset();
       const vertexCount = this.wasm!.get_vertex_count();
       const uniformOffset = this.wasm!.get_uniform_buffer_offset();
       const entityCount = this.wasm!.get_entity_count();
@@ -279,15 +302,26 @@ export class Engine implements GameEngine {
         console.log(`🎾 Entities: ${entityCount} | Vertices: ${vertexCount}`);
       }
 
-      // Render using optimized instanced rendering (Phase 6.3)
-      this.renderer.renderMultipleEntitiesInstanced(
-        this.wasm!.memory.buffer,
-        vertexOffset,
-        vertexCount,
-        uniformOffset,
-        this.wasm!,
-        entityCount
-      );
+      // Check for mixed mesh types and choose appropriate renderer
+      const sphereCount = this.wasm!.get_sphere_count();
+      const cubeCount = this.wasm!.get_cube_count();
+      
+      if (sphereCount > 0 || cubeCount > 0) {
+        // Use multi-mesh renderer for all cases (single or mixed mesh types)
+        // This ensures spheres and cubes use their separate vertex buffers
+        this.renderer.renderMixedMeshesInstanced(
+          this.wasm!.memory.buffer,
+          uniformOffset,
+          this.wasm!
+        );
+      } else {
+        // No entities - just render floor grid and clear the scene
+        this.renderer.renderFloorGridOnly(
+          this.wasm!.memory.buffer,
+          uniformOffset,
+          this.wasm!
+        );
+      }
 
     } catch (error) {
       console.error('Game loop error:', error);

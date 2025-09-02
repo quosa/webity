@@ -10,7 +10,8 @@ import {
   createSingleBallScene, 
   createCollisionTestScene, 
   createFancyDemoScene,
-  createRainScene
+  createRainScene,
+  createMixedDemoScene
 } from './scene-presets.js';
 import { RainSystem } from './rain-system.js';
 
@@ -70,31 +71,52 @@ async function startDemo(): Promise<void> {
 
     console.log('Engine initialized successfully');
 
-    // Load ball assets
+    // Load ball and cube assets
     const assets: AssetConfig = {
       ball: {
         segments: 8, // Very low segment count for debugging
         radius: 0.5
+      },
+      cube: {
+        size: 1.0
       }
     };
 
     await engine.loadAssets(assets);
     console.log('Assets loaded successfully');
 
-    // Create default single ball scene so screen isn't blank on startup
-    const defaultScene = new Scene('DefaultScene');
+    // Create simple default scene - basic mixed mesh demo with a few entities
+    const defaultScene = new Scene('DefaultMixedDemo');
     defaultScene.setEngine(engine);
     defaultScene.setEntropy(engine.getEntropy());
     
-    createSingleBallScene(defaultScene);
+    // Simple 3x3 grid of spheres at different heights
+    const gridSpacing = 1.5; // Space between spheres
+    const baseHeight = 4; // Lower starting height for quicker settling
+    
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) {
+        const x = (col - 1) * gridSpacing; // -1.5, 0, 1.5
+        const z = (row - 1) * gridSpacing; // -1.5, 0, 1.5
+        const y = baseHeight + (Math.random() * 1); // Less height variation
+        
+        const sphereName = `Sphere_${row}_${col}`;
+        defaultScene.createSphereGameObject(sphereName, x, y, z, 0.5);
+      }
+    }
+    
+    // Add a cube resting on the floor as a static obstacle
+    // Floor level = -world_bounds.y + radius = -8.0 + 0.5 = -7.5
+    defaultScene.createCubeGameObject('FloorCube', 0, -7.5, 0, 1.0);
+    
     defaultScene.awake();
     defaultScene.start();
     
-    console.log('Default single ball scene created');
+    console.log('🏗️ Physics test scene created - 9 spheres falling onto floor cube!');
 
     // Start the game loop
     engine.start();
-    console.log('Game loop started - use WASD to move the ball!');
+    console.log('Game loop started - use WASD to fly around and observe the floor grid!');
 
     // Add stop/start button functionality
     const stopButton = document.getElementById('stopButton') as HTMLButtonElement;
@@ -172,7 +194,7 @@ async function startDemo(): Promise<void> {
         scene.setEngine(engine);
         scene.setEntropy(engine.getEntropy());
         
-        activeRainSystem = createRainScene(scene, engine, 1.5); // Default intensity
+        activeRainSystem = createRainScene(scene, engine, 20); // High intensity - 20 balls per second
         scene.awake();
         scene.start();
         
@@ -213,7 +235,7 @@ async function startDemo(): Promise<void> {
         scene.setEngine(engine);
         scene.setEntropy(engine.getEntropy());
 
-        createMixedScene(scene);
+        createMixedDemoScene(scene);
 
         // Start the scene to spawn WASM entities
         scene.awake();

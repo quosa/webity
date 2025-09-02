@@ -156,12 +156,11 @@ export class Scene {
     // Find all GameObjects with MeshRenderer and RigidBody components
     const renderableObjects = this.findGameObjectsWithComponent(MeshRenderer);
 
-    // Check for mixed mesh types - current WASM rendering doesn't fully support this
+    // Log mixed mesh types (now supported!)
     const meshTypes = new Set(renderableObjects.map(obj => obj.getComponent(MeshRenderer)!.getMeshType()));
     if (meshTypes.size > 1) {
-      console.warn('⚠️  Mixed mesh types detected! Current rendering system uses instanced rendering with single mesh.');
-      console.warn('    All entities will render with the same geometry. This is a known limitation.');
-      console.warn('    Mesh types in scene:', Array.from(meshTypes).map(t => t === 0 ? 'SPHERE' : 'CUBE'));
+      console.log('🎨 Mixed mesh types detected! Using multi-mesh renderer for optimal rendering.');
+      console.log('    Mesh types in scene:', Array.from(meshTypes).map(t => t === 0 ? 'SPHERE' : 'CUBE'));
     }
 
     console.log(`🎮 Spawning ${renderableObjects.length} WASM entities for GameObject scene`);

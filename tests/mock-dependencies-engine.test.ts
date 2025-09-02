@@ -36,6 +36,8 @@ const mockRenderer = {
   init: jest.fn().mockResolvedValue(undefined),
   render: jest.fn(),
   renderMultipleEntitiesInstanced: jest.fn(),
+  renderMixedMeshesInstanced: jest.fn(),
+  renderFloorGridOnly: jest.fn(),
   dispose: jest.fn(),
   getDevice: jest.fn().mockReturnValue(mockDevice)
 } as unknown as Renderer;
@@ -111,6 +113,14 @@ describe('Engine', () => {
           get_entity_position_z: jest.fn().mockReturnValue(0),
           set_entity_position: jest.fn(),
           set_entity_velocity: jest.fn(),
+          get_sphere_count: jest.fn().mockReturnValue(1),
+          get_cube_count: jest.fn().mockReturnValue(0),
+          get_sphere_position_x: jest.fn().mockReturnValue(0),
+          get_sphere_position_y: jest.fn().mockReturnValue(0),
+          get_sphere_position_z: jest.fn().mockReturnValue(0),
+          get_cube_position_x: jest.fn().mockReturnValue(0),
+          get_cube_position_y: jest.fn().mockReturnValue(0),
+          get_cube_position_z: jest.fn().mockReturnValue(0),
         }
       }
     });

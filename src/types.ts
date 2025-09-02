@@ -99,6 +99,20 @@ export interface WASMExports {
   generate_cube_mesh(size: number): void;
   spawn_entity_with_mesh(x: number, y: number, z: number, radius: number, mesh_type: number): number;
   get_entity_mesh_type(index: number): number;
+  get_sphere_count(): number;
+  get_cube_count(): number;
+  get_sphere_position_x(index: number): number;
+  get_sphere_position_y(index: number): number;
+  get_sphere_position_z(index: number): number;
+  get_cube_position_x(index: number): number;
+  get_cube_position_y(index: number): number;
+  get_cube_position_z(index: number): number;
+
+  // Separate mesh vertex buffer exports
+  get_sphere_vertex_buffer_offset(): number;
+  get_sphere_vertex_count(): number;
+  get_cube_vertex_buffer_offset(): number;
+  get_cube_vertex_count(): number;
   
   // Debug exports
   get_debug_floating_entity_index(): number;

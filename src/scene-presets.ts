@@ -19,44 +19,56 @@ export function createCollisionTestScene(scene: Scene): void {
   console.log('⚡ Creating collision test scene');
   scene.clear();
 
-  // Two balls stacked with slight horizontal offset so they separate
-  scene.createSphereGameObject('Ball1', 0, 1, 0, 0.5);        // Bottom ball at center
-  scene.createSphereGameObject('Ball2', 0.001, 2.01, 0, 0.5);   // Top ball slightly offset horizontally
+  // Two balls stacked with small gap + slight offset - will create wild bouncing and separation
+  scene.createSphereGameObject('Ball1', 0, 2, 0, 0.5);        // Bottom ball at center
+  scene.createSphereGameObject('Ball2', 0.01, 3.1, 0, 0.5);   // Top ball with 0.1 gap + minimal horizontal offset for separation
   
   console.log('⚡ Two ball test: 2 balls with slight offset, should separate and settle');
 }
 
-// Fancy demo scene - impressive multi-entity demonstration
+// Fancy demo scene - MAXIMUM CHAOS with towers and physics mayhem
 export function createFancyDemoScene(scene: Scene): void {
-  console.log('🎪 Creating fancy demo scene');
+  console.log('🎪 Creating CHAOS demo scene');
   scene.clear();
 
-  // Create a 3x3 grid of balls at different heights
-  const gridSize = 3;
-  const spacing = 1.5;
+  // Center: 3x3 grid of spheres
+  const gridSpacing = 1.5;
   const baseHeight = 8;
-  const offset = (gridSize - 1) * spacing / 2;
-
-  for (let x = 0; x < gridSize; x++) {
-    for (let z = 0; z < gridSize; z++) {
-      const xPos = (x * spacing) - offset;
-      const zPos = (z * spacing) - offset;
-      const yPos = baseHeight + (Math.random() * 2); // Slight height variation
-
-      const ballName = `Ball_${x}_${z}`;
-      const ball = scene.createSphereGameObject(ballName, xPos, yPos, zPos, 0.5);
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const x = (col - 1) * gridSpacing;
+      const z = (row - 1) * gridSpacing;
+      const y = baseHeight + (Math.random() * 2);
       
-      // Add some initial velocity for interesting interactions
-      const rigidBody = ball.getComponent(RigidBody);
-      if (rigidBody) {
-        const vx = (Math.random() - 0.5) * 2.0;
-        const vz = (Math.random() - 0.5) * 2.0;
-        rigidBody.setVelocity(vx, 0, vz);
-      }
+      const sphereName = `GridSphere_${row}_${col}`;
+      scene.createSphereGameObject(sphereName, x, y, z, 0.5);
     }
   }
+  
+  // Center obstacle cube
+  scene.createCubeGameObject('FloorCube', 0, -7.5, 0, 1.0);
+  
+  // Right side: 6-cube falling tower
+  const cubeSize = 1.0;
+  const stackX = 4.0;
+  const cubeSpacing = 3.0;
+  for (let i = 0; i < 6; i++) {
+    const stackY = -3.0 + (i * cubeSpacing);
+    scene.createCubeGameObject(`StackCube_${i}`, stackX, stackY, 0, cubeSize);
+  }
+  
+  // Left side: 8-sphere falling tower with randomness
+  const sphereRadius = 0.5;
+  const sphereStackX = -4.0;
+  const sphereSpacing = 2.5;
+  for (let i = 0; i < 8; i++) {
+    const sphereY = -2.0 + (i * sphereSpacing);
+    const randomX = sphereStackX + (Math.random() - 0.5) * 0.8;
+    const randomZ = (Math.random() - 0.5) * 0.8;
+    scene.createSphereGameObject(`TowerSphere_${i}`, randomX, sphereY, randomZ, sphereRadius);
+  }
 
-  console.log(`🎪 Fancy demo scene created: ${scene.getGameObjectCount()} balls in 3x3 formation with random velocities`);
+  console.log(`🎪 CHAOS demo scene created: 25+ entities of pure physics mayhem!`);
 }
 
 // Rain scene - returns RainSystem for external control

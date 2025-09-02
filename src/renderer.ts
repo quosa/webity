@@ -16,6 +16,9 @@ export class Renderer {
   private instancedPipeline?: GPURenderPipeline;
   private instanceBuffer?: GPUBuffer;
   private instancedBindGroup?: GPUBindGroup;
+  // Separate vertex buffers for mixed mesh rendering
+  private sphereVertexBuffer?: GPUBuffer;
+  private cubeVertexBuffer?: GPUBuffer;
 
   constructor(private bufferManager: BufferManager) { // eslint-disable-line no-unused-vars
     // BufferManager injected via constructor
@@ -121,6 +124,84 @@ export class Renderer {
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
+  // Multi-mesh instanced rendering - separate draw calls for spheres and cubes
+  renderMixedMeshesInstanced(wasmMemory: ArrayBuffer, uniformOffset: number, wasm: any): void {
+    if (!this.device || !this.context || !this.instancedPipeline) {
+      return; // Skip if not ready
+    }
+
+    const sphereCount = wasm.get_sphere_count();
+    const cubeCount = wasm.get_cube_count();
+    
+    if (sphereCount === 0 && cubeCount === 0) {
+      return; // Nothing to render
+    }
+
+    // Update uniforms (shared for both mesh types)
+    this.updateUniformBufferOnly(wasmMemory, uniformOffset);
+
+    // Begin render pass
+    const commandEncoder = this.device.createCommandEncoder();
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.context.getCurrentTexture().createView(),
+        clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+
+    // Render grid floor
+    const gridVertexCount = wasm.get_grid_vertex_count();
+    if (gridVertexCount > 0) {
+      this.updateGridUniformsOnly(wasmMemory, uniformOffset, wasm);
+      
+      renderPass.setPipeline(this.gridPipeline!);
+      renderPass.setBindGroup(0, this.gridBindGroup!);
+      renderPass.setVertexBuffer(0, this.gridVertexBuffer);
+      renderPass.draw(gridVertexCount);
+    }
+
+    // Create combined instance buffer with both sphere and cube data
+    const totalInstances = sphereCount + cubeCount;
+    if (totalInstances > 0) {
+      this.updateMixedInstanceBuffer(wasm, sphereCount, cubeCount);
+    }
+
+    // Render spheres if any exist
+    if (sphereCount > 0) {
+      // Generate sphere mesh
+      wasm.generate_sphere_mesh(16); // 16 segments
+      const sphereVertexOffset = wasm.get_sphere_vertex_buffer_offset();
+      const sphereVertexCount = wasm.get_sphere_vertex_count();
+      
+      this.updateSphereVertexBuffer(wasmMemory, sphereVertexOffset, sphereVertexCount);
+      
+      renderPass.setPipeline(this.instancedPipeline);
+      renderPass.setBindGroup(0, this.instancedBindGroup!);
+      renderPass.setVertexBuffer(0, this.sphereVertexBuffer!);
+      renderPass.draw(sphereVertexCount, sphereCount, 0, 0); // Draw first N sphere instances
+    }
+
+    // Render cubes if any exist
+    if (cubeCount > 0) {
+      // Generate cube mesh
+      wasm.generate_cube_mesh(1.0); // Size 1.0
+      const cubeVertexOffset = wasm.get_cube_vertex_buffer_offset();
+      const cubeVertexCount = wasm.get_cube_vertex_count();
+      
+      this.updateCubeVertexBuffer(wasmMemory, cubeVertexOffset, cubeVertexCount);
+      
+      renderPass.setPipeline(this.instancedPipeline);
+      renderPass.setBindGroup(0, this.instancedBindGroup!);
+      renderPass.setVertexBuffer(0, this.cubeVertexBuffer!);
+      renderPass.draw(cubeVertexCount, cubeCount, 0, sphereCount); // Draw next M cube instances
+    }
+
+    renderPass.end();
+    this.device.queue.submit([commandEncoder.finish()]);
+  }
+
   dispose(): void {
     this.vertexBuffer?.destroy();
     this.uniformBuffer?.destroy();
@@ -129,6 +210,9 @@ export class Renderer {
     this.gridUniformBuffer?.destroy();
     // Clean up instanced rendering resources
     this.instanceBuffer?.destroy();
+    // Clean up mixed mesh vertex buffers
+    this.sphereVertexBuffer?.destroy();
+    this.cubeVertexBuffer?.destroy();
     // Other GPU resources are automatically cleaned up
   }
 
@@ -355,6 +439,152 @@ export class Renderer {
     }
   }
 
+
+
+  private updateMixedInstanceBuffer(wasm: any, sphereCount: number, cubeCount: number): void {
+    if (!this.device || !this.instanceBuffer) return;
+
+    const totalInstances = sphereCount + cubeCount;
+    const instanceData = new Float32Array(totalInstances * 16); // 16 floats per 4x4 matrix
+
+    // Pack sphere instances first (indices 0 to sphereCount-1)
+    for (let i = 0; i < sphereCount; i++) {
+      const x = wasm.get_sphere_position_x(i);
+      const y = wasm.get_sphere_position_y(i);  
+      const z = wasm.get_sphere_position_z(i);
+      
+      const offset = i * 16;
+      instanceData[offset] = 1; instanceData[offset + 5] = 1; 
+      instanceData[offset + 10] = 1; instanceData[offset + 15] = 1;
+      instanceData[offset + 12] = x; instanceData[offset + 13] = y; instanceData[offset + 14] = z;
+    }
+
+    // Pack cube instances after spheres (indices sphereCount to sphereCount+cubeCount-1)
+    for (let i = 0; i < cubeCount; i++) {
+      const x = wasm.get_cube_position_x(i);
+      const y = wasm.get_cube_position_y(i);  
+      const z = wasm.get_cube_position_z(i);
+      
+      const offset = (sphereCount + i) * 16;
+      instanceData[offset] = 1; instanceData[offset + 5] = 1; 
+      instanceData[offset + 10] = 1; instanceData[offset + 15] = 1;
+      instanceData[offset + 12] = x; instanceData[offset + 13] = y; instanceData[offset + 14] = z;
+    }
+
+    // Upload combined instance data to GPU
+    this.device.queue.writeBuffer(this.instanceBuffer, 0, instanceData);
+  }
+
+  private updateSphereVertexBuffer(_wasmMemory: ArrayBuffer, sphereVertexOffset: number, sphereVertexCount: number): void {
+    if (!this.device || !this.bufferManager) return;
+
+    const vertexData = this.bufferManager.getVertexData(sphereVertexOffset, sphereVertexCount);
+    const vertexSize = vertexData.byteLength;
+
+    // Create or resize sphere vertex buffer as needed
+    if (!this.sphereVertexBuffer || this.sphereVertexBuffer.size < vertexSize) {
+      this.sphereVertexBuffer?.destroy();
+      this.sphereVertexBuffer = this.device.createBuffer({
+        label: 'Sphere Vertex Buffer',
+        size: Math.max(vertexSize, 1024),
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      });
+    }
+
+    const vertexBuffer = new ArrayBuffer(vertexData.byteLength);
+    new Float32Array(vertexBuffer).set(vertexData);
+    this.device.queue.writeBuffer(this.sphereVertexBuffer, 0, vertexBuffer);
+  }
+
+  private updateCubeVertexBuffer(_wasmMemory: ArrayBuffer, cubeVertexOffset: number, cubeVertexCount: number): void {
+    if (!this.device || !this.bufferManager) return;
+
+    const vertexData = this.bufferManager.getVertexData(cubeVertexOffset, cubeVertexCount);
+    const vertexSize = vertexData.byteLength;
+
+    // Create or resize cube vertex buffer as needed
+    if (!this.cubeVertexBuffer || this.cubeVertexBuffer.size < vertexSize) {
+      this.cubeVertexBuffer?.destroy();
+      this.cubeVertexBuffer = this.device.createBuffer({
+        label: 'Cube Vertex Buffer',
+        size: Math.max(vertexSize, 1024),
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      });
+    }
+
+    const vertexBuffer = new ArrayBuffer(vertexData.byteLength);
+    new Float32Array(vertexBuffer).set(vertexData);
+    this.device.queue.writeBuffer(this.cubeVertexBuffer, 0, vertexBuffer);
+  }
+
+  private updateUniformBufferOnly(wasmMemory: ArrayBuffer, uniformOffset: number): void {
+    if (!this.device || !this.uniformBuffer) return;
+
+    const wasmUniforms = new Float32Array(wasmMemory, uniformOffset, 48); // 3 matrices * 16 floats
+    const viewProjectionUniforms = new Float32Array(32); // 2 matrices * 16 floats
+    
+    // Skip model matrix, copy view and projection only
+    viewProjectionUniforms.set(wasmUniforms.slice(16, 32), 0);  // View matrix
+    viewProjectionUniforms.set(wasmUniforms.slice(32, 48), 16); // Projection matrix
+    
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, viewProjectionUniforms);
+  }
+
+  private updateGridUniformsOnly(wasmMemory: ArrayBuffer, uniformOffset: number, wasm: any): void {
+    // Ensure grid vertex buffer exists (initialize once if needed)
+    if (!this.gridVertexBuffer) {
+      this.initializeGridVertexBuffer(wasmMemory, wasm);
+    }
+    
+    // Update only the grid uniform buffer (camera matrices), not vertex data
+    if (this.gridUniformBuffer) {
+      const wasmUniforms = new Float32Array(wasmMemory, uniformOffset, 48); // 3 matrices * 16 floats
+      const gridUniforms = new Float32Array(48);
+      
+      // Identity model matrix (grid doesn't move)
+      const identityMatrix = new Float32Array([
+        1, 0, 0, 0,
+        0, 1, 0, 0, 
+        0, 0, 1, 0,
+        0, 0, 0, 1
+      ]);
+      gridUniforms.set(identityMatrix, 0);
+      
+      // Copy view and projection matrices from WASM (camera movement)
+      gridUniforms.set(wasmUniforms.slice(16, 32), 16); // View matrix
+      gridUniforms.set(wasmUniforms.slice(32, 48), 32); // Projection matrix
+      
+      this.device!.queue.writeBuffer(this.gridUniformBuffer!, 0, gridUniforms);
+    }
+  }
+
+  private initializeGridVertexBuffer(wasmMemory: ArrayBuffer, wasm: any): void {
+    if (!this.device || !this.bufferManager) return;
+    
+    // Get grid data from WASM (this should be populated by engine.generate_grid_floor)
+    const gridOffset = wasm.get_grid_buffer_offset();
+    const gridVertexCount = wasm.get_grid_vertex_count();
+    
+    if (gridVertexCount > 0) {
+      const gridData = new Float32Array(wasmMemory, gridOffset, gridVertexCount * 3);
+      const gridSize = gridData.byteLength;
+
+      // Create grid vertex buffer
+      this.gridVertexBuffer = this.device.createBuffer({
+        label: 'Grid Vertex Buffer',
+        size: Math.max(gridSize, 1024),
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      });
+
+      // Write grid data to GPU (one-time initialization)
+      const gridBuffer = new ArrayBuffer(gridData.byteLength);
+      new Float32Array(gridBuffer).set(gridData);
+      this.device.queue.writeBuffer(this.gridVertexBuffer, 0, gridBuffer);
+    }
+  }
+
+
+
   private updateGridBuffers(wasmMemory: ArrayBuffer, gridOffset: number, gridVertexCount: number, uniformOffset: number): void {
     if (!this.device || !this.bufferManager) return;
 
@@ -395,7 +625,7 @@ export class Renderer {
       gridUniforms.set(wasmUniforms.slice(16, 32), 16); // View matrix
       gridUniforms.set(wasmUniforms.slice(32, 48), 32); // Projection matrix
       
-      this.device.queue.writeBuffer(this.gridUniformBuffer, 0, gridUniforms);
+      this.device!.queue.writeBuffer(this.gridUniformBuffer!, 0, gridUniforms);
     }
   }
 
@@ -462,5 +692,39 @@ export class Renderer {
         return vec4<f32>(0.0, 1.0, 1.0, 1.0); // Cyan wireframe
       }
     `;
+  }
+
+  renderFloorGridOnly(wasmMemory: ArrayBuffer, uniformOffset: number, wasm: any): void {
+    if (!this.device || !this.context) {
+      return; // Skip if not ready
+    }
+
+    // Update uniforms
+    this.updateUniformBufferOnly(wasmMemory, uniformOffset);
+
+    // Begin render pass
+    const commandEncoder = this.device.createCommandEncoder();
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.context.getCurrentTexture().createView(),
+        clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+
+    // Render only the grid floor
+    const gridVertexCount = wasm.get_grid_vertex_count();
+    if (gridVertexCount > 0) {
+      this.updateGridUniformsOnly(wasmMemory, uniformOffset, wasm);
+      
+      renderPass.setPipeline(this.gridPipeline!);
+      renderPass.setBindGroup(0, this.gridBindGroup!);
+      renderPass.setVertexBuffer(0, this.gridVertexBuffer);
+      renderPass.draw(gridVertexCount);
+    }
+
+    renderPass.end();
+    this.device.queue.submit([commandEncoder.finish()]);
   }
 }

@@ -6,6 +6,12 @@ const core = @import("game_core.zig");
 var vertex_buffer: [10000]f32 = undefined;
 var vertex_count: u32 = 0;
 
+// Separate vertex buffers for different mesh types
+var sphere_vertex_buffer: [10000]f32 = undefined;
+var sphere_vertex_count: u32 = 0;
+var cube_vertex_buffer: [10000]f32 = undefined;
+var cube_vertex_count: u32 = 0;
+
 // Grid floor rendering
 var grid_buffer: [5000]f32 = undefined;
 var grid_vertex_count: u32 = 0;
@@ -47,6 +53,12 @@ const Entity = struct {
 var entities: [MAX_ENTITIES]Entity = undefined;
 pub var entity_count: u32 = 0;
 
+// Separate arrays for multi-mesh rendering
+var sphere_entities: [MAX_ENTITIES]Entity = undefined;
+var cube_entities: [MAX_ENTITIES]Entity = undefined;
+pub var sphere_count: u32 = 0;
+pub var cube_count: u32 = 0;
+
 var input_state: u8 = 0; // Bitmask for WASD
 var collision_state: u8 = 0; // Bitmask for collisions
 var debug_floating_entity_index: u32 = MAX_ENTITIES; // Index of floating entity for debugging
@@ -63,9 +75,69 @@ fn initEntities() void {
         };
     }
     entity_count = 0;
+
+    // Initialize separate mesh type arrays
+    for (&sphere_entities) |*entity| {
+        entity.* = Entity{
+            .position = .{ .x = 0, .y = 0, .z = 0 },
+            .velocity = .{ .x = 0, .y = 0, .z = 0 },
+            .radius = 0.5,
+            .mesh_type = MeshType.SPHERE,
+            .active = false,
+        };
+    }
+    for (&cube_entities) |*entity| {
+        entity.* = Entity{
+            .position = .{ .x = 0, .y = 0, .z = 0 },
+            .velocity = .{ .x = 0, .y = 0, .z = 0 },
+            .radius = 0.5,
+            .mesh_type = MeshType.CUBE,
+            .active = false,
+        };
+    }
+    sphere_count = 0;
+    cube_count = 0;
+}
+
+fn syncSeparateEntityArrays() void {
+    // Clear separate arrays first
+    for (&sphere_entities) |*entity| {
+        entity.active = false;
+    }
+    for (&cube_entities) |*entity| {
+        entity.active = false;
+    }
+    
+    // Synchronize separate mesh arrays with main entities array after physics updates
+    var sphere_index: u32 = 0;
+    var cube_index: u32 = 0;
+    
+    for (0..entity_count) |i| {
+        if (!entities[i].active) continue;
+        
+        switch (entities[i].mesh_type) {
+            MeshType.SPHERE => {
+                if (sphere_index < MAX_ENTITIES) {
+                    sphere_entities[sphere_index] = entities[i];
+                    sphere_index += 1;
+                }
+            },
+            MeshType.CUBE => {
+                if (cube_index < MAX_ENTITIES) {
+                    cube_entities[cube_index] = entities[i];
+                    cube_index += 1;
+                }
+            },
+        }
+    }
+    
+    // Update counts to reflect synchronized entities
+    sphere_count = sphere_index;
+    cube_count = cube_index;
 }
 
 fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType) u32 {
+    // Keep old entity array for backward compatibility
     if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
 
     const index = entity_count;
@@ -77,6 +149,35 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .active = true,
     };
     entity_count += 1;
+
+    // Also add to the appropriate mesh-type array
+    switch (mesh_type) {
+        MeshType.SPHERE => {
+            if (sphere_count < MAX_ENTITIES) {
+                sphere_entities[sphere_count] = Entity{
+                    .position = .{ .x = x, .y = y, .z = z },
+                    .velocity = .{ .x = 0, .y = 0, .z = 0 },
+                    .radius = radius,
+                    .mesh_type = mesh_type,
+                    .active = true,
+                };
+                sphere_count += 1;
+            }
+        },
+        MeshType.CUBE => {
+            if (cube_count < MAX_ENTITIES) {
+                cube_entities[cube_count] = Entity{
+                    .position = .{ .x = x, .y = y, .z = z },
+                    .velocity = .{ .x = 0, .y = 0, .z = 0 },
+                    .radius = radius,
+                    .mesh_type = mesh_type,
+                    .active = true,
+                };
+                cube_count += 1;
+            }
+        },
+    }
+
     return index;
 }
 
@@ -340,18 +441,18 @@ pub export fn update(delta_time: f32) void {
     // Third, update positions after collision resolution
     for (0..entity_count) |i| {
         if (entities[i].active) {
-            const was_floating = entities[i].position.y > -world_bounds.y + entities[i].radius + 0.5 and @abs(entities[i].velocity.y) < 0.01;
+            // const was_floating = entities[i].position.y > -world_bounds.y + entities[i].radius + 0.5 and @abs(entities[i].velocity.y) < 0.01;
 
             // Update position
             entities[i].position.x += entities[i].velocity.x * delta_time;
             entities[i].position.y += entities[i].velocity.y * delta_time;
             entities[i].position.z += entities[i].velocity.z * delta_time;
 
-            // Debug floating entities - export logging function for JS to use
-            if (was_floating and entities[i].position.y > -world_bounds.y + entities[i].radius + 0.5) {
-                // Mark this entity for debugging - we'll add a JS-callable debug function
-                debug_floating_entity_index = @intCast(i);
-            }
+            // Debug floating entities - temporarily disabled for testing
+            // if (was_floating and entities[i].position.y > -world_bounds.y + entities[i].radius + 0.5) {
+            //     // Mark this entity for debugging - we'll add a JS-callable debug function
+            //     debug_floating_entity_index = @intCast(i);
+            // }
         }
     }
 
@@ -379,6 +480,9 @@ pub export fn update(delta_time: f32) void {
         }
     }
 
+    // Synchronize separate mesh arrays with main entities array after physics update
+    syncSeparateEntityArrays();
+
     // Update model matrix with first active entity position (for backward compatibility)
     uniforms.model = core.Mat4.identity();
     if (entity_count > 0 and entities[0].active) {
@@ -405,13 +509,13 @@ pub export fn set_input(key: u8, pressed: bool) void {
 }
 
 pub export fn generate_sphere_mesh(segments: u32) void {
-    // Use first entity's radius, or default if no entities
-    const radius = if (entity_count > 0 and entities[0].active) entities[0].radius else 0.5;
-    vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
+    // Use first sphere entity's radius, or default if no sphere entities
+    const radius = if (sphere_count > 0 and sphere_entities[0].active) sphere_entities[0].radius else 0.5;
+    sphere_vertex_count = core.generateWireframeSphere(&sphere_vertex_buffer, segments, radius);
 }
 
 pub export fn generate_cube_mesh(size: f32) void {
-    vertex_count = core.generateWireframeCube(&vertex_buffer, size);
+    cube_vertex_count = core.generateWireframeCube(&cube_vertex_buffer, size);
 }
 
 pub export fn generate_grid_floor(grid_size: u32) void {
@@ -491,6 +595,31 @@ pub export fn get_vertex_count() u32 {
 
 pub export fn get_grid_vertex_count() u32 {
     return grid_vertex_count;
+}
+
+// Separate mesh type buffer accessors
+pub export fn get_sphere_vertex_buffer_offset() u32 {
+    if (comptime @import("builtin").target.cpu.arch == .wasm32) {
+        return @as(u32, @intCast(@intFromPtr(&sphere_vertex_buffer)));
+    } else {
+        return @truncate(@intFromPtr(&sphere_vertex_buffer));
+    }
+}
+
+pub export fn get_sphere_vertex_count() u32 {
+    return sphere_vertex_count;
+}
+
+pub export fn get_cube_vertex_buffer_offset() u32 {
+    if (comptime @import("builtin").target.cpu.arch == .wasm32) {
+        return @as(u32, @intCast(@intFromPtr(&cube_vertex_buffer)));
+    } else {
+        return @truncate(@intFromPtr(&cube_vertex_buffer));
+    }
+}
+
+pub export fn get_cube_vertex_count() u32 {
+    return cube_vertex_count;
 }
 
 pub export fn get_collision_state() u8 {
@@ -577,11 +706,29 @@ pub export fn get_entity_count() u32 {
     return entity_count;
 }
 
+pub export fn get_sphere_count() u32 {
+    return sphere_count;
+}
+
+pub export fn get_cube_count() u32 {
+    return cube_count;
+}
+
 pub export fn despawn_all_entities() void {
     for (&entities) |*entity| {
         entity.active = false;
     }
     entity_count = 0;
+
+    // Also clear separate mesh arrays
+    for (&sphere_entities) |*entity| {
+        entity.active = false;
+    }
+    for (&cube_entities) |*entity| {
+        entity.active = false;
+    }
+    sphere_count = 0;
+    cube_count = 0;
 }
 
 pub export fn get_entity_position_x(index: u32) f32 {
@@ -597,6 +744,38 @@ pub export fn get_entity_position_y(index: u32) f32 {
 pub export fn get_entity_position_z(index: u32) f32 {
     if (index >= MAX_ENTITIES or !entities[index].active) return 0;
     return entities[index].position.z;
+}
+
+// Sphere-specific position getters
+pub export fn get_sphere_position_x(index: u32) f32 {
+    if (index >= sphere_count or !sphere_entities[index].active) return 0;
+    return sphere_entities[index].position.x;
+}
+
+pub export fn get_sphere_position_y(index: u32) f32 {
+    if (index >= sphere_count or !sphere_entities[index].active) return 0;
+    return sphere_entities[index].position.y;
+}
+
+pub export fn get_sphere_position_z(index: u32) f32 {
+    if (index >= sphere_count or !sphere_entities[index].active) return 0;
+    return sphere_entities[index].position.z;
+}
+
+// Cube-specific position getters
+pub export fn get_cube_position_x(index: u32) f32 {
+    if (index >= cube_count or !cube_entities[index].active) return 0;
+    return cube_entities[index].position.x;
+}
+
+pub export fn get_cube_position_y(index: u32) f32 {
+    if (index >= cube_count or !cube_entities[index].active) return 0;
+    return cube_entities[index].position.y;
+}
+
+pub export fn get_cube_position_z(index: u32) f32 {
+    if (index >= cube_count or !cube_entities[index].active) return 0;
+    return cube_entities[index].position.z;
 }
 
 pub export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {

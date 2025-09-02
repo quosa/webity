@@ -279,6 +279,39 @@ Building on the proven performance foundation, Phase 7 successfully created a ma
   - 0.01+: Immediate chaotic collapse
 - **Demo Examples**: `entropy-demo.ts` showcases different entropy configurations for various physics behaviors
 
+### Phase 7.5: Mixed Geometry Rendering System ✅ COMPLETED
+**🎯 MAJOR MILESTONE: Breakthrough solution for mixed mesh type rendering**
+
+After extensive development work on GameObject architecture, a critical rendering issue emerged: when spheres and cubes were rendered together, each sphere also drew a cube around it, creating visual artifacts. This phase represents the complete solution to mixed geometry rendering.
+
+- [x] **Root Cause Analysis** - Identified that shared `vertexBuffer` caused cube mesh data to overwrite sphere mesh data in renderer
+- [x] **Separate Vertex Buffers Architecture** - Implemented dedicated `sphereVertexBuffer` and `cubeVertexBuffer` in renderer.ts
+- [x] **WASM Mixed Mesh Support** - Enhanced game_engine.zig with `MeshType` enum, separate entity arrays, and mixed mesh exports
+- [x] **Rendering Pipeline Integration** - Updated engine.ts to choose appropriate renderer based on entity composition
+- [x] **Multi-Draw Call System** - Implemented `renderMixedMeshesInstanced()` with separate draw calls for each mesh type
+- [x] **Comprehensive Testing** - Validated with complex physics scenarios (25+ mixed entities)
+
+**Major Technical Achievements:**
+- **Separate Vertex Buffer Strategy**: `updateSphereVertexBuffer()` and `updateCubeVertexBuffer()` methods prevent geometry conflicts
+- **WASM Entity Type System**: Complete `MeshType.SPHERE`/`MeshType.CUBE` support with separate entity tracking
+- **Smart Rendering Selection**: Engine automatically chooses mixed mesh renderer when multiple types present
+- **Performance Optimization**: Uses instanced rendering with separate vertex buffers for optimal GPU utilization
+- **Scene Complexity Support**: Successfully handles cube towers, sphere cascades, and mixed collision scenarios
+
+**Critical Files Modified:**
+- **`src/renderer.ts`**: Added separate vertex buffers and mixed mesh rendering pipeline (THE key breakthrough)
+- **`src/core/game_engine.zig`**: Added MeshType enum, separate entity arrays, mixed mesh WASM exports
+- **`src/engine.ts`**: Integrated mixed mesh rendering selection and vertex count calculation
+- **`src/types.ts`**: Enhanced type definitions for mixed mesh support
+
+**Demo Scenes Validated:**
+- **Complex Physics Playground**: 9 spheres + 7 cubes + floor grid with realistic physics interactions ✅
+- **Cube Stack Demolition**: Stable cube tower demolished by wrecking ball with perfect geometry rendering ✅  
+- **Mixed Collision Testing**: Multiple entity types colliding with proper visual representation ✅
+- **Rain System Performance**: High-intensity particle system (20 balls/sec) with mixed obstacles ✅
+
+**Performance Results:** Mixed geometry rendering maintains the proven 6,598+ entity performance baseline from Phase 6.5, with the physics bottleneck remaining as expected (O(n²) collision detection in WASM). WebGPU rendering remains highly efficient even with multiple mesh types.
+
 ### Phase 8: Asset & Material Pipeline 📋 FUTURE
 **🎯 MAJOR MILESTONE: Production-ready asset loading and material system**
 
