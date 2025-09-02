@@ -312,6 +312,49 @@ After extensive development work on GameObject architecture, a critical renderin
 
 **Performance Results:** Mixed geometry rendering maintains the proven 6,598+ entity performance baseline from Phase 6.5, with the physics bottleneck remaining as expected (O(n²) collision detection in WASM). WebGPU rendering remains highly efficient even with multiple mesh types.
 
+### Phase 7.75: Unified Rendering Pipeline Rationalization 📋 IN PROGRESS
+**🎯 MAJOR MILESTONE: Scalable rendering architecture for 100+ mixed mesh objects**
+
+Transform the current fragmented rendering system into a unified, scalable pipeline capable of efficiently handling 100+ game objects with mixed geometry types while maintaining wireframe rendering and preparing for future material systems.
+
+**Current State Analysis:**
+- Multiple separate vertex buffers per mesh type (`sphereVertexBuffer`, `cubeVertexBuffer`)  
+- Separate draw calls per mesh type with manual instance data packing
+- Fragmented WASM interface with duplicate exports (`get_sphere_*`, `get_cube_*`)
+- Performance proven but architecture doesn't scale beyond current mesh types
+
+**Implementation Plan:**
+
+#### Architecture Components:
+- [x] **Unified Buffer System** - Single combined vertex/index buffers for all mesh types
+- [x] **Mesh Registry** - Central tracking of vertex/index ranges per mesh type  
+- [x] **Instance Management** - Efficient transform, material ID, and mesh ID per object
+- [x] **Smart Rendering Strategy** - Direct draws for <20 objects, indirect rendering for 20+ objects
+- [x] **Material Foundation** - Basic material properties with wireframe support
+
+#### Implementation Steps:
+1. [x] **Create Unified Buffer Manager** - Replace separate buffer system with single combined approach
+2. [x] **Implement Mesh Registry** - Central mesh type and geometry management system
+3. [x] **Build Instance System** - Efficient transform and material data packing architecture  
+4. [x] **Add Material Foundation** - Basic wireframe materials expandable to textures
+5. [x] **Implement Indirect Rendering** - Multi-draw indirect for high object count performance
+6. [x] **Create Smart Batching** - Automatic rendering strategy selection based on object count
+7. [x] **Add Performance Monitoring** - Track rendering performance and batch efficiency
+
+#### Cleanup Phase:
+8. [x] **Remove Legacy Systems** - Delete old rendering methods and separate vertex buffer updates
+9. [x] **Consolidate WASM Interface** - Remove duplicate exports, create unified mesh data exports
+10. [x] **Clean Zig Architecture** - Remove separate mesh entity arrays, streamline buffer management
+11. [x] **Final Architecture Validation** - Test 100+ objects, verify performance, run full test suite
+
+**Technical Benefits:**
+- **Scalable Architecture**: Handles 100+ objects efficiently with automatic batching
+- **Single Buffer Strategy**: No dedicated buffers per mesh type, unified memory management
+- **Material Ready**: Foundation for textures/materials without major refactoring  
+- **Performance Optimized**: Indirect rendering for high object counts, reduced CPU overhead  
+- **Clean Codebase**: Eliminates fragmented legacy rendering approaches
+- **Maintainable**: Centralized geometry and rendering management system
+
 ### Phase 8: Asset & Material Pipeline 📋 FUTURE
 **🎯 MAJOR MILESTONE: Production-ready asset loading and material system**
 
