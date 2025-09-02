@@ -1,0 +1,70 @@
+
+Here's a clear breakdown of your current rendering pipeline, focusing on shared buffers, shaders, mesh types, and physics integration. I'll include an ASCII diagram and highlight anything that looks unusual or potentially problematic.
+
+Rendering Pipeline Overview
+1. Entity & Mesh Management
+    Each GameObject in the scene can have a MeshRenderer component.
+    Mesh types supported: Sphere and Cube (MeshType enum).
+    Mesh properties (radius, segments for spheres; size, width/height/depth for cubes) are managed per entity.
+2. WASM Integration
+    Physics and transforms are calculated in Zig/WASM.
+    Each entity has a corresponding index in the WASM entity array.
+    Transform matrices (position, rotation, scale) are packed into a shared buffer for GPU access.
+3. Shared Buffers
+    Separate Vertex Buffers: Dedicated sphereVertexBuffer and cubeVertexBuffer prevent geometry conflicts. Each mesh type uses its own buffer.
+    Instance Buffer: A single GPU storage buffer holds all entity transforms (Float32Array(entityCount * 16) for 4x4 matrices).
+    Uniform Buffer: Holds view/projection matrices for the camera.
+4. Rendering (WebGPU)
+    Instanced Rendering: All entities of a given mesh type are rendered in a single draw call using the instance buffer and their dedicated vertex buffer.
+    Multi-Mesh Support: Spheres and cubes are rendered in separate instanced draw calls, each with its own vertex buffer. This prevents geometry conflicts and visual artifacts.
+    Bind Groups: Used to bind uniform and instance buffers to shaders.
+5. Shaders
+    Vertex shader uses @builtin(instance_index) to fetch the correct transform from the instance buffer.
+    Fragment shader handles coloring and effects (currently basic).
+6. Physics
+    Physics is calculated in WASM (Zig), results are written to the shared buffer.
+    The renderer reads updated transforms from WASM memory before each frame.
+
+
+ASCII Diagram
+
+
++-------------------+      +-------------------+      +-------------------+
+|   GameObject[]    | ---> | MeshRenderer[]    | ---> | WASM Entity Array |
++-------------------+      +-------------------+      +-------------------+
+    |                        |                           |
+    v                        v                           v
++---------------------------------------------------------------+
+|                  Shared Buffers (WebGPU)                      |
+|  +------------------------+   +----------------+   +----------------+|
+|  | Sphere Vertex Buffer   |   | Instance Buffer|   | Uniform Buffer ||
+|  +------------------------+   +----------------+   +----------------+|
+|  +------------------------+                                      |
+|  | Cube Vertex Buffer     |--------------------------------------+
+|  +------------------------+                                      |
++---------------------------------------------------------------+
+    |                        |                           |
+    v                        v                           v
++---------------------------------------------------------------+
+|                  WebGPU Render Pipeline                       |
+|  +----------------+   +----------------+   +----------------+|
+|  | Vertex Shader  |   | Fragment Shader|   | Bind Groups    ||
+|  +----------------+   +----------------+   +----------------+|
++---------------------------------------------------------------+
+    |
+    v
++-------------------+
+|   Canvas Output   |
++-------------------+
+
+Unusual/Problematic Areas
+    Multi-Mesh Draw Calls: Spheres and cubes are rendered in separate instanced draw calls, each with its own vertex buffer. This prevents geometry conflicts and visual artifacts.
+    Physics Sync: If physics calculations in WASM are not updating the shared buffer correctly (especially with mixed mesh types), transforms may be out of sync, causing rendering/physics mismatches.
+    Mesh Generation: The MeshRenderer component marks meshes as "dirty" and triggers regeneration, but actual mesh data generation is deferred to the engine. If this logic is broken, mesh data may not match physics entities.
+    Buffer Overwrites: If the instance buffer is not correctly sized or indexed (especially with mixed types), you may overwrite transforms or render entities with the wrong mesh.
+Recommendations
+    Check Buffer Updates: Ensure that the instance buffer is updated with the correct transforms for each mesh type before each draw call.
+    Partitioning: When rendering mixed mesh types, partition the instance buffer so that spheres and cubes use the correct offsets.
+    Physics ↔ Rendering Sync: Double-check that WASM writes transforms for all entities, and that the renderer reads them in the same order.
+    Debug Logging: Use debug logs to print out mesh types, entity indices, and buffer offsets during each frame.
+    If you want a deeper backtrace into the Zig/WASM side (entity array, physics loop, buffer writes), let me know! I can diagram the Zig code flow as well.

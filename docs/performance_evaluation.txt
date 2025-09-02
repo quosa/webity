@@ -1,0 +1,64 @@
+This was the rain/flood test for the instantiated sphere rendering pipeline
+ - upto 6.5k spheres
+ - static grid floor
+ - physics (On^2)
+
+Starting WebAssembly Ball Physics Demo...
+main.ts:61 Engine initialized successfully
+main.ts:72 Assets loaded successfully
+main.ts:76 Game loop started - use WASD to move the ball!
+engine.ts:240 🌧️ Starting rain scene with intensity 24.6
+engine.ts:247 🌧️ Rain started: 24.6 balls/sec, max 10000 balls
+main.ts:138 🌧️ Rain scene started with intensity 24.6
+engine.ts:295 🌧️ Rain progress: 101 balls spawned
+
+FPS: 60 (avg: 59.9)
+Frame: 16.4ms
+🎾 Entities: 503
+Vertices: 256
+WASM: 900μ
+
+FPS: 60 (avg: 60.0)
+Frame: 17.6ms
+🎾 Entities: 2005
+Vertices: 256
+WASM: 4000μs
+
+FPS: 60 (avg: 60.1)
+Frame: 15.8ms
+🎾 Entities: 3007
+Vertices: 256
+WASM: 5800μs
+
+FPS: 60 (avg: 60.0)
+Frame: 16.6ms
+🎾 Entities: 4007
+Vertices: 256
+WASM: 7100μs
+
+
+FPS: 60 (avg: 60.0)
+Frame: 16.6ms
+🎾 Entities: 5008
+Vertices: 256
+WASM: 11300μs
+
+FPS: 58 (avg: 58.3)
+Frame: 17.3ms
+🎾 Entities: 6008
+Vertices: 256
+WASM: 17200μs
+
+
+FPS: 48 (avg: 48.3)
+Frame: 20.6ms
+🎾 Entities: 6598
+Vertices: 256
+WASM: 20500μs
+
+
+
+🌧️ Rain progress: 6501 balls spawned
+engine.ts:273 🌧️ Rain auto-stopped due to performance drop: 6598 balls
+engine.ts:274 🌧️ Performance threshold: 48 FPS
+
