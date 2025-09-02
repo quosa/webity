@@ -6,6 +6,13 @@ import { BufferManager } from './buffer-manager.js';
 import { AssetConfig, EngineError, PerformanceStats } from './types.js';
 import { createCubeStackScene, createMixedScene } from '../gameobject-example.js';
 import { Scene } from './scene.js';
+import { 
+  createSingleBallScene, 
+  createCollisionTestScene, 
+  createFancyDemoScene,
+  createRainScene
+} from './scene-presets.js';
+import { RainSystem } from './rain-system.js';
 
 // Show loading indicator
 function showLoading(show: boolean): void {
@@ -74,6 +81,17 @@ async function startDemo(): Promise<void> {
     await engine.loadAssets(assets);
     console.log('Assets loaded successfully');
 
+    // Create default single ball scene so screen isn't blank on startup
+    const defaultScene = new Scene('DefaultScene');
+    defaultScene.setEngine(engine);
+    defaultScene.setEntropy(engine.getEntropy());
+    
+    createSingleBallScene(defaultScene);
+    defaultScene.awake();
+    defaultScene.start();
+    
+    console.log('Default single ball scene created');
+
     // Start the game loop
     engine.start();
     console.log('Game loop started - use WASD to move the ball!');
@@ -96,114 +114,81 @@ async function startDemo(): Promise<void> {
       stopButton.style.display = 'inline-block';
     });
 
-    // Add scene preset button functionality
-    const multiBallButton = document.getElementById('multiBallButton') as HTMLButtonElement;
-    multiBallButton?.addEventListener('click', () => {
-      engine.spawnMultiBallScene();
-      console.log(`🎾 Multi-ball scene spawned! ${engine.getEntityCount()} balls total`);
+    // Simplified scene preset functionality - 5 focused demos
+    const fancyDemoButton = document.getElementById('fancyDemoButton') as HTMLButtonElement;
+    fancyDemoButton?.addEventListener('click', () => {
+      const scene = new Scene('FancyDemo');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      createFancyDemoScene(scene);
+      scene.awake();
+      scene.start();
+      
+      console.log(`🎪 Fancy demo scene activated! ${engine.getWasmEntityCount()} entities total`);
     });
 
-    const gridSceneButton = document.getElementById('gridSceneButton') as HTMLButtonElement;
-    gridSceneButton?.addEventListener('click', () => {
-      engine.spawnGridScene(3, 1.5, 8);
-      console.log(`⬜ Grid formation activated! ${engine.getEntityCount()} balls total`);
-    });
-
-    const circleSceneButton = document.getElementById('circleSceneButton') as HTMLButtonElement;
-    circleSceneButton?.addEventListener('click', () => {
-      engine.spawnCircleScene(3, 6, 8);
-      console.log(`⭕ Circle formation activated! ${engine.getEntityCount()} balls total`);
-    });
-
-    const chaosSceneButton = document.getElementById('chaosSceneButton') as HTMLButtonElement;
-    chaosSceneButton?.addEventListener('click', () => {
-      engine.spawnChaosScene(8);
-      console.log(`💥 Chaos mode activated! ${engine.getEntityCount()} balls total`);
-    });
-
-    // Add simple test scenes for debugging physics
+    // Essential physics test scenes
     const singleBallButton = document.getElementById('singleBallButton') as HTMLButtonElement;
     singleBallButton?.addEventListener('click', () => {
-      engine.clearAllBalls();
-      // Single ball dropped from Y=2 to test settling
-      const wasmExports = (engine as any).wasm;
-      if (wasmExports) {
-        wasmExports.spawn_entity(0, 2, 0, 0.5);
-        console.log('🎯 Single ball test: 1 ball at Y=2, should settle on floor');
+      const scene = new Scene('SingleBallTest');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      createSingleBallScene(scene);
+      scene.awake();
+      scene.start();
+      
+      console.log(`🎯 Single ball test: ${engine.getWasmEntityCount()} ball for physics testing`);
+    });
+
+    const collisionTestButton = document.getElementById('collisionTestButton') as HTMLButtonElement;
+    collisionTestButton?.addEventListener('click', () => {
+      const scene = new Scene('CollisionTest');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      createCollisionTestScene(scene);
+      scene.awake();
+      scene.start();
+      
+      console.log(`⚡ Collision test: ${engine.getWasmEntityCount()} balls for collision testing`);
+    });
+
+    // Rain scene with encapsulated RainSystem
+    let activeRainSystem: RainSystem | null = null;
+    const rainButton = document.getElementById('rainButton') as HTMLButtonElement;
+    
+    rainButton?.addEventListener('click', () => {
+      if (activeRainSystem && activeRainSystem.isActive()) {
+        // Stop existing rain
+        activeRainSystem.stop();
+        activeRainSystem = null;
+        rainButton.textContent = 'Start Rain Scene';
+        console.log('🌧️ Rain scene stopped');
+      } else {
+        // Start new rain scene
+        const scene = new Scene('RainScene');
+        scene.setEngine(engine);
+        scene.setEntropy(engine.getEntropy());
+        
+        activeRainSystem = createRainScene(scene, engine, 1.5); // Default intensity
+        scene.awake();
+        scene.start();
+        
+        rainButton.textContent = 'Stop Rain Scene';
+        console.log(`🌧️ Rain scene started with ${activeRainSystem.getCurrentBallCount()} initial balls`);
       }
-    });
-
-    const twoBallButton = document.getElementById('twoBallButton') as HTMLButtonElement;
-    twoBallButton?.addEventListener('click', () => {
-      engine.clearAllBalls();
-      // Two balls stacked with slight horizontal offset so they separate
-      const wasmExports = (engine as any).wasm;
-      if (wasmExports) {
-        wasmExports.spawn_entity(0, 1, 0, 0.5);        // Bottom ball at center
-        wasmExports.spawn_entity(0.001, 2.01, 0, 0.5);   // Top ball slightly offset horizontally
-        console.log('⚡ Two ball test: 2 balls with slight offset, should separate and settle');
-      }
-    });
-
-    const separatedBallsButton = document.getElementById('separatedBallsButton') as HTMLButtonElement;
-    separatedBallsButton?.addEventListener('click', () => {
-      engine.clearAllBalls();
-      // Two balls clearly separated (no collision interaction)
-      const wasmExports = (engine as any).wasm;
-      if (wasmExports) {
-        wasmExports.spawn_entity(-2, 2, 0, 0.5);  // Left ball
-        wasmExports.spawn_entity(2, 2, 0, 0.5);   // Right ball
-        console.log('🎯 Separated balls test: 2 balls far apart, should settle independently');
-      }
-    });
-
-    // Add rain scene controls
-    const rainIntensitySlider = document.getElementById('rainIntensity') as HTMLInputElement;
-    const rainIntensityValue = document.getElementById('rainIntensityValue') as HTMLSpanElement;
-    const startRainButton = document.getElementById('startRainButton') as HTMLButtonElement;
-    const stopRainButton = document.getElementById('stopRainButton') as HTMLButtonElement;
-
-    // Update rain intensity display
-    rainIntensitySlider?.addEventListener('input', () => {
-      const intensity = parseFloat(rainIntensitySlider.value);
-      if (rainIntensityValue) {
-        rainIntensityValue.textContent = intensity.toFixed(1);
-      }
-    });
-
-    startRainButton?.addEventListener('click', () => {
-      const intensity = parseFloat(rainIntensitySlider.value);
-      engine.startRainScene(intensity);
-      console.log(`🌧️ Rain scene started with intensity ${intensity}`);
-      startRainButton.disabled = true;
-      stopRainButton.disabled = false;
-    });
-
-    stopRainButton?.addEventListener('click', () => {
-      engine.stopRainScene();
-      console.log('🌧️ Rain scene stopped');
-      startRainButton.disabled = false;
-      stopRainButton.disabled = true;
     });
 
     // Add GameObject scene controls
     const cubeStackButton = document.getElementById('cubeStackButton') as HTMLButtonElement;
     const mixedSceneButton = document.getElementById('mixedSceneButton') as HTMLButtonElement;
-    const gameObjectFactoryButton = document.getElementById('gameObjectFactoryButton') as HTMLButtonElement;
-
     cubeStackButton?.addEventListener('click', () => {
       try {
-        // Clear existing entities first
-        engine.clearAllBalls();
-
-        // Create scene and connect to engine's WASM exports
+        // Create scene with proper Engine integration
         const scene = new Scene('CubeStackDemo');
-        const wasmExports = (engine as any).wasm; // Access private wasm member
-        if (wasmExports) {
-          scene.setWasmExports(wasmExports);
-        }
-
-        // Configure entropy from engine settings
+        scene.setEngine(engine);
         scene.setEntropy(engine.getEntropy());
 
         createCubeStackScene(scene);
@@ -214,7 +199,7 @@ async function startDemo(): Promise<void> {
 
         console.log('🏗️ Cube stack scene created! GameObject system active');
         console.log(scene.toString());
-        console.log(`🎾 Entity count after GameObject scene: ${engine.getEntityCount()}`);
+        console.log(`🎾 Entity count after GameObject scene: ${engine.getWasmEntityCount()}`);
       } catch (error) {
         console.error('Failed to create cube stack scene:', error);
         showError(`GameObject scene error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -223,17 +208,9 @@ async function startDemo(): Promise<void> {
 
     mixedSceneButton?.addEventListener('click', () => {
       try {
-        // Clear existing entities first
-        engine.clearAllBalls();
-
-        // Create scene and connect to engine's WASM exports
+        // Create scene with proper Engine integration
         const scene = new Scene('MixedDemo');
-        const wasmExports = (engine as any).wasm; // Access private wasm member
-        if (wasmExports) {
-          scene.setWasmExports(wasmExports);
-        }
-
-        // Configure entropy from engine settings
+        scene.setEngine(engine);
         scene.setEntropy(engine.getEntropy());
 
         createMixedScene(scene);
@@ -244,28 +221,13 @@ async function startDemo(): Promise<void> {
 
         console.log('🔗 Mixed scene created! GameObject system active');
         console.log(scene.toString());
-        console.log(`🎾 Entity count after GameObject scene: ${engine.getEntityCount()}`);
+        console.log(`🎾 Entity count after GameObject scene: ${engine.getWasmEntityCount()}`);
       } catch (error) {
         console.error('Failed to create mixed scene:', error);
         showError(`GameObject scene error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     });
 
-    gameObjectFactoryButton?.addEventListener('click', () => {
-      try {
-        // Clear existing entities first
-        engine.clearAllBalls();
-
-        // For the factory example, we need to modify it to accept a scene parameter
-        // For now, just show a warning that this needs WASM integration
-        console.log('🎮 GameObject factory examples created!');
-        console.warn('⚠️ GameObject Factory button needs integration work - createGameObjectExamples() needs WASM connection');
-        showError('GameObject Factory needs integration work - check console for details');
-      } catch (error) {
-        console.error('Failed to create GameObject examples:', error);
-        showError(`GameObject scene error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    });
 
     // Set up performance monitoring with floating entity debugging
     engine.setPerformanceCallback((stats) => {
@@ -324,16 +286,13 @@ async function startDemo(): Promise<void> {
 
 // Check for floating entities and display debug info
 function checkFloatingEntities(engine: Engine): void {
-  const wasmExports = (engine as any).wasm;
-  if (!wasmExports) return;
-
-  const floatingIndex = wasmExports.get_debug_floating_entity_index();
+  const floatingIndex = engine.getDebugFloatingEntityIndex();
   const debugDisplay = document.getElementById('debug-display');
 
   if (floatingIndex !== 10000) { // MAX_ENTITIES is 10000, used as sentinel
-    const posY = wasmExports.get_entity_position_y(floatingIndex);
-    const velY = wasmExports.get_entity_velocity_y(floatingIndex);
-    const totalEntities = wasmExports.get_entity_count();
+    const posY = engine.getWasmEntityPosition(floatingIndex)?.y || 0;
+    const velY = engine.getWasmEntityVelocityY(floatingIndex);
+    const totalEntities = engine.getWasmEntityCount();
 
     if (debugDisplay) {
       debugDisplay.innerHTML = `
@@ -351,7 +310,7 @@ function checkFloatingEntities(engine: Engine): void {
     console.warn(`🐛 Floating entity detected: #${floatingIndex} at Y=${posY.toFixed(3)}, velY=${velY.toFixed(6)}`);
 
     // Clear the flag so we don't spam
-    wasmExports.clear_debug_floating_entity();
+    engine.clearDebugFloatingEntity();
   } else {
     // No floating entities detected
     if (debugDisplay) {

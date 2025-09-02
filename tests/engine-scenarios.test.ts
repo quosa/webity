@@ -4,6 +4,12 @@ import { Renderer } from '../src/renderer.js';
 import { InputManager } from '../src/input.js';
 import { BufferManager } from '../src/buffer-manager.js';
 import { EngineError, ENGINE_CONSTANTS } from '../src/types.js';
+import { Scene } from '../src/scene.js';
+import { 
+  createSingleBallScene,
+  createCollisionTestScene,
+  createFancyDemoScene
+} from '../src/scene-presets.js';
 import { setupWebGPUTestEnvironment } from './utils/dom-mocks.js';
 
 // Helper function to create engine with all dependencies
@@ -40,102 +46,123 @@ describe('Engine Scenarios', () => {
       await engine.loadAssets({ ball: { segments: 8 } });
     });
 
-    it('should spawn and manage multiple balls in multi-ball scene', () => {
-      const initialCount = engine.getEntityCount();
-
-      engine.spawnMultiBallScene();
-      const finalCount = engine.getEntityCount();
-
+    it('should create single ball scene', () => {
+      const scene = new Scene('TestScene');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      const initialCount = engine.getWasmEntityCount();
+      
+      createSingleBallScene(scene);
+      scene.awake();
+      scene.start();
+      
+      const finalCount = engine.getWasmEntityCount();
       expect(finalCount).toBeGreaterThan(initialCount);
-      expect(finalCount).toBeGreaterThanOrEqual(4); // Multi-ball scene spawns 4 balls
+      expect(finalCount).toBe(initialCount + 1); // Single ball scene spawns 1 ball
     });
 
-    it('should create grid formation in grid scene', () => {
-      engine.clearAllBalls();
-      const initialCount = engine.getEntityCount();
-
-      engine.spawnGridScene(3, 1.5, 8);
-      const finalCount = engine.getEntityCount();
-
+    it('should create collision test scene', () => {
+      const scene = new Scene('CollisionTest');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      const initialCount = engine.getWasmEntityCount();
+      
+      createCollisionTestScene(scene);
+      scene.awake();
+      scene.start();
+      
+      const finalCount = engine.getWasmEntityCount();
       expect(finalCount).toBeGreaterThan(initialCount);
-      expect(finalCount).toBeLessThanOrEqual(9); // 3x3 grid max
+      expect(finalCount).toBe(initialCount + 2); // Collision test spawns 2 balls
     });
 
-    it('should create circular formation in circle scene', () => {
-      engine.clearAllBalls();
-      const initialCount = engine.getEntityCount();
-
-      engine.spawnCircleScene(3, 6, 8);
-      const finalCount = engine.getEntityCount();
-
+    it('should create fancy demo scene', () => {
+      const scene = new Scene('FancyDemo');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      const initialCount = engine.getWasmEntityCount();
+      
+      createFancyDemoScene(scene);
+      scene.awake();
+      scene.start();
+      
+      const finalCount = engine.getWasmEntityCount();
       expect(finalCount).toBeGreaterThan(initialCount);
-      expect(finalCount).toBeLessThanOrEqual(6); // Max 6 balls requested
+      expect(finalCount).toBeLessThanOrEqual(initialCount + 9); // 3x3 grid max
     });
 
-    it('should create random chaos scene', () => {
-      engine.clearAllBalls();
-      const initialCount = engine.getEntityCount();
-
-      engine.spawnChaosScene(8);
-      const finalCount = engine.getEntityCount();
-
-      expect(finalCount).toBeGreaterThan(initialCount);
-      expect(finalCount).toBeLessThanOrEqual(8); // Max 8 balls requested
+    it('should handle scene clearing', () => {
+      const scene = new Scene('ClearTest');
+      scene.setEngine(engine);
+      scene.setEntropy(engine.getEntropy());
+      
+      createFancyDemoScene(scene);
+      scene.awake();
+      scene.start();
+      
+      expect(engine.getWasmEntityCount()).toBeGreaterThan(0);
+      
+      scene.clear();
+      expect(engine.getWasmEntityCount()).toBe(0);
     });
 
-    it('should handle scene spawning with different parameters', () => {
-      // Test grid with different sizes
-      engine.clearAllBalls();
-      engine.spawnGridScene(2, 2.0, 5);
-      expect(engine.getEntityCount()).toBeLessThanOrEqual(4); // 2x2 grid
-
-      engine.clearAllBalls();
-      engine.spawnGridScene(4, 1.0, 10);
-      expect(engine.getEntityCount()).toBe(16); // 4x4 grid = 16 entities
-    });
-
-    it('should clear all balls and reset entity count', () => {
-      engine.spawnMultiBallScene();
-      expect(engine.getEntityCount()).toBeGreaterThan(0);
-
-      engine.clearAllBalls();
-      expect(engine.getEntityCount()).toBe(0);
+    it('should handle multiple scene transitions', () => {
+      const scene1 = new Scene('Scene1');
+      scene1.setEngine(engine);
+      createSingleBallScene(scene1);
+      scene1.awake();
+      scene1.start();
+      
+      expect(engine.getWasmEntityCount()).toBe(1);
+      
+      const scene2 = new Scene('Scene2');
+      scene2.setEngine(engine);
+      createCollisionTestScene(scene2); // This calls scene.clear() internally
+      scene2.awake();
+      scene2.start();
+      
+      expect(engine.getWasmEntityCount()).toBe(2); // Collision test creates 2 balls (after clearing previous)
     });
   });
 
-  describe('Ball Spawning', () => {
+  describe('WASM Entity Spawning', () => {
     beforeEach(async () => {
       engine = createTestEngine();
       await engine.init();
       await engine.loadAssets({ ball: { segments: 8 } });
     });
 
-    it('should spawn individual balls at specific positions', () => {
-      const initialCount = engine.getEntityCount();
+    it('should spawn individual entities at specific positions', () => {
+      const initialCount = engine.getWasmEntityCount();
 
-      const ballId = engine.spawnBall(1.0, 2.0, 3.0, 0.8);
+      const entityId = engine.spawnWasmEntity(1.0, 2.0, 3.0, 0.8);
 
-      expect(typeof ballId).toBe('number');
-      expect(engine.getEntityCount()).toBe(initialCount + 1);
+      expect(typeof entityId).toBe('number');
+      expect(engine.getWasmEntityCount()).toBe(initialCount + 1);
     });
 
-    it('should spawn balls with default radius when not specified', () => {
-      const initialCount = engine.getEntityCount();
+    it('should spawn entities with mesh types', () => {
+      const initialCount = engine.getWasmEntityCount();
 
-      const ballId = engine.spawnBall(0, 0, 0); // No radius specified
+      const sphereId = engine.spawnWasmEntity(0, 0, 0, 0.5); // Default sphere
+      const cubeId = engine.spawnWasmEntity(1, 0, 0, 0.5, 1); // Cube mesh type
 
-      expect(typeof ballId).toBe('number');
-      expect(engine.getEntityCount()).toBe(initialCount + 1);
+      expect(typeof sphereId).toBe('number');
+      expect(typeof cubeId).toBe('number');
+      expect(engine.getWasmEntityCount()).toBe(initialCount + 2);
     });
 
     it('should handle spawning when engine not initialized', () => {
       const uninitializedEngine = createTestEngine();
 
       expect(() => {
-        uninitializedEngine.spawnBall(0, 0, 0);
+        uninitializedEngine.spawnWasmEntity(0, 0, 0, 0.5);
       }).toThrow(EngineError);
       expect(() => {
-        uninitializedEngine.spawnBall(0, 0, 0);
+        uninitializedEngine.spawnWasmEntity(0, 0, 0, 0.5);
       }).toThrow('Engine not initialized');
     });
   });
@@ -146,21 +173,15 @@ describe('Engine Scenarios', () => {
       await engine.init();
     });
 
-    it('should set physics parameters', () => {
+    it('should set physics parameters via WASM wrappers', () => {
       expect(() => {
-        engine.setPhysicsParameters(-15.0, 0.95, 0.9);
+        engine.setWasmPhysicsConfig(-15.0, 0.95, 0.9);
       }).not.toThrow();
     });
 
-    it('should set world size', () => {
+    it('should set world bounds via WASM wrappers', () => {
       expect(() => {
-        engine.setWorldSize(12);
-      }).not.toThrow();
-    });
-
-    it('should handle physics configuration with default values', () => {
-      expect(() => {
-        engine.setPhysicsParameters(); // All default values
+        engine.setWasmWorldBounds(12, 12, 12);
       }).not.toThrow();
     });
 
@@ -169,11 +190,11 @@ describe('Engine Scenarios', () => {
 
       // Should not throw - these methods check if wasm exists
       expect(() => {
-        uninitializedEngine.setPhysicsParameters(-10, 0.8, 0.7);
+        uninitializedEngine.setWasmPhysicsConfig(-10, 0.8, 0.7);
       }).not.toThrow();
 
       expect(() => {
-        uninitializedEngine.setWorldSize(15);
+        uninitializedEngine.setWasmWorldBounds(15, 15, 15);
       }).not.toThrow();
     });
   });
@@ -213,32 +234,44 @@ describe('Engine Scenarios', () => {
     });
 
     it('should handle scene transitions', () => {
-      // Start with multi-ball scene
-      engine.spawnMultiBallScene();
-      const multiBallCount = engine.getEntityCount();
+      const scene1 = new Scene('Scene1');
+      scene1.setEngine(engine);
+      createSingleBallScene(scene1);
+      scene1.awake();
+      scene1.start();
+      const singleBallCount = engine.getWasmEntityCount();
 
-      // Switch to grid scene
-      engine.clearAllBalls();
-      engine.spawnGridScene(3, 2.0, 10);
-      const gridCount = engine.getEntityCount();
+      const scene2 = new Scene('Scene2');
+      scene2.setEngine(engine);
+      createCollisionTestScene(scene2);
+      scene2.awake();
+      scene2.start();
+      const collisionTestCount = engine.getWasmEntityCount();
 
-      // Switch to chaos scene
-      engine.clearAllBalls();
-      engine.spawnChaosScene(5);
-      const chaosCount = engine.getEntityCount();
+      const scene3 = new Scene('Scene3');
+      scene3.setEngine(engine);
+      createFancyDemoScene(scene3);
+      scene3.awake();
+      scene3.start();
+      const fancyDemoCount = engine.getWasmEntityCount();
 
-      expect(multiBallCount).toBeGreaterThan(0);
-      expect(gridCount).toBeGreaterThan(0);
-      expect(chaosCount).toBeGreaterThan(0);
+      expect(singleBallCount).toBe(1);
+      expect(collisionTestCount).toBe(2); // Collision test creates 2 balls (after clearing previous)
+      expect(fancyDemoCount).toBeGreaterThan(2); // Grid entities (after clearing previous)
     });
 
     it('should handle configuration changes during gameplay', () => {
-      engine.spawnMultiBallScene();
+      const scene = new Scene('ConfigTest');
+      scene.setEngine(engine);
+      createSingleBallScene(scene);
+      scene.awake();
+      scene.start();
+      
       engine.start();
 
       // Change physics during gameplay
-      engine.setPhysicsParameters(-20.0, 0.8, 1.0);
-      engine.setWorldSize(15);
+      engine.setWasmPhysicsConfig(-20.0, 0.8, 1.0);
+      engine.setWasmWorldBounds(15, 15, 15);
 
       // Should not crash
       engine.stop();
@@ -248,25 +281,23 @@ describe('Engine Scenarios', () => {
     it('should handle asset loading with different configurations', async () => {
       // Test with low segment count
       await engine.loadAssets({ ball: { segments: 4, radius: 0.3 } });
-      engine.spawnBall(0, 0, 0);
+      engine.spawnWasmEntity(0, 0, 0, 0.3);
 
       // Test with high segment count
       await engine.loadAssets({ ball: { segments: 32, radius: 1.2 } });
-      engine.spawnBall(1, 1, 1);
+      engine.spawnWasmEntity(1, 1, 1, 1.2);
 
-      expect(engine.getEntityCount()).toBeGreaterThan(0);
+      expect(engine.getWasmEntityCount()).toBeGreaterThan(0);
     });
 
     it('should handle maximum entity scenarios', () => {
-      // TODO: need to export the internal entity_count
-      // Try to spawn many balls - with our high MAX_ENTITIES limit, they should all succeed
-      engine.clearAllBalls(); // Start clean
+      engine.clearWasmEntities(); // Start clean
       for (let i = 0; i < 15; i++) {
-        engine.spawnBall(i, 0, 0);
+        engine.spawnWasmEntity(i, 0, 0, 0.5);
       }
 
-      const finalCount = engine.getEntityCount();
-      expect(finalCount).toBe(15); // All 15 balls should spawn successfully
+      const finalCount = engine.getWasmEntityCount();
+      expect(finalCount).toBe(15); // All 15 entities should spawn successfully
       expect(finalCount).toBeLessThanOrEqual(ENGINE_CONSTANTS.MAX_ENTITIES); // Within our high limit
     });
   });
@@ -276,10 +307,10 @@ describe('Engine Scenarios', () => {
       const uninitializedEngine = createTestEngine();
 
       expect(() => uninitializedEngine.start()).toThrow(EngineError);
-      expect(() => uninitializedEngine.spawnBall(0, 0, 0)).toThrow(EngineError);
+      expect(() => uninitializedEngine.spawnWasmEntity(0, 0, 0, 0.5)).toThrow(EngineError);
 
-      // clearAllBalls() returns early when uninitialized (doesn't throw)
-      expect(() => uninitializedEngine.clearAllBalls()).not.toThrow();
+      // clearWasmEntities() returns early when uninitialized (doesn't throw)
+      expect(() => uninitializedEngine.clearWasmEntities()).not.toThrow();
     });
 
     it('should handle asset loading on uninitialized engine', async () => {

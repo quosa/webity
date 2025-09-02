@@ -75,20 +75,11 @@
     <button id="stopButton" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #ff4444; color: white; border: none; border-radius: 5px; cursor: pointer;">⏸️ Stop Engine</button>
     <button id="startButton" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #44aa44; color: white; border: none; border-radius: 5px; cursor: pointer; display: none;">▶️ Start Engine</button>
     <div style="margin: 10px 0; border-top: 1px solid #444; padding-top: 15px;">
-      <h3 style="color: #00ffff; margin-bottom: 10px;">🎮 Entity-Based Scenes (Phase 6)</h3>
-      <p style="color: #aaa; font-size: 12px; margin-bottom: 10px;">Legacy entity system - proven performance baseline</p>
-      <button id="multiBallButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #4444ff; color: white; border: none; border-radius: 5px; cursor: pointer;">🎾 Multi-Ball</button>
-      <button id="gridSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #ff8800; color: white; border: none; border-radius: 5px; cursor: pointer;">⬜ Grid Formation</button>
-      <button id="circleSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #8844ff; color: white; border: none; border-radius: 5px; cursor: pointer;">⭕ Circle Formation</button>
-      <button id="chaosSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #ff4488; color: white; border: none; border-radius: 5px; cursor: pointer;">💥 Chaos Mode</button>
-    </div>
-    
-    <div style="margin: 10px 0; border-top: 1px solid #444; padding-top: 15px;">
       <h3 style="color: #ffff00; margin-bottom: 10px;">🔬 Debug Physics Tests</h3>
       <p style="color: #aaa; font-size: 12px; margin-bottom: 10px;">Simple test cases to debug settling behavior</p>
       <button id="singleBallButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #666; color: white; border: none; border-radius: 5px; cursor: pointer;">🎯 Single Ball</button>
-      <button id="twoBallButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #777; color: white; border: none; border-radius: 5px; cursor: pointer;">⚡ Two Ball Stack</button>
-      <button id="separatedBallsButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #888; color: white; border: none; border-radius: 5px; cursor: pointer;">🎯 Separated Balls</button>
+      <button id="collisionTestButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #777; color: white; border: none; border-radius: 5px; cursor: pointer;">⚡ Two Ball Stack</button>
+      <button id="fancyDemoButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #8844ff; color: white; border: none; border-radius: 5px; cursor: pointer;">🎪 Fancy Demo</button>
     </div>
     
     <div style="margin: 10px 0; border-top: 1px solid #444; padding-top: 15px;">
@@ -96,18 +87,11 @@
       <p style="color: #aaa; font-size: 12px; margin-bottom: 10px;">New GameObject/Component architecture - testing needed</p>
       <button id="cubeStackButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #228844; color: white; border: none; border-radius: 5px; cursor: pointer;">🏗️ Cube Stack</button>
       <button id="mixedSceneButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #448822; color: white; border: none; border-radius: 5px; cursor: pointer;">🔗 Mixed Scene</button>
-      <button id="gameObjectFactoryButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #882244; color: white; border: none; border-radius: 5px; cursor: pointer;">🎮 GameObject Factory</button>
     </div>
     
     <div style="margin: 10px 0; border-top: 1px solid #444; padding-top: 15px;">
       <h3 style="color: #ffaa00; margin-bottom: 10px;">🌧️ Performance Testing</h3>
-      <div style="margin-bottom: 10px;">
-        <label for="rainIntensity" style="margin-right: 10px;">Rain Intensity:</label>
-        <input type="range" id="rainIntensity" min="0.1" max="25.0" step="0.5" value="15.0" style="width: 120px; margin-right: 10px;">
-        <span id="rainIntensityValue" style="color: #ffaa00;">15.0</span> balls/sec
-      </div>
-      <button id="startRainButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #006699; color: white; border: none; border-radius: 5px; cursor: pointer;">🌧️ Start Rain</button>
-      <button id="stopRainButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;" disabled>⏹️ Stop Rain</button>
+      <button id="rainButton" style="margin: 5px; padding: 8px 16px; font-size: 14px; background: #006699; color: white; border: none; border-radius: 5px; cursor: pointer;">🌧️ Start Rain Scene</button>
     </div>
     <p class="info">Built with TypeScript + WebGPU + Zig WebAssembly</p>
   </div>

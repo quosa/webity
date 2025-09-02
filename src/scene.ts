@@ -5,14 +5,14 @@ import { Transform } from './components/transform.js';
 import { MeshRenderer } from './components/mesh-renderer.js';
 import { RigidBody } from './components/rigidbody.js';
 import { MeshType } from './mesh-types.js';
-import type { WASMExports } from './types.js';
+import type { Engine } from './engine.js';
 
 export class Scene {
   public name: string;
 
   private gameObjects: Map<string, GameObject> = new Map();
   private rootGameObjects: GameObject[] = []; // GameObjects without parents
-  private wasmExports?: WASMExports;
+  private engine?: Engine;
 
   // Physics configuration
   private entropy: number = 0.003; // Default entropy for breaking perfect alignment
@@ -25,13 +25,13 @@ export class Scene {
     this.name = name;
   }
 
-  // WASM integration
-  setWasmExports(wasmExports: WASMExports): void {
-    this.wasmExports = wasmExports;
+  // Engine integration
+  setEngine(engine: Engine): void {
+    this.engine = engine;
   }
 
-  getWasmExports(): WASMExports | undefined {
-    return this.wasmExports;
+  getEngine(): Engine | undefined {
+    return this.engine;
   }
 
   // Physics configuration
@@ -148,13 +148,21 @@ export class Scene {
 
   // Spawn WASM entities for all GameObjects in this scene
   private spawnWasmEntities(): void {
-    if (!this.wasmExports) {
-      console.warn('Cannot spawn WASM entities - no WASM exports available');
+    if (!this.engine) {
+      console.warn('Cannot spawn WASM entities - no Engine available');
       return;
     }
 
     // Find all GameObjects with MeshRenderer and RigidBody components
     const renderableObjects = this.findGameObjectsWithComponent(MeshRenderer);
+
+    // Check for mixed mesh types - current WASM rendering doesn't fully support this
+    const meshTypes = new Set(renderableObjects.map(obj => obj.getComponent(MeshRenderer)!.getMeshType()));
+    if (meshTypes.size > 1) {
+      console.warn('⚠️  Mixed mesh types detected! Current rendering system uses instanced rendering with single mesh.');
+      console.warn('    All entities will render with the same geometry. This is a known limitation.');
+      console.warn('    Mesh types in scene:', Array.from(meshTypes).map(t => t === 0 ? 'SPHERE' : 'CUBE'));
+    }
 
     console.log(`🎮 Spawning ${renderableObjects.length} WASM entities for GameObject scene`);
 
@@ -169,24 +177,23 @@ export class Scene {
       const worldPos = transform.getWorldPosition();
       console.log(`🎮 Spawning ${gameObject.name} at position (${worldPos.x}, ${worldPos.y}, ${worldPos.z})`);
 
-      // Spawn WASM entity based on mesh type
+      // Spawn WASM entity based on mesh type using Engine wrapper
       let wasmEntityIndex: number;
 
       if (meshRenderer.getMeshType() === MeshType.CUBE) {
-        // Spawn cube entity - use spawn_entity_with_mesh if available
-        if (this.wasmExports.spawn_entity_with_mesh) {
-          wasmEntityIndex = this.wasmExports.spawn_entity_with_mesh(
-            worldPos.x, worldPos.y, worldPos.z,
-            meshRenderer.getSize(),
-            1 // MeshType.CUBE
-          );
-        } else {
-          // Fallback to regular spawn
-          wasmEntityIndex = this.wasmExports.spawn_entity(worldPos.x, worldPos.y, worldPos.z, meshRenderer.getSize());
-        }
+        // Spawn cube entity with mesh type
+        wasmEntityIndex = this.engine.spawnWasmEntity(
+          worldPos.x, worldPos.y, worldPos.z,
+          meshRenderer.getSize(),
+          1 // MeshType.CUBE
+        );
       } else {
         // Spawn sphere entity
-        wasmEntityIndex = this.wasmExports.spawn_entity(worldPos.x, worldPos.y, worldPos.z, meshRenderer.getRadius());
+        wasmEntityIndex = this.engine.spawnWasmEntity(
+          worldPos.x, worldPos.y, worldPos.z,
+          meshRenderer.getRadius(),
+          0 // MeshType.SPHERE
+        );
       }
 
       // Connect the GameObject components to the WASM entity
@@ -196,7 +203,7 @@ export class Scene {
         // Set initial velocity if specified
         const velocity = rigidBody.getVelocity();
         if (velocity.x !== 0 || velocity.y !== 0 || velocity.z !== 0) {
-          this.wasmExports.set_entity_velocity(wasmEntityIndex, velocity.x, velocity.y, velocity.z);
+          this.engine.setWasmEntityVelocity(wasmEntityIndex, velocity.x, velocity.y, velocity.z);
         }
       }
 
@@ -256,7 +263,7 @@ export class Scene {
   }
 
   private syncWithWasm(): void {
-    if (!this.wasmExports) return;
+    if (!this.engine) return;
 
     // Sync all GameObjects with RigidBody components
     const rigidBodyObjects = this.findGameObjectsWithComponent(RigidBody);
@@ -269,18 +276,17 @@ export class Scene {
       if (wasmIndex >= 0 && transform) {
         // Sync physics state from WASM to Transform
         if (!rigidBody.isKinematic) {
-          const wasmPosX = this.wasmExports.get_entity_position_x(wasmIndex);
-          const wasmPosY = this.wasmExports.get_entity_position_y(wasmIndex);
-          const wasmPosZ = this.wasmExports.get_entity_position_z(wasmIndex);
-
-          transform.setPosition(wasmPosX, wasmPosY, wasmPosZ);
+          const wasmPos = this.engine.getWasmEntityPosition(wasmIndex);
+          if (wasmPos) {
+            transform.setPosition(wasmPos.x, wasmPos.y, wasmPos.z);
+          }
 
           // Update velocity (WASM doesn't currently expose velocity getters,
           // but this is where we'd sync it)
         } else {
           // For kinematic bodies, sync Transform to WASM
           const worldPos = transform.getWorldPosition();
-          this.wasmExports.set_entity_position(wasmIndex, worldPos.x, worldPos.y, worldPos.z);
+          this.engine.setWasmEntityPosition(wasmIndex, worldPos.x, worldPos.y, worldPos.z);
         }
       }
     }
@@ -288,25 +294,21 @@ export class Scene {
 
   // WASM convenience methods for components
   updateWasmEntityPosition(wasmIndex: number, position: { x: number; y: number; z: number }): void {
-    if (this.wasmExports && wasmIndex >= 0) {
-      this.wasmExports.set_entity_position(wasmIndex, position.x, position.y, position.z);
+    if (this.engine && wasmIndex >= 0) {
+      this.engine.setWasmEntityPosition(wasmIndex, position.x, position.y, position.z);
     }
   }
 
   updateWasmEntityVelocity(wasmIndex: number, velocity: { x: number; y: number; z: number }): void {
-    if (this.wasmExports && wasmIndex >= 0) {
-      this.wasmExports.set_entity_velocity(wasmIndex, velocity.x, velocity.y, velocity.z);
+    if (this.engine && wasmIndex >= 0) {
+      this.engine.setWasmEntityVelocity(wasmIndex, velocity.x, velocity.y, velocity.z);
     }
   }
 
   getWasmEntityPosition(wasmIndex: number): { x: number; y: number; z: number } | null {
-    if (!this.wasmExports || wasmIndex < 0) return null;
-
-    return {
-      x: this.wasmExports.get_entity_position_x(wasmIndex),
-      y: this.wasmExports.get_entity_position_y(wasmIndex),
-      z: this.wasmExports.get_entity_position_z(wasmIndex),
-    };
+    if (!this.engine || wasmIndex < 0) return null;
+    
+    return this.engine.getWasmEntityPosition(wasmIndex);
   }
 
   // Scene preset factory methods
@@ -358,7 +360,7 @@ export class Scene {
       gameObjectCount: this.gameObjects.size,
       rigidBodyCount: rigidBodyObjects.length,
       meshRendererCount: meshRendererObjects.length,
-      wasmEntityCount: this.wasmExports?.get_entity_count() || 0,
+      wasmEntityCount: this.engine?.getWasmEntityCount() || 0,
     };
   }
 
@@ -371,8 +373,8 @@ export class Scene {
   // Clear all GameObjects (useful for scene transitions)
   clear(): void {
     // Clear WASM entities first
-    if (this.wasmExports) {
-      this.wasmExports.despawn_all_entities();
+    if (this.engine) {
+      this.engine.clearWasmEntities();
     }
 
     // Destroy all GameObjects
