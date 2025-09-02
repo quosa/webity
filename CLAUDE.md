@@ -43,6 +43,17 @@ The project follows a simple client-side WebAssembly pattern:
 - Zig 0.15.1 or compatible version
 - Python 3 for development server
 - Modern web browser with WebAssembly support
+## Visual Testing
+
+When asked to check visual output or take a screenshot:
+```bash
+visual-test
+```
+This command instructs Claude to use MCP Playwright tools:
+1. `mcp__playwright__browser_navigate` to https://localhost:5173/ (ignore HTTPS certificate errors)
+2. Accept self-signed certificate by clicking "Advanced" then "Proceed to localhost (unsafe)"
+3. `mcp__playwright__browser_take_screenshot` to capture the current state
+
 ## Important Development Notes
 
 - **ALWAYS run `npm run verify` before declaring any phase or task complete**
