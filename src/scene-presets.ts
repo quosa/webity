@@ -68,7 +68,7 @@ export function createFancyDemoScene(scene: Scene): void {
     scene.createSphereGameObject(`TowerSphere_${i}`, randomX, sphereY, randomZ, sphereRadius);
   }
 
-  console.log(`🎪 CHAOS demo scene created: 25+ entities of pure physics mayhem!`);
+  console.log('🎪 CHAOS demo scene created: 25+ entities of pure physics mayhem!');
 }
 
 // Rain scene - returns RainSystem for external control

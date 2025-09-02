@@ -99,3 +99,5 @@ Thumbs.db
 *.temp
 .temp/
 .tmp/
+.playwright-mcp/game-engine-demo.png
+.playwright-mcp/initial-state.png

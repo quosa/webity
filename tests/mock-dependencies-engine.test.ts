@@ -92,6 +92,8 @@ describe('Engine', () => {
           get_uniform_buffer_offset: jest.fn().mockReturnValue(1024),
           get_vertex_count: jest.fn().mockReturnValue(100),
           get_grid_vertex_count: jest.fn().mockReturnValue(50),
+          get_sphere_vertex_count: jest.fn().mockReturnValue(256),
+          get_cube_vertex_count: jest.fn().mockReturnValue(144),
           get_collision_state: jest.fn().mockReturnValue(0),
           set_position: jest.fn(),
           apply_force: jest.fn(),

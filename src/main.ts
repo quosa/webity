@@ -4,11 +4,11 @@ import { Renderer } from './renderer.js';
 import { InputManager } from './input.js';
 import { BufferManager } from './buffer-manager.js';
 import { AssetConfig, EngineError, PerformanceStats } from './types.js';
-import { createCubeStackScene, createMixedScene } from '../gameobject-example.js';
+import { createCubeStackScene } from '../gameobject-example.js';
 import { Scene } from './scene.js';
-import { 
-  createSingleBallScene, 
-  createCollisionTestScene, 
+import {
+  createSingleBallScene,
+  createCollisionTestScene,
   createFancyDemoScene,
   createRainScene,
   createMixedDemoScene
@@ -89,29 +89,29 @@ async function startDemo(): Promise<void> {
     const defaultScene = new Scene('DefaultMixedDemo');
     defaultScene.setEngine(engine);
     defaultScene.setEntropy(engine.getEntropy());
-    
+
     // Simple 3x3 grid of spheres at different heights
     const gridSpacing = 1.5; // Space between spheres
     const baseHeight = 4; // Lower starting height for quicker settling
-    
+
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
         const x = (col - 1) * gridSpacing; // -1.5, 0, 1.5
         const z = (row - 1) * gridSpacing; // -1.5, 0, 1.5
         const y = baseHeight + (Math.random() * 1); // Less height variation
-        
+
         const sphereName = `Sphere_${row}_${col}`;
         defaultScene.createSphereGameObject(sphereName, x, y, z, 0.5);
       }
     }
-    
+
     // Add a cube resting on the floor as a static obstacle
     // Floor level = -world_bounds.y + radius = -8.0 + 0.5 = -7.5
     defaultScene.createCubeGameObject('FloorCube', 0, -7.5, 0, 1.0);
-    
+
     defaultScene.awake();
     defaultScene.start();
-    
+
     console.log('🏗️ Physics test scene created - 9 spheres falling onto floor cube!');
 
     // Start the game loop
@@ -142,11 +142,11 @@ async function startDemo(): Promise<void> {
       const scene = new Scene('FancyDemo');
       scene.setEngine(engine);
       scene.setEntropy(engine.getEntropy());
-      
+
       createFancyDemoScene(scene);
       scene.awake();
       scene.start();
-      
+
       console.log(`🎪 Fancy demo scene activated! ${engine.getWasmEntityCount()} entities total`);
     });
 
@@ -156,11 +156,11 @@ async function startDemo(): Promise<void> {
       const scene = new Scene('SingleBallTest');
       scene.setEngine(engine);
       scene.setEntropy(engine.getEntropy());
-      
+
       createSingleBallScene(scene);
       scene.awake();
       scene.start();
-      
+
       console.log(`🎯 Single ball test: ${engine.getWasmEntityCount()} ball for physics testing`);
     });
 
@@ -169,18 +169,18 @@ async function startDemo(): Promise<void> {
       const scene = new Scene('CollisionTest');
       scene.setEngine(engine);
       scene.setEntropy(engine.getEntropy());
-      
+
       createCollisionTestScene(scene);
       scene.awake();
       scene.start();
-      
+
       console.log(`⚡ Collision test: ${engine.getWasmEntityCount()} balls for collision testing`);
     });
 
     // Rain scene with encapsulated RainSystem
     let activeRainSystem: RainSystem | null = null;
     const rainButton = document.getElementById('rainButton') as HTMLButtonElement;
-    
+
     rainButton?.addEventListener('click', () => {
       if (activeRainSystem && activeRainSystem.isActive()) {
         // Stop existing rain
@@ -193,11 +193,11 @@ async function startDemo(): Promise<void> {
         const scene = new Scene('RainScene');
         scene.setEngine(engine);
         scene.setEntropy(engine.getEntropy());
-        
+
         activeRainSystem = createRainScene(scene, engine, 20); // High intensity - 20 balls per second
         scene.awake();
         scene.start();
-        
+
         rainButton.textContent = 'Stop Rain Scene';
         console.log(`🌧️ Rain scene started with ${activeRainSystem.getCurrentBallCount()} initial balls`);
       }

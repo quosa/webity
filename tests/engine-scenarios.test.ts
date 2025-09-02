@@ -91,7 +91,7 @@ describe('Engine Scenarios', () => {
       
       const finalCount = engine.getWasmEntityCount();
       expect(finalCount).toBeGreaterThan(initialCount);
-      expect(finalCount).toBeLessThanOrEqual(initialCount + 9); // 3x3 grid max
+      expect(finalCount).toBeLessThanOrEqual(initialCount + 25); // Chaos mode: 9 center spheres + 6 cube tower + 8 sphere tower + 1 floor cube + 1 obstacle
     });
 
     it('should handle scene clearing', () => {
