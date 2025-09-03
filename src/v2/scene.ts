@@ -69,23 +69,12 @@ async function main() {
     const cubeMesh = createCubeMesh(2);
     renderer.registerMesh('cube', cubeMesh);
 
-    // Use orthographic camera for now (perspective has W=0 issues)
-    // renderer.setOrthographicCamera({
-    //   left: -10,
-    //   right: 10,
-    //   top: 8,
-    //   bottom: -8
-    // });
-
-    // renderer.setPerspectiveCamera([0, 3, 8], [0, 0, 0]); // fov 45°
+    // Set up perspective camera
     renderer.setPerspectiveCamera([0, 0, -10], [0, 0, 0]); // Camera behind scene, looking forward
 
-    // Add cubes FIRST - position them in positive Z (in front of camera)
+    // Add cubes - position them in positive Z (in front of camera)
     const cube1Transform = makeTransformMatrix(-3, 0, 5, 1);
     const cube2Transform = makeTransformMatrix(3, 0, 5, 1);
-
-    console.log('🔵 Cube1 transform:', Array.from(cube1Transform));
-    console.log('🔵 Cube2 transform:', Array.from(cube2Transform));
 
     renderer.addEntity({
       id: 'cube1',
@@ -101,16 +90,14 @@ async function main() {
       color: [0, 0, 1, 1] // Blue
     } as Entity);
 
-    // Add triangle LAST so it renders on top - position it in positive Z
-    const triangleTransform = makeTransformMatrix(0, 0, 2, 1);
-
-    console.log('🔺 Triangle transform:', Array.from(triangleTransform));
+    // Add triangle in front of cubes
+    const triangleTransform = makeTransformMatrix(0, 0, 5, 1);
 
     renderer.addEntity({
       id: 'triangle1',
       meshId: 'triangle',
       transform: triangleTransform,
-      color: [1, 0, 0, 1] // Bright RED - should be very obvious!
+      color: [1, 0, 0, 1] // Red
     } as Entity);
 
     // Render once (single pass)

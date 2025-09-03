@@ -104,15 +104,9 @@ export class WebGPURendererV2 {
     target: [0, 0, 0],
     up: [0, 1, 0],
     fov: Math.PI / 4,
-    near: 0.1,  // Positive near plane for perspective projection
+    near: 0.1,
     far: 100,
-    useOrthographic: true,  // Start with orthographic for now
-    orthoBounds: {
-      left: -8,
-      right: 8,
-      top: 6,
-      bottom: -6
-    }
+    useOrthographic: false
   };
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -156,13 +150,10 @@ export class WebGPURendererV2 {
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
         @location(0) color: vec4<f32>,
-        @location(1) debug_world: vec4<f32>,    // Debug: world position
-        @location(2) debug_clip: vec4<f32>,     // Debug: clip position before divide
       }
 
       @vertex
       fn main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
-        // Use actual vertex buffer data
         let vertexPosition = vertex.position;
 
         // Reconstruct transform matrix from instance data
@@ -183,10 +174,6 @@ export class WebGPURendererV2 {
         output.position = clipPosition;
         output.color = instance.color;
 
-        // DEBUG: Pass intermediate values to fragment shader for inspection
-        output.debug_world = worldPosition;
-        output.debug_clip = clipPosition;
-
         return output;
       }
     `;
@@ -195,8 +182,6 @@ export class WebGPURendererV2 {
     const fragmentShader = `
       struct FragmentInput {
         @location(0) color: vec4<f32>,
-        @location(1) debug_world: vec4<f32>,
-        @location(2) debug_clip: vec4<f32>,
       }
 
       @fragment
@@ -275,14 +260,13 @@ export class WebGPURendererV2 {
       },
       primitive: {
         topology: 'triangle-list',
-        cullMode: 'none', // Disable culling to see all faces
+        cullMode: 'none',
       },
-      // Temporarily disable depth testing to debug triangle visibility
-      // depthStencil: {
-      //   format: 'depth24plus',
-      //   depthWriteEnabled: true,
-      //   depthCompare: 'less',
-      // },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      },
     });
   }
 
@@ -333,10 +317,6 @@ export class WebGPURendererV2 {
         transX, transY, transZ,1
       ]);
     } else {
-      console.log('🎥 PERSPECTIVE CAMERA DEBUG:');
-      console.log(`Camera: pos=${this.camera.position}, target=${this.camera.target}`);
-      console.log(`FOV: ${fov * 180 / Math.PI}°, near: ${near}, far: ${far}, aspect: ${aspect}`);
-
       // --- PERSPECTIVE PROJECTION ---
       const f = 1.0 / Math.tan(fov / 2);
 
@@ -344,8 +324,8 @@ export class WebGPURendererV2 {
       const projectionMatrix = new Float32Array([
         f / aspect, 0, 0, 0,                          // column 0
         0, f, 0, 0,                                   // column 1
-        0, 0, -(far + near) / (far - near), -1,      // column 2 (fixed z-mapping)
-        0, 0, -(2 * near * far) / (far - near), 0    // column 3 (fixed translation)
+        0, 0, -(far + near) / (far - near), -1,      // column 2
+        0, 0, -(2 * near * far) / (far - near), 0    // column 3
       ]);
 
       // --- VIEW MATRIX (lookAt) ---
@@ -382,26 +362,19 @@ export class WebGPURendererV2 {
         right[0]! * forward[1]! - right[1]! * forward[0]!
       ];
 
-      console.log(`Vectors: forward=${forward}, right=${right}, up=${trueUp}`);
-
       // Create view matrix (column-major for WebGPU)
-      // Standard view matrix: R^T * T where R is rotation and T is translation
       const viewMatrix = new Float32Array([
         right[0]!, -trueUp[0]!, -forward[0]!, 0,                                      // column 0
-        right[1]!, -trueUp[1]!, -forward[1]!, 0,                                      // column 1  
+        right[1]!, -trueUp[1]!, -forward[1]!, 0,                                      // column 1
         right[2]!, -trueUp[2]!, -forward[2]!, 0,                                      // column 2
         -(right[0]! * eye[0] + right[1]! * eye[1] + right[2]! * eye[2]),            // column 3 x
-        -(-trueUp[0]! * eye[0] + -trueUp[1]! * eye[1] + -trueUp[2]! * eye[2]),       // column 3 y  
-        -(-forward[0]! * eye[0] + -forward[1]! * eye[1] + -forward[2]! * eye[2]),   // column 3 z (corrected)
+        -(-trueUp[0]! * eye[0] + -trueUp[1]! * eye[1] + -trueUp[2]! * eye[2]),       // column 3 y
+        -(-forward[0]! * eye[0] + -forward[1]! * eye[1] + -forward[2]! * eye[2]),   // column 3 z
         1                                                                             // column 3 w
       ]);
 
-      console.log('Projection matrix:', Array.from(projectionMatrix));
-      console.log('View matrix:', Array.from(viewMatrix));
-
       // Multiply projection * view (correct order for view-projection matrix)
       const result = multiplyMat4(projectionMatrix, viewMatrix);
-      console.log('Combined view-projection matrix:', Array.from(result));
 
       return result;
     }
@@ -490,29 +463,28 @@ export class WebGPURendererV2 {
     }
 
     // Create depth texture for depth testing
-    // Temporarily disable depth texture creation
-    // const _depthTexture = this.device.createTexture({
-    //   size: { width: canvas.width, height: canvas.height },
-    //   format: 'depth24plus',
-    //   usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    // });
+    const canvas = this.context.canvas as HTMLCanvasElement;
+    const depthTexture = this.device.createTexture({
+      size: { width: canvas.width, height: canvas.height },
+      format: 'depth24plus',
+      usage: 0x10, // GPUTextureUsage.RENDER_ATTACHMENT
+    });
 
     // Begin render pass
     const commandEncoder = this.device.createCommandEncoder();
     const renderPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
         view: this.context.getCurrentTexture().createView(),
-        clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 }, // Dark blue background
+        clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 },
         loadOp: 'clear',
         storeOp: 'store',
       }],
-      // Temporarily disable depth attachment to debug triangle visibility
-      // depthStencilAttachment: {
-      //   view: depthTexture.createView(),
-      //   depthClearValue: 1.0,
-      //   depthLoadOp: 'clear',
-      //   depthStoreOp: 'store',
-      // },
+      depthStencilAttachment: {
+        view: depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      },
     });
 
     // Set pipeline and bind group
