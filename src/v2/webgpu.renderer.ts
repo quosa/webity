@@ -47,9 +47,6 @@ class Mesh {
         `Invalid triangle mesh: index count ${mesh.indices.length} not divisible by 3`);
     }
 
-    console.log(`🔍 Creating mesh with vertices:`, Array.from(mesh.vertices));
-    console.log(`🔍 Creating mesh with indices:`, Array.from(mesh.indices));
-
     this.vertexBuffer = device.createBuffer({
       size: Math.max(4, ((mesh.vertices.byteLength + 3) & ~3)), // Round up to multiple of 4
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -117,19 +114,11 @@ export class WebGPURendererV2 {
   };
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
-    console.log('🔍 Canvas setup:', {
-      width: canvas.width,
-      height: canvas.height,
-      clientWidth: canvas.clientWidth,
-      clientHeight: canvas.clientHeight
-    });
-
     // Setup device/context
     const adapter = await navigator.gpu.requestAdapter();
     this.device = await adapter!.requestDevice();
     this.context = canvas.getContext('webgpu')!;
     this.presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    console.log('🔍 Presentation format:', this.presentationFormat);
 
     this.context.configure({
       device: this.device,
@@ -216,7 +205,6 @@ export class WebGPURendererV2 {
     let vertexModule, fragmentModule;
     try {
       vertexModule = this.device.createShaderModule({ code: vertexShader });
-      console.log('✅ Vertex shader compiled successfully');
     } catch (error) {
       console.error('❌ Vertex shader compilation failed:', error);
       throw error;
@@ -224,7 +212,6 @@ export class WebGPURendererV2 {
 
     try {
       fragmentModule = this.device.createShaderModule({ code: fragmentShader });
-      console.log('✅ Fragment shader compiled successfully');
     } catch (error) {
       console.error('❌ Fragment shader compilation failed:', error);
       throw error;
@@ -295,12 +282,6 @@ export class WebGPURendererV2 {
       //   depthCompare: 'less',
       // },
     });
-
-    console.log('✅ Render pipeline created successfully with:', {
-      cullMode: 'none',
-      topology: 'triangle-list',
-      depthStencil: 'enabled'
-    });
   }
 
   private createUniformBuffer(): void {
@@ -334,16 +315,12 @@ export class WebGPURendererV2 {
       const { left, right, top, bottom } = this.camera.orthoBounds;
       const { near, far } = this.camera;
 
-      console.log('🔍 Using orthographic projection with:', { left, right, top, bottom, near, far });
-
       const scaleX = 2/(right-left);
       const scaleY = 2/(top-bottom);
       const scaleZ = 1/(far-near);   // Positive for WebGPU [0,1] range
       const transX = -(right+left)/(right-left);
       const transY = -(top+bottom)/(top-bottom);
       const transZ = -near/(far-near);  // This maps near→0, far→1
-
-      console.log('🔍 Matrix components:', { scaleX, scaleY, scaleZ, transX, transY, transZ });
 
       return new Float32Array([
         scaleX, 0, 0, 0,
@@ -447,9 +424,6 @@ export class WebGPURendererV2 {
       meshGroups[entity.meshId]!.push(entity);
     }
 
-    console.log('Render groups:', Object.keys(meshGroups));
-    console.log('Total entities to render:', this.entities.length);
-
     // Create depth texture for depth testing
     // Temporarily disable depth texture creation
     // const _depthTexture = this.device.createTexture({
@@ -478,9 +452,7 @@ export class WebGPURendererV2 {
 
     // Set pipeline and bind group
     renderPass.setPipeline(this.renderPipeline);
-    console.log('🔍 Render pipeline set');
     renderPass.setBindGroup(0, this.bindGroup);
-    console.log('🔍 Bind group set');
 
     // For each mesh group, create instance buffer and draw
     for (const meshId in meshGroups) {
@@ -491,7 +463,6 @@ export class WebGPURendererV2 {
       }
 
       const instances = meshGroups[meshId]!;
-      console.log(`Drawing ${instances.length} instances of mesh ${meshId} with ${mesh.indexCount} indices`);
 
       // Create instance data: [transform matrix (16 floats) + color (4 floats)] per instance
       const instanceData = new Float32Array(instances.length * 20); // 20 floats per instance
@@ -507,33 +478,6 @@ export class WebGPURendererV2 {
         instanceData.set(instance.color, offset + 16);
       }
 
-      console.log('🔍 Instance data sample:', {
-        firstTransform: Array.from(instanceData.slice(0, 16)),
-        firstColor: Array.from(instanceData.slice(16, 20))
-      });
-
-      // Debug: Manual clip space calculation to see where vertices end up
-      const testVertex = meshId === 'triangle' ?
-        [0, 4, 0] : // First vertex of triangle (top vertex: 0, 4, 0)
-        [0, 2, 0]; // Default for cubes
-      const transform = Array.from(instanceData.slice(0, 16));
-
-      // Apply transform matrix to test vertex
-      const worldX = transform[0]! * testVertex[0]! + transform[4]! * testVertex[1]! + transform[8]! * testVertex[2]! + transform[12]!;
-      const worldY = transform[1]! * testVertex[0]! + transform[5]! * testVertex[1]! + transform[9]! * testVertex[2]! + transform[13]!;
-      const worldZ = transform[2]! * testVertex[0]! + transform[6]! * testVertex[1]! + transform[10]! * testVertex[2]! + transform[14]!;
-
-      // Apply view-projection matrix
-      const vpMatrix = this.createViewProjectionMatrix();
-      console.log('🔍 View-Projection Matrix:', Array.from(vpMatrix));
-      const clipX = vpMatrix[0]! * worldX + vpMatrix[4]! * worldY + vpMatrix[8]! * worldZ + vpMatrix[12]!;
-      const clipY = vpMatrix[1]! * worldX + vpMatrix[5]! * worldY + vpMatrix[9]! * worldZ + vpMatrix[13]!;
-      const clipZ = vpMatrix[2]! * worldX + vpMatrix[6]! * worldY + vpMatrix[10]! * worldZ + vpMatrix[14]!;
-      const clipW = vpMatrix[3]! * worldX + vpMatrix[7]! * worldY + vpMatrix[11]! * worldZ + vpMatrix[15]!;
-
-      console.log(`🎯 Test vertex [${testVertex.join(',')}] -> World: [${worldX.toFixed(3)}, ${worldY.toFixed(3)}, ${worldZ.toFixed(3)}] -> Clip: [${clipX.toFixed(3)}, ${clipY.toFixed(3)}, ${clipZ.toFixed(3)}, ${clipW.toFixed(3)}]`);
-      console.log(`🎯 NDC coords: [${(clipX/clipW).toFixed(3)}, ${(clipY/clipW).toFixed(3)}, ${(clipZ/clipW).toFixed(3)}] (visible if X,Y in [-1,1] and Z in [0,1])`);
-
       // Create instance buffer
       const instanceBuffer = this.device.createBuffer({
         size: instanceData.byteLength,
@@ -545,31 +489,17 @@ export class WebGPURendererV2 {
 
       // Bind mesh vertex and index buffers
       renderPass.setVertexBuffer(0, mesh.vertexBuffer); // Vertex positions
-      console.log('🔍 Vertex buffer 0 set for mesh:', meshId);
       renderPass.setVertexBuffer(1, instanceBuffer);    // Instance data
-      console.log('🔍 Vertex buffer 1 set (instance data)');
       renderPass.setIndexBuffer(mesh.indexBuffer, 'uint16');
-      console.log('🔍 Index buffer set');
 
       // Draw instances
       renderPass.drawIndexed(mesh.indexCount, instances.length);
-      console.log(`🔍 drawIndexed called: ${mesh.indexCount} indices, ${instances.length} instances`);
-      console.log(`✅ Draw call issued: ${mesh.indexCount} indices, ${instances.length} instances`);
     }
 
     // End render pass and submit
     renderPass.end();
-    console.log('🔍 Render pass ended');
     const commandBuffer = commandEncoder.finish();
-    console.log('🔍 Command buffer finished');
     this.device.queue.submit([commandBuffer]);
-    console.log('🎨 Render pass submitted');
-
-    // Force a frame to be presented
-    console.log('🔍 Checking canvas texture...');
-    const currentTexture = this.context.getCurrentTexture();
-    console.log('🔍 Current texture format:', currentTexture.format);
-    console.log('🔍 Current texture size:', currentTexture.width, 'x', currentTexture.height);
   }
 
   dispose(): void {

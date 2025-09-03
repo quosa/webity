@@ -2,16 +2,14 @@ import { WebGPURendererV2, MeshData, makeTransformMatrix, Entity } from './webgp
 
 // Utility to create a simple triangle for testing
 function createTriangleMesh(): MeshData {
-  // HUGE triangle to make sure it's visible
   const vertices = new Float32Array([
-    // Triangle vertices (x, y, z) - HUGE and at same Z as cubes
-    0.0,  4.0, 0.0,  // Top vertex (very high, same Z as cubes)
-    -4.0, -4.0, 0.0,  // Bottom left (very wide, same Z as cubes)
-    4.0, -4.0, 0.0,  // Bottom right (very wide, same Z as cubes)
+    // Triangle vertices (x, y, z) - reasonable size triangle
+    0.0,  1.5, 0.0,  // Top vertex
+    -1.5, -1.5, 0.0,  // Bottom left
+    1.5, -1.5, 0.0,  // Bottom right
   ]);
 
-  // Try clockwise winding order
-  const indices = new Uint16Array([0, 1, 2]); // Changed from [0, 2, 1]
+  const indices = new Uint16Array([0, 1, 2]);
 
   return { vertices, indices };
 }
@@ -65,24 +63,10 @@ async function main() {
 
     // Test with a simple triangle first
     const triangleMesh = createTriangleMesh();
-    console.log('Triangle mesh created:', {
-      vertexCount: triangleMesh.vertices.length / 3,
-      triangleCount: triangleMesh.indices.length / 3,
-      vertices: Array.from(triangleMesh.vertices),
-      indices: Array.from(triangleMesh.indices)
-    });
-
     renderer.registerMesh('triangle', triangleMesh);
 
     // Register a cube mesh
     const cubeMesh = createCubeMesh(2);
-    console.log('Cube mesh created:', {
-      vertexCount: cubeMesh.vertices.length / 3,
-      triangleCount: cubeMesh.indices.length / 3,
-      vertices: Array.from(cubeMesh.vertices),
-      indices: Array.from(cubeMesh.indices)
-    });
-
     renderer.registerMesh('cube', cubeMesh);
 
     // Use orthographic camera for now (perspective has W=0 issues)
@@ -96,11 +80,6 @@ async function main() {
     // Add cubes FIRST
     const cube1Transform = makeTransformMatrix(-3, 0, 0, 1);
     const cube2Transform = makeTransformMatrix(3, 0, 0, 1);
-
-    console.log('Cube transforms:', {
-      cube1: Array.from(cube1Transform),
-      cube2: Array.from(cube2Transform)
-    });
 
     renderer.addEntity({
       id: 'cube1',
@@ -118,17 +97,16 @@ async function main() {
 
     // Add triangle LAST so it renders on top
     const triangleTransform = makeTransformMatrix(0, 0, 0, 1); // Center it at origin
-    console.log('Triangle transform matrix:', Array.from(triangleTransform));
 
     renderer.addEntity({
       id: 'triangle1',
       meshId: 'triangle',
       transform: triangleTransform,
       color: [1, 0, 0, 1] // Bright RED - should be very obvious!
-    } as Entity);    // Render once (single pass)
-    renderer.render();
+    } as Entity);
 
-    console.log('✅ Rendering complete! Two cubes should be visible.');
+    // Render once (single pass)
+    renderer.render();
 
   } catch (error) {
     console.error('❌ Error initializing WebGPU renderer:', error);
