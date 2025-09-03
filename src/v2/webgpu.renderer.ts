@@ -3,7 +3,23 @@
 /// <reference types="@webgpu/types" />
 
 // Types
-export type MeshData = {
+export interface Camera {
+  position: [number, number, number];
+  target: [number, number, number];
+  up: [number, number, number];
+  fov: number;        // Field of view in radians
+  near: number;       // Near plane distance
+  far: number;        // Far plane distance
+  useOrthographic?: boolean;
+  orthoBounds?: {     // For orthographic projection
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  };
+}
+
+export interface MeshData {
   vertices: Float32Array; // [x0, y0, z0, x1, y1, z1, ...]
   indices: Uint16Array; // [v0, v1, v2, v1, v2, v4, ...]
 };
@@ -30,6 +46,9 @@ class Mesh {
       throw new Error(
         `Invalid triangle mesh: index count ${mesh.indices.length} not divisible by 3`);
     }
+
+    console.log(`🔍 Creating mesh with vertices:`, Array.from(mesh.vertices));
+    console.log(`🔍 Creating mesh with indices:`, Array.from(mesh.indices));
 
     this.vertexBuffer = device.createBuffer({
       size: Math.max(4, ((mesh.vertices.byteLength + 3) & ~3)), // Round up to multiple of 4
@@ -71,6 +90,7 @@ export class WebGPURendererV2 {
   private device!: GPUDevice;
   private context!: GPUCanvasContext;
   private presentationFormat!: GPUTextureFormat;
+
   private renderPipeline!: GPURenderPipeline;
   private uniformBuffer!: GPUBuffer;
   private bindGroup!: GPUBindGroup;
@@ -79,12 +99,38 @@ export class WebGPURendererV2 {
   private textureRegistry = new Map<string, Texture>();
   private entities: Entity[] = [];
 
+  // Camera system
+  private camera: Camera = {
+    position: [0, 3, 8],
+    target: [0, 0, 0],
+    up: [0, 1, 0],
+    fov: Math.PI / 4,
+    near: -10,  // Allow objects at Z=0 to be visible
+    far: 100,
+    useOrthographic: true,  // Start with orthographic for now
+    orthoBounds: {
+      left: -8,
+      right: 8,
+      top: 6,
+      bottom: -6
+    }
+  };
+
   async init(canvas: HTMLCanvasElement): Promise<void> {
+    console.log('🔍 Canvas setup:', {
+      width: canvas.width,
+      height: canvas.height,
+      clientWidth: canvas.clientWidth,
+      clientHeight: canvas.clientHeight
+    });
+
     // Setup device/context
     const adapter = await navigator.gpu.requestAdapter();
     this.device = await adapter!.requestDevice();
     this.context = canvas.getContext('webgpu')!;
     this.presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    console.log('🔍 Presentation format:', this.presentationFormat);
+
     this.context.configure({
       device: this.device,
       format: this.presentationFormat,
@@ -96,9 +142,6 @@ export class WebGPURendererV2 {
   }
 
   private createRenderPipeline(): void {
-    // Debug: Add validation for shader compilation
-    console.log('🔧 Creating render pipeline...');
-
     // Vertex shader: transforms vertices from model space to screen space
     const vertexShader = `
       struct Uniforms {
@@ -107,6 +150,7 @@ export class WebGPURendererV2 {
       @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
       struct VertexInput {
+        @builtin(vertex_index) vertexIndex: u32,
         @location(0) position: vec3<f32>,
       }
 
@@ -125,6 +169,16 @@ export class WebGPURendererV2 {
 
       @vertex
       fn main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
+        // DEBUG: Use hardcoded triangle vertices to bypass vertex buffer issues
+        var hardcodedVertices = array<vec3<f32>, 3>(
+          vec3<f32>(0.0, 0.9, 0.0),   // Top - almost at top of screen
+          vec3<f32>(-0.9, -0.9, 0.0), // Bottom left - almost at bottom left
+          vec3<f32>(0.9, -0.9, 0.0)   // Bottom right - almost at bottom right
+        );
+
+                // Use actual vertex buffer data now that we know the pipeline works
+        let vertexPosition = vertex.position;
+
         // Reconstruct transform matrix from instance data
         let transformMatrix = mat4x4<f32>(
           instance.transform_0,
@@ -133,13 +187,15 @@ export class WebGPURendererV2 {
           instance.transform_3
         );
 
-        // Transform vertex position: Model -> World -> View -> Projection
-        let worldPosition = transformMatrix * vec4<f32>(vertex.position, 1.0);
+                // Apply transform matrix (should be identity for now)
+        let worldPosition = transformMatrix * vec4<f32>(vertexPosition, 1.0);
+
+        // Apply view-projection matrix
         let clipPosition = uniforms.viewProjectionMatrix * worldPosition;
 
         var output: VertexOutput;
         output.position = clipPosition;
-        output.color = instance.color;
+        output.color = instance.color; // Use the instance color
         return output;
       }
     `;
@@ -152,7 +208,7 @@ export class WebGPURendererV2 {
 
       @fragment
       fn main(input: FragmentInput) -> @location(0) vec4<f32> {
-        return input.color; // Just output the interpolated color
+        return input.color; // Use the interpolated color from vertex shader
       }
     `;
 
@@ -232,11 +288,12 @@ export class WebGPURendererV2 {
         topology: 'triangle-list',
         cullMode: 'none', // Disable culling to see all faces
       },
-      depthStencil: {
-        format: 'depth24plus',
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-      },
+      // Temporarily disable depth testing to debug triangle visibility
+      // depthStencil: {
+      //   format: 'depth24plus',
+      //   depthWriteEnabled: true,
+      //   depthCompare: 'less',
+      // },
     });
 
     console.log('✅ Render pipeline created successfully with:', {
@@ -272,99 +329,40 @@ export class WebGPURendererV2 {
   }
 
   private createViewProjectionMatrix(): Float32Array {
-    // Use simple orthographic projection to eliminate perspective math issues
-    const left = -5;
-    const right = 5;
-    const bottom = -5;
-    const top = 5;
-    const near = 0.1;
-    const far = 100;
+    if (this.camera.useOrthographic && this.camera.orthoBounds) {
+      // Orthographic projection for WebGPU (Z maps to [0,1] not [-1,1])
+      const { left, right, top, bottom } = this.camera.orthoBounds;
+      const { near, far } = this.camera;
 
-    console.log('Using orthographic projection:', { left, right, bottom, top, near, far });
+      console.log('🔍 Using orthographic projection with:', { left, right, top, bottom, near, far });
 
-    // Correct orthographic projection matrix for WebGPU (NDC Z: [0,1])
-    // No view matrix needed - just pure orthographic projection
-    const orthoMatrix = new Float32Array([
-      2/(right-left), 0, 0, 0,
-      0, 2/(top-bottom), 0, 0,
-      0, 0, -1/(far-near), 0,
-      -(right+left)/(right-left), -(top+bottom)/(top-bottom), -near/(far-near), 1
-    ]);
+      const scaleX = 2/(right-left);
+      const scaleY = 2/(top-bottom);
+      const scaleZ = 1/(far-near);   // Positive for WebGPU [0,1] range
+      const transX = -(right+left)/(right-left);
+      const transY = -(top+bottom)/(top-bottom);
+      const transZ = -near/(far-near);  // This maps near→0, far→1
 
-    console.log('FIXED Orthographic matrix (no view transform):', Array.from(orthoMatrix));
+      console.log('🔍 Matrix components:', { scaleX, scaleY, scaleZ, transX, transY, transZ });
 
-    return orthoMatrix;
-  }  private createSimpleLookAtMatrix(eye: number[], target: number[], up: number[]): Float32Array {
-    // Simplified lookAt for camera at [0, 0, -10] looking at origin
-    // This should just be a translation matrix
-    return new Float32Array([
-      1, 0, 0, 0,  // x-axis
-      0, 1, 0, 0,  // y-axis
-      0, 0, 1, 0,  // z-axis
-      -eye[0]!, -eye[1]!, -eye[2]!, 1  // translation
-    ]);
-  }
+      return new Float32Array([
+        scaleX, 0, 0, 0,
+        0, scaleY, 0, 0,
+        0, 0, scaleZ, 0,
+        transX, transY, transZ, 1
+      ]);
+    } else {
+      // TODO: Fix perspective projection (currently has W=0 issues)
+      // For now, fall back to orthographic
+      console.warn('Perspective camera not yet supported, using orthographic');
 
-  private createLookAtMatrix(eye: number[], target: number[], up: number[]): Float32Array {
-    // Simple lookAt matrix implementation
-    const zAxis = this.normalize(this.subtract(eye, target));
-    const xAxis = this.normalize(this.cross(up, zAxis));
-    const yAxis = this.cross(zAxis, xAxis);
-
-    return new Float32Array([
-      xAxis[0]!, yAxis[0]!, zAxis[0]!, 0,
-      xAxis[1]!, yAxis[1]!, zAxis[1]!, 0,
-      xAxis[2]!, yAxis[2]!, zAxis[2]!, 0,
-      -this.dot(xAxis, eye), -this.dot(yAxis, eye), -this.dot(zAxis, eye), 1,
-    ]);
-  }
-
-  private createPerspectiveMatrix(fov: number, aspect: number, near: number, far: number): Float32Array {
-    const f = 1.0 / Math.tan(fov / 2);
-    const rangeInv = 1.0 / (near - far);
-
-    return new Float32Array([
-      f / aspect, 0, 0, 0,
-      0, f, 0, 0,
-      0, 0, (near + far) * rangeInv, -1,
-      0, 0, near * far * rangeInv * 2, 0,
-    ]);
-  }
-
-  private multiplyMatrices(a: Float32Array, b: Float32Array): Float32Array {
-    const result = new Float32Array(16);
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
-        result[i * 4 + j] =
-          a[i * 4 + 0]! * b[0 * 4 + j]! +
-          a[i * 4 + 1]! * b[1 * 4 + j]! +
-          a[i * 4 + 2]! * b[2 * 4 + j]! +
-          a[i * 4 + 3]! * b[3 * 4 + j]!;
-      }
+      return new Float32Array([
+        0.1, 0, 0, 0,
+        0, 0.1, 0, 0,
+        0, 0, -0.01, 0,
+        0, 0, -0.001, 1
+      ]);
     }
-    return result;
-  }
-
-  // Helper math functions
-  private normalize(v: number[]): number[] {
-    const len = Math.sqrt(v[0]! * v[0]! + v[1]! * v[1]! + v[2]! * v[2]!);
-    return [v[0]! / len, v[1]! / len, v[2]! / len];
-  }
-
-  private subtract(a: number[], b: number[]): number[] {
-    return [a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!];
-  }
-
-  private cross(a: number[], b: number[]): number[] {
-    return [
-      a[1]! * b[2]! - a[2]! * b[1]!,
-      a[2]! * b[0]! - a[0]! * b[2]!,
-      a[0]! * b[1]! - a[1]! * b[0]!,
-    ];
-  }
-
-  private dot(a: number[], b: number[]): number {
-    return a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
   }
 
   registerMesh(meshId: string, mesh: MeshData): void {
@@ -382,6 +380,7 @@ export class WebGPURendererV2 {
   updateEntity(id: string, newData: Partial<Entity>): void {
     const idx = this.entities.findIndex(e => e.id === id);
     if (idx !== -1) {
+      // i.e. this.entities[idx] = { ...this.entities[idx], ...newData };
       const entity = this.entities[idx]!;
       const updatedEntity: Entity = {
         id: newData.id ?? entity.id,
@@ -409,6 +408,37 @@ export class WebGPURendererV2 {
     this.entities = [];
   }
 
+  // Camera control methods
+  setCamera(cameraSettings: Partial<Camera>): void {
+    this.camera = { ...this.camera, ...cameraSettings };
+    this.updateViewProjectionMatrix();
+  }
+
+  setPerspectiveCamera(position: [number, number, number], target: [number, number, number], fov = Math.PI / 4): void {
+    this.camera = {
+      ...this.camera,
+      position,
+      target,
+      fov,
+      useOrthographic: false
+    };
+    this.updateViewProjectionMatrix();
+  }
+
+  setOrthographicCamera(bounds: { left: number; right: number; top: number; bottom: number }): void {
+    this.camera = {
+      ...this.camera,
+      useOrthographic: true,
+      orthoBounds: bounds
+    };
+    this.updateViewProjectionMatrix();
+  }
+
+  private updateViewProjectionMatrix(): void {
+    const viewProjectionMatrix = this.createViewProjectionMatrix();
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, viewProjectionMatrix.buffer);
+  }
+
   render(): void {
     // Group entities by meshId for instanced rendering
     const meshGroups: Record<string, Entity[]> = {};
@@ -421,11 +451,12 @@ export class WebGPURendererV2 {
     console.log('Total entities to render:', this.entities.length);
 
     // Create depth texture for depth testing
-    const depthTexture = this.device.createTexture({
-      size: { width: 800, height: 600, depthOrArrayLayers: 1 }, // TODO: Get from canvas
-      format: 'depth24plus',
-      usage: (1 << 4), // GPUTextureUsage.RENDER_ATTACHMENT
-    });
+    // Temporarily disable depth texture creation
+    // const _depthTexture = this.device.createTexture({
+    //   size: { width: canvas.width, height: canvas.height },
+    //   format: 'depth24plus',
+    //   usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    // });
 
     // Begin render pass
     const commandEncoder = this.device.createCommandEncoder();
@@ -436,17 +467,20 @@ export class WebGPURendererV2 {
         loadOp: 'clear',
         storeOp: 'store',
       }],
-      depthStencilAttachment: {
-        view: depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-      },
+      // Temporarily disable depth attachment to debug triangle visibility
+      // depthStencilAttachment: {
+      //   view: depthTexture.createView(),
+      //   depthClearValue: 1.0,
+      //   depthLoadOp: 'clear',
+      //   depthStoreOp: 'store',
+      // },
     });
 
     // Set pipeline and bind group
     renderPass.setPipeline(this.renderPipeline);
+    console.log('🔍 Render pipeline set');
     renderPass.setBindGroup(0, this.bindGroup);
+    console.log('🔍 Bind group set');
 
     // For each mesh group, create instance buffer and draw
     for (const meshId in meshGroups) {
@@ -473,13 +507,15 @@ export class WebGPURendererV2 {
         instanceData.set(instance.color, offset + 16);
       }
 
-      console.log('Instance data sample:', {
+      console.log('🔍 Instance data sample:', {
         firstTransform: Array.from(instanceData.slice(0, 16)),
         firstColor: Array.from(instanceData.slice(16, 20))
       });
 
       // Debug: Manual clip space calculation to see where vertices end up
-      const testVertex = [0, 2, 0]; // Top vertex of triangle
+      const testVertex = meshId === 'triangle' ?
+        [0, 4, 0] : // First vertex of triangle (top vertex: 0, 4, 0)
+        [0, 2, 0]; // Default for cubes
       const transform = Array.from(instanceData.slice(0, 16));
 
       // Apply transform matrix to test vertex
@@ -489,13 +525,14 @@ export class WebGPURendererV2 {
 
       // Apply view-projection matrix
       const vpMatrix = this.createViewProjectionMatrix();
+      console.log('🔍 View-Projection Matrix:', Array.from(vpMatrix));
       const clipX = vpMatrix[0]! * worldX + vpMatrix[4]! * worldY + vpMatrix[8]! * worldZ + vpMatrix[12]!;
       const clipY = vpMatrix[1]! * worldX + vpMatrix[5]! * worldY + vpMatrix[9]! * worldZ + vpMatrix[13]!;
       const clipZ = vpMatrix[2]! * worldX + vpMatrix[6]! * worldY + vpMatrix[10]! * worldZ + vpMatrix[14]!;
       const clipW = vpMatrix[3]! * worldX + vpMatrix[7]! * worldY + vpMatrix[11]! * worldZ + vpMatrix[15]!;
 
-      console.log(`🎯 Test vertex [0,2,0] -> World: [${worldX.toFixed(3)}, ${worldY.toFixed(3)}, ${worldZ.toFixed(3)}] -> Clip: [${clipX.toFixed(3)}, ${clipY.toFixed(3)}, ${clipZ.toFixed(3)}, ${clipW.toFixed(3)}]`);
-      console.log(`🎯 NDC coords: [${(clipX/clipW).toFixed(3)}, ${(clipY/clipW).toFixed(3)}, ${(clipZ/clipW).toFixed(3)}] (visible if all in [-1,1])`);
+      console.log(`🎯 Test vertex [${testVertex.join(',')}] -> World: [${worldX.toFixed(3)}, ${worldY.toFixed(3)}, ${worldZ.toFixed(3)}] -> Clip: [${clipX.toFixed(3)}, ${clipY.toFixed(3)}, ${clipZ.toFixed(3)}, ${clipW.toFixed(3)}]`);
+      console.log(`🎯 NDC coords: [${(clipX/clipW).toFixed(3)}, ${(clipY/clipW).toFixed(3)}, ${(clipZ/clipW).toFixed(3)}] (visible if X,Y in [-1,1] and Z in [0,1])`);
 
       // Create instance buffer
       const instanceBuffer = this.device.createBuffer({
@@ -508,18 +545,31 @@ export class WebGPURendererV2 {
 
       // Bind mesh vertex and index buffers
       renderPass.setVertexBuffer(0, mesh.vertexBuffer); // Vertex positions
+      console.log('🔍 Vertex buffer 0 set for mesh:', meshId);
       renderPass.setVertexBuffer(1, instanceBuffer);    // Instance data
+      console.log('🔍 Vertex buffer 1 set (instance data)');
       renderPass.setIndexBuffer(mesh.indexBuffer, 'uint16');
+      console.log('🔍 Index buffer set');
 
       // Draw instances
       renderPass.drawIndexed(mesh.indexCount, instances.length);
+      console.log(`🔍 drawIndexed called: ${mesh.indexCount} indices, ${instances.length} instances`);
       console.log(`✅ Draw call issued: ${mesh.indexCount} indices, ${instances.length} instances`);
     }
 
     // End render pass and submit
     renderPass.end();
-    this.device.queue.submit([commandEncoder.finish()]);
+    console.log('🔍 Render pass ended');
+    const commandBuffer = commandEncoder.finish();
+    console.log('🔍 Command buffer finished');
+    this.device.queue.submit([commandBuffer]);
     console.log('🎨 Render pass submitted');
+
+    // Force a frame to be presented
+    console.log('🔍 Checking canvas texture...');
+    const currentTexture = this.context.getCurrentTexture();
+    console.log('🔍 Current texture format:', currentTexture.format);
+    console.log('🔍 Current texture size:', currentTexture.width, 'x', currentTexture.height);
   }
 
   dispose(): void {

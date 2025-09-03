@@ -2,19 +2,20 @@ import { WebGPURendererV2, MeshData, makeTransformMatrix, Entity } from './webgp
 
 // Utility to create a simple triangle for testing
 function createTriangleMesh(): MeshData {
-  // Much larger triangle that should definitely be visible
+  // HUGE triangle to make sure it's visible
   const vertices = new Float32Array([
-    // Triangle vertices (x, y, z) - much larger!
-     0.0,  2.0, 0.0,  // Top vertex
-    -2.0, -2.0, 0.0,  // Bottom left
-     2.0, -2.0, 0.0,  // Bottom right
+    // Triangle vertices (x, y, z) - HUGE and at same Z as cubes
+    0.0,  4.0, 0.0,  // Top vertex (very high, same Z as cubes)
+    -4.0, -4.0, 0.0,  // Bottom left (very wide, same Z as cubes)
+    4.0, -4.0, 0.0,  // Bottom right (very wide, same Z as cubes)
   ]);
 
-  // Just one triangle
-  const indices = new Uint16Array([0, 1, 2]);
+  // Try clockwise winding order
+  const indices = new Uint16Array([0, 1, 2]); // Changed from [0, 2, 1]
 
   return { vertices, indices };
 }
+
 function createCubeMesh(size: number): MeshData {
   const s = size / 2;
   // 8 vertices, each with x, y, z
@@ -84,15 +85,15 @@ async function main() {
 
     renderer.registerMesh('cube', cubeMesh);
 
-    // Add a test triangle first - make it REALLY obvious
-    renderer.addEntity({
-      id: 'triangle1',
-      meshId: 'triangle',
-      transform: makeTransformMatrix(0, 0, -1, 1), // Move it slightly forward
-      color: [1, 0, 1, 1] // Bright magenta - very visible!
-    } as Entity);
+    // Use orthographic camera for now (perspective has W=0 issues)
+    renderer.setOrthographicCamera({
+      left: -10,
+      right: 10,
+      top: 8,
+      bottom: -8
+    });
 
-    // Add a few entities (cubes) with different transforms/colors
+    // Add cubes FIRST
     const cube1Transform = makeTransformMatrix(-3, 0, 0, 1);
     const cube2Transform = makeTransformMatrix(3, 0, 0, 1);
 
@@ -105,17 +106,26 @@ async function main() {
       id: 'cube1',
       meshId: 'cube',
       transform: cube1Transform,
-      color: [1, 0, 0, 1] // Red
+      color: [0, 1, 0, 1] // Green
     } as Entity);
 
     renderer.addEntity({
       id: 'cube2',
       meshId: 'cube',
       transform: cube2Transform,
-      color: [0, 1, 0, 1] // Green
+      color: [0, 0, 1, 1] // Blue
     } as Entity);
 
-    // Render once (single pass)
+    // Add triangle LAST so it renders on top
+    const triangleTransform = makeTransformMatrix(0, 0, 0, 1); // Center it at origin
+    console.log('Triangle transform matrix:', Array.from(triangleTransform));
+
+    renderer.addEntity({
+      id: 'triangle1',
+      meshId: 'triangle',
+      transform: triangleTransform,
+      color: [1, 0, 0, 1] // Bright RED - should be very obvious!
+    } as Entity);    // Render once (single pass)
     renderer.render();
 
     console.log('✅ Rendering complete! Two cubes should be visible.');
