@@ -80,8 +80,8 @@ async function main() {
     renderer.registerMesh('cube', cubeMesh);
 
     // Add cubes - position them in positive Z (in front of camera)
-    const cube1Transform = makeTransformMatrix(-3, 0, 5, 1);
-    const cube2Transform = makeTransformMatrix(3, 0, 5, 1);
+    let cube1Transform = makeTransformMatrix([-3, 0, 5], 1);
+    let cube2Transform = makeTransformMatrix([3, 0, 5], 1);
 
     renderer.addEntity({
       id: 'cube1',
@@ -98,7 +98,7 @@ async function main() {
     } as Entity);
 
     // Add triangle in front of cubes
-    const triangleTransform = makeTransformMatrix(0, 0, 5, 1);
+    const triangleTransform = makeTransformMatrix([0, 0, 5], 1);
 
     renderer.addEntity({
       id: 'triangle1',
@@ -108,7 +108,18 @@ async function main() {
     } as Entity);
 
     // Render once (single pass)
-    renderer.render();
+    let i = 0;
+    while (i < 180) {
+      cube1Transform = makeTransformMatrix([-3 + i/100, 0, 5], 1); // move right
+      renderer.updateEntity('cube1', { transform: cube1Transform });
+      cube2Transform = makeTransformMatrix([3, 0, 5], 1, [0, 0 + i/100, 0]); // rotate on Y-axis
+      renderer.updateEntity('cube2', { transform: cube2Transform });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      renderer.render();
+      i++;
+    }
+    console.log('🎥 Animation complete 🏆');
+    // renderer.render();
 
   } catch (error) {
     console.error('❌ Error initializing WebGPU renderer:', error);

@@ -25,20 +25,53 @@ export function multiplyMat4(a: Float32Array, b: Float32Array): Float32Array {
 }
 
 /**
- * Create a transform matrix for position, scale, and rotation
+ * Create a transform matrix for translation, scale, and rotation
  * Returns column-major matrix for WebGPU
+ * @param translation - [x, y, z] translation
+ * @param scale - [x, y, z] scale factors (or single number for uniform scale)
+ * @param rotation - [pitch, yaw, roll] Euler angles in radians (X, Y, Z rotation)
  */
 export function makeTransformMatrix(
-  x: number, y: number, z: number,
-  scale: number = 1, // TODO: xyz scaling
-  _rotation: [number, number, number] = [0, 0, 0] // TODO: add rotation
+  translation: [number, number, number] = [0, 0, 0],
+  scale: [number, number, number] | number = 1,
+  rotation: [number, number, number] = [0, 0, 0]
 ): Float32Array {
-  // Create column-major transform matrix for WebGPU
+  const [x, y, z] = translation;
+  const [pitch, yaw, roll] = rotation;
+
+  // Handle both uniform scale (number) and non-uniform scale ([x, y, z])
+  const [scaleX, scaleY, scaleZ] = typeof scale === 'number'
+    ? [scale, scale, scale]
+    : scale;
+
+  // Calculate trigonometric values
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
+  const cosYaw = Math.cos(yaw);
+  const sinYaw = Math.sin(yaw);
+  const cosRoll = Math.cos(roll);
+  const sinRoll = Math.sin(roll);
+
+  // Create rotation matrix (ZYX order - roll * yaw * pitch)
+  // This is the most common order for Euler angles
+  const m00 = cosYaw * cosRoll;
+  const m01 = cosYaw * sinRoll;
+  const m02 = -sinYaw;
+
+  const m10 = sinPitch * sinYaw * cosRoll - cosPitch * sinRoll;
+  const m11 = sinPitch * sinYaw * sinRoll + cosPitch * cosRoll;
+  const m12 = sinPitch * cosYaw;
+
+  const m20 = cosPitch * sinYaw * cosRoll + sinPitch * sinRoll;
+  const m21 = cosPitch * sinYaw * sinRoll - sinPitch * cosRoll;
+  const m22 = cosPitch * cosYaw;
+
+  // Apply scale to rotation matrix and create column-major transform matrix for WebGPU
   return new Float32Array([
-    scale, 0, 0, 0,     // column 0: [scale, 0, 0, 0]
-    0, scale, 0, 0,     // column 1: [0, scale, 0, 0]
-    0, 0, scale, 0,     // column 2: [0, 0, scale, 0]
-    x, y, z, 1          // column 3: [x, y, z, 1] - translation
+    m00 * scaleX, m10 * scaleX, m20 * scaleX, 0,     // column 0
+    m01 * scaleY, m11 * scaleY, m21 * scaleY, 0,     // column 1
+    m02 * scaleZ, m12 * scaleZ, m22 * scaleZ, 0,     // column 2
+    x, y, z, 1                                       // column 3: translation
   ]);
 }
 
