@@ -48,9 +48,10 @@ class Mesh {
     }
 
     this.vertexBuffer = device.createBuffer({
-      size: Math.max(4, ((mesh.vertices.byteLength + 3) & ~3)), // Round up to multiple of 4
+      // WebGPU buffers need to be aligned to 4-byte boundaries for performance reasons.
+      size: Math.ceil(mesh.vertices.byteLength / 4) * 4, // Round up to multiple of 4 bytes
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      mappedAtCreation: true, // direct CPU access to GPU memory
+      mappedAtCreation: true,
     });
     new Float32Array(this.vertexBuffer.getMappedRange()).set(mesh.vertices);
     //               ^- ArrayBuffer pointing directly to GPU memory
@@ -58,7 +59,8 @@ class Mesh {
     this.vertexBuffer.unmap(); // release buffer for GPU to use
 
     this.indexBuffer = device.createBuffer({
-      size: Math.max(4, ((mesh.indices.byteLength + 3) & ~3)), // Round up to multiple of 4
+      // WebGPU buffers need to be aligned to 4-byte boundaries for performance reasons.
+      size: Math.ceil(mesh.indices.byteLength / 4) * 4, // Round up to multiple of 4 bytes
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
@@ -102,7 +104,7 @@ export class WebGPURendererV2 {
     target: [0, 0, 0],
     up: [0, 1, 0],
     fov: Math.PI / 4,
-    near: -10,  // Allow objects at Z=0 to be visible
+    near: 0.1,  // Positive near plane for perspective projection
     far: 100,
     useOrthographic: true,  // Start with orthographic for now
     orthoBounds: {
@@ -154,18 +156,13 @@ export class WebGPURendererV2 {
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
         @location(0) color: vec4<f32>,
+        @location(1) debug_world: vec4<f32>,    // Debug: world position
+        @location(2) debug_clip: vec4<f32>,     // Debug: clip position before divide
       }
 
       @vertex
       fn main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
-        // DEBUG: Use hardcoded triangle vertices to bypass vertex buffer issues
-        var hardcodedVertices = array<vec3<f32>, 3>(
-          vec3<f32>(0.0, 0.9, 0.0),   // Top - almost at top of screen
-          vec3<f32>(-0.9, -0.9, 0.0), // Bottom left - almost at bottom left
-          vec3<f32>(0.9, -0.9, 0.0)   // Bottom right - almost at bottom right
-        );
-
-                // Use actual vertex buffer data now that we know the pipeline works
+        // Use actual vertex buffer data
         let vertexPosition = vertex.position;
 
         // Reconstruct transform matrix from instance data
@@ -176,7 +173,7 @@ export class WebGPURendererV2 {
           instance.transform_3
         );
 
-                // Apply transform matrix (should be identity for now)
+        // Apply transform matrix
         let worldPosition = transformMatrix * vec4<f32>(vertexPosition, 1.0);
 
         // Apply view-projection matrix
@@ -184,7 +181,12 @@ export class WebGPURendererV2 {
 
         var output: VertexOutput;
         output.position = clipPosition;
-        output.color = instance.color; // Use the instance color
+        output.color = instance.color;
+
+        // DEBUG: Pass intermediate values to fragment shader for inspection
+        output.debug_world = worldPosition;
+        output.debug_clip = clipPosition;
+
         return output;
       }
     `;
@@ -193,15 +195,15 @@ export class WebGPURendererV2 {
     const fragmentShader = `
       struct FragmentInput {
         @location(0) color: vec4<f32>,
+        @location(1) debug_world: vec4<f32>,
+        @location(2) debug_clip: vec4<f32>,
       }
 
       @fragment
       fn main(input: FragmentInput) -> @location(0) vec4<f32> {
-        return input.color; // Use the interpolated color from vertex shader
+        return input.color;
       }
-    `;
-
-    // Create shader modules with error checking
+    `;    // Create shader modules with error checking
     let vertexModule, fragmentModule;
     try {
       vertexModule = this.device.createShaderModule({ code: vertexShader });
@@ -310,35 +312,98 @@ export class WebGPURendererV2 {
   }
 
   private createViewProjectionMatrix(): Float32Array {
-    if (this.camera.useOrthographic && this.camera.orthoBounds) {
-      // Orthographic projection for WebGPU (Z maps to [0,1] not [-1,1])
-      const { left, right, top, bottom } = this.camera.orthoBounds;
-      const { near, far } = this.camera;
+    const { fov, near, far } = this.camera;
+    const aspect = this.context.canvas.width / this.context.canvas.height;
 
-      const scaleX = 2/(right-left);
-      const scaleY = 2/(top-bottom);
-      const scaleZ = 1/(far-near);   // Positive for WebGPU [0,1] range
-      const transX = -(right+left)/(right-left);
-      const transY = -(top+bottom)/(top-bottom);
-      const transZ = -near/(far-near);  // This maps near→0, far→1
+    if (this.camera.useOrthographic && this.camera.orthoBounds) {
+      // --- ORTHOGRAPHIC (already working) ---
+      const { left, right, top, bottom } = this.camera.orthoBounds;
+
+      const scaleX = 2 / (right - left);
+      const scaleY = 2 / (top - bottom);
+      const scaleZ = 1 / (far - near);
+      const transX = -(right + left) / (right - left);
+      const transY = -(top + bottom) / (top - bottom);
+      const transZ = -near / (far - near);
 
       return new Float32Array([
-        scaleX, 0, 0, 0,
-        0, scaleY, 0, 0,
-        0, 0, scaleZ, 0,
-        transX, transY, transZ, 1
+        scaleX, 0,      0,     0,
+        0,      scaleY, 0,     0,
+        0,      0,      scaleZ,0,
+        transX, transY, transZ,1
       ]);
     } else {
-      // TODO: Fix perspective projection (currently has W=0 issues)
-      // For now, fall back to orthographic
-      console.warn('Perspective camera not yet supported, using orthographic');
+      console.log('🎥 PERSPECTIVE CAMERA DEBUG:');
+      console.log(`Camera: pos=${this.camera.position}, target=${this.camera.target}`);
+      console.log(`FOV: ${fov * 180 / Math.PI}°, near: ${near}, far: ${far}, aspect: ${aspect}`);
 
-      return new Float32Array([
-        0.1, 0, 0, 0,
-        0, 0.1, 0, 0,
-        0, 0, -0.01, 0,
-        0, 0, -0.001, 1
+      // --- PERSPECTIVE PROJECTION ---
+      const f = 1.0 / Math.tan(fov / 2);
+
+      // Create perspective projection matrix (column-major for WebGPU)
+      const projectionMatrix = new Float32Array([
+        f / aspect, 0, 0, 0,                          // column 0
+        0, f, 0, 0,                                   // column 1
+        0, 0, -(far + near) / (far - near), -1,      // column 2 (fixed z-mapping)
+        0, 0, -(2 * near * far) / (far - near), 0    // column 3 (fixed translation)
       ]);
+
+      // --- VIEW MATRIX (lookAt) ---
+      const eye = this.camera.position;
+      const target = this.camera.target;
+      const up = this.camera.up;
+
+      // Calculate forward vector (from eye to target)
+      const forward: number[] = [
+        target[0] - eye[0],
+        target[1] - eye[1],
+        target[2] - eye[2]
+      ];
+      const forwardLength = Math.sqrt(forward[0]! * forward[0]! + forward[1]! * forward[1]! + forward[2]! * forward[2]!);
+      forward[0] = forward[0]! / forwardLength;
+      forward[1] = forward[1]! / forwardLength;
+      forward[2] = forward[2]! / forwardLength;
+
+      // Calculate right vector (cross product of up and forward for correct handedness)
+      const right: number[] = [
+        up[1]! * forward[2] - up[2]! * forward[1],
+        up[2]! * forward[0] - up[0]! * forward[2],
+        up[0]! * forward[1] - up[1]! * forward[0]
+      ];
+      const rightLength = Math.sqrt(right[0]! * right[0]! + right[1]! * right[1]! + right[2]! * right[2]!);
+      right[0] = right[0]! / rightLength;
+      right[1] = right[1]! / rightLength;
+      right[2] = right[2]! / rightLength;
+
+      // Calculate true up vector (cross product of right and forward)
+      const trueUp: number[] = [
+        right[1]! * forward[2]! - right[2]! * forward[1]!,
+        right[2]! * forward[0]! - right[0]! * forward[2]!,
+        right[0]! * forward[1]! - right[1]! * forward[0]!
+      ];
+
+      console.log(`Vectors: forward=${forward}, right=${right}, up=${trueUp}`);
+
+      // Create view matrix (column-major for WebGPU)
+      // Standard view matrix: R^T * T where R is rotation and T is translation
+      const viewMatrix = new Float32Array([
+        right[0]!, -trueUp[0]!, -forward[0]!, 0,                                      // column 0
+        right[1]!, -trueUp[1]!, -forward[1]!, 0,                                      // column 1  
+        right[2]!, -trueUp[2]!, -forward[2]!, 0,                                      // column 2
+        -(right[0]! * eye[0] + right[1]! * eye[1] + right[2]! * eye[2]),            // column 3 x
+        -(-trueUp[0]! * eye[0] + -trueUp[1]! * eye[1] + -trueUp[2]! * eye[2]),       // column 3 y  
+        -(-forward[0]! * eye[0] + -forward[1]! * eye[1] + -forward[2]! * eye[2]),   // column 3 z (corrected)
+        1                                                                             // column 3 w
+      ]);
+
+      console.log('Projection matrix:', Array.from(projectionMatrix));
+      console.log('View matrix:', Array.from(viewMatrix));
+
+      // Multiply projection * view (correct order for view-projection matrix)
+      const result = multiplyMat4(projectionMatrix, viewMatrix);
+      console.log('Combined view-projection matrix:', Array.from(result));
+
+      return result;
     }
   }
 
@@ -516,12 +581,31 @@ export function makeTransformMatrix(
   scale: number = 1, // TODO: xyz scaling
   _rotation: [number, number, number] = [0, 0, 0] // TODO: add rotation
 ): Float32Array {
-  // TODO: Implement full transform (translation, scale, rotation)
-  // For now, just translation and uniform scale
+  // Create column-major transform matrix for WebGPU
   return new Float32Array([
-    scale, 0, 0, 0,
-    0, scale, 0, 0,
-    0, 0, scale, 0,
-    x, y, z, 1
+    scale, 0, 0, 0,     // column 0: [scale, 0, 0, 0]
+    0, scale, 0, 0,     // column 1: [0, scale, 0, 0]
+    0, 0, scale, 0,     // column 2: [0, 0, scale, 0]
+    x, y, z, 1          // column 3: [x, y, z, 1] - translation
   ]);
+}
+
+function multiplyMat4(a: Float32Array, b: Float32Array): Float32Array {
+  if (a.length !== 16 || b.length !== 16) {
+    throw new Error('Invalid matrix size');
+  }
+  const out = new Float32Array(16);
+
+  // WebGPU uses column-major storage, so both matrices are stored column-major
+  // out[col*4 + row] = sum of (a[k*4 + row] * b[col*4 + k]) for k=0..3
+  for (let col = 0; col < 4; col++) {
+    for (let row = 0; row < 4; row++) {
+      out[col * 4 + row] =
+        a[0 * 4 + row]! * b[col * 4 + 0]! +
+        a[1 * 4 + row]! * b[col * 4 + 1]! +
+        a[2 * 4 + row]! * b[col * 4 + 2]! +
+        a[3 * 4 + row]! * b[col * 4 + 3]!;
+    }
+  }
+  return out;
 }
