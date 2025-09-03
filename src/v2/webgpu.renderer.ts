@@ -1,33 +1,17 @@
 // src/v2/webgpu.renderer.ts
-// Generic WebGPU renderer with instanced rendering support for shared meshes
+// Clean WebGPU renderer focused on GPU resource management and rendering
 /// <reference types="@webgpu/types" />
 
 // Types
-export interface Camera {
-  position: [number, number, number];
-  target: [number, number, number];
-  up: [number, number, number];
-  fov: number;        // Field of view in radians
-  near: number;       // Near plane distance
-  far: number;        // Far plane distance
-  useOrthographic?: boolean;
-  orthoBounds?: {     // For orthographic projection
-    left: number;
-    right: number;
-    top: number;
-    bottom: number;
-  };
-}
-
 export interface MeshData {
   vertices: Float32Array; // [x0, y0, z0, x1, y1, z1, ...]
   indices: Uint16Array; // [v0, v1, v2, v1, v2, v4, ...]
-};
+}
 
 export type TextureData = {
   image: HTMLImageElement | ImageBitmap;
   // ...other texture params
-};
+}
 
 export type Entity = {
   id: string; // Unique identifier
@@ -35,7 +19,7 @@ export type Entity = {
   transform: Float32Array; // 4x4 matrix
   color: [number, number, number, number]; // RGBA
   textureId?: string;
-};
+}
 
 class Mesh {
   vertexBuffer: GPUBuffer;
@@ -80,7 +64,7 @@ class Texture {
     this.gpuTexture = device.createTexture({
       size: [texture.image.width, texture.image.height, 1],
       format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      usage: 0x04 | 0x02, // GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
     });
   }
 }
@@ -97,17 +81,6 @@ export class WebGPURendererV2 {
   private meshRegistry = new Map<string, Mesh>();
   private textureRegistry = new Map<string, Texture>();
   private entities: Entity[] = [];
-
-  // Camera system
-  private camera: Camera = {
-    position: [0, 3, 8],
-    target: [0, 0, 0],
-    up: [0, 1, 0],
-    fov: Math.PI / 4,
-    near: 0.1,
-    far: 100,
-    useOrthographic: false
-  };
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     // Setup device/context
@@ -271,17 +244,20 @@ export class WebGPURendererV2 {
   }
 
   private createUniformBuffer(): void {
-    // Create view-projection matrix (simple perspective camera)
-    const viewProjectionMatrix = this.createViewProjectionMatrix();
-
-    // Create uniform buffer
+    // Create uniform buffer (view-projection matrix will be set externally)
     this.uniformBuffer = this.device.createBuffer({
       size: 64, // 4x4 matrix = 16 floats * 4 bytes = 64 bytes
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Upload view-projection matrix
-    this.device.queue.writeBuffer(this.uniformBuffer, 0, viewProjectionMatrix.buffer);
+    // Initialize with identity matrix
+    const identityMatrix = new Float32Array([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]);
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, identityMatrix.buffer);
 
     // Create bind group
     this.bindGroup = this.device.createBindGroup({
@@ -295,89 +271,9 @@ export class WebGPURendererV2 {
     });
   }
 
-  private createViewProjectionMatrix(): Float32Array {
-    const { fov, near, far } = this.camera;
-    const aspect = this.context.canvas.width / this.context.canvas.height;
-
-    if (this.camera.useOrthographic && this.camera.orthoBounds) {
-      // --- ORTHOGRAPHIC (already working) ---
-      const { left, right, top, bottom } = this.camera.orthoBounds;
-
-      const scaleX = 2 / (right - left);
-      const scaleY = 2 / (top - bottom);
-      const scaleZ = 1 / (far - near);
-      const transX = -(right + left) / (right - left);
-      const transY = -(top + bottom) / (top - bottom);
-      const transZ = -near / (far - near);
-
-      return new Float32Array([
-        scaleX, 0,      0,     0,
-        0,      scaleY, 0,     0,
-        0,      0,      scaleZ,0,
-        transX, transY, transZ,1
-      ]);
-    } else {
-      // --- PERSPECTIVE PROJECTION ---
-      const f = 1.0 / Math.tan(fov / 2);
-
-      // Create perspective projection matrix (column-major for WebGPU)
-      const projectionMatrix = new Float32Array([
-        f / aspect, 0, 0, 0,                          // column 0
-        0, f, 0, 0,                                   // column 1
-        0, 0, -(far + near) / (far - near), -1,      // column 2
-        0, 0, -(2 * near * far) / (far - near), 0    // column 3
-      ]);
-
-      // --- VIEW MATRIX (lookAt) ---
-      const eye = this.camera.position;
-      const target = this.camera.target;
-      const up = this.camera.up;
-
-      // Calculate forward vector (from eye to target)
-      const forward: number[] = [
-        target[0] - eye[0],
-        target[1] - eye[1],
-        target[2] - eye[2]
-      ];
-      const forwardLength = Math.sqrt(forward[0]! * forward[0]! + forward[1]! * forward[1]! + forward[2]! * forward[2]!);
-      forward[0] = forward[0]! / forwardLength;
-      forward[1] = forward[1]! / forwardLength;
-      forward[2] = forward[2]! / forwardLength;
-
-      // Calculate right vector (cross product of up and forward for correct handedness)
-      const right: number[] = [
-        up[1]! * forward[2] - up[2]! * forward[1],
-        up[2]! * forward[0] - up[0]! * forward[2],
-        up[0]! * forward[1] - up[1]! * forward[0]
-      ];
-      const rightLength = Math.sqrt(right[0]! * right[0]! + right[1]! * right[1]! + right[2]! * right[2]!);
-      right[0] = right[0]! / rightLength;
-      right[1] = right[1]! / rightLength;
-      right[2] = right[2]! / rightLength;
-
-      // Calculate true up vector (cross product of right and forward)
-      const trueUp: number[] = [
-        right[1]! * forward[2]! - right[2]! * forward[1]!,
-        right[2]! * forward[0]! - right[0]! * forward[2]!,
-        right[0]! * forward[1]! - right[1]! * forward[0]!
-      ];
-
-      // Create view matrix (column-major for WebGPU)
-      const viewMatrix = new Float32Array([
-        right[0]!, -trueUp[0]!, -forward[0]!, 0,                                      // column 0
-        right[1]!, -trueUp[1]!, -forward[1]!, 0,                                      // column 1
-        right[2]!, -trueUp[2]!, -forward[2]!, 0,                                      // column 2
-        -(right[0]! * eye[0] + right[1]! * eye[1] + right[2]! * eye[2]),            // column 3 x
-        -(-trueUp[0]! * eye[0] + -trueUp[1]! * eye[1] + -trueUp[2]! * eye[2]),       // column 3 y
-        -(-forward[0]! * eye[0] + -forward[1]! * eye[1] + -forward[2]! * eye[2]),   // column 3 z
-        1                                                                             // column 3 w
-      ]);
-
-      // Multiply projection * view (correct order for view-projection matrix)
-      const result = multiplyMat4(projectionMatrix, viewMatrix);
-
-      return result;
-    }
+  // Set view-projection matrix from external camera
+  setViewProjectionMatrix(matrix: Float32Array): void {
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, matrix.buffer);
   }
 
   registerMesh(meshId: string, mesh: MeshData): void {
@@ -421,37 +317,6 @@ export class WebGPURendererV2 {
 
   clearEntities(): void {
     this.entities = [];
-  }
-
-  // Camera control methods
-  setCamera(cameraSettings: Partial<Camera>): void {
-    this.camera = { ...this.camera, ...cameraSettings };
-    this.updateViewProjectionMatrix();
-  }
-
-  setPerspectiveCamera(position: [number, number, number], target: [number, number, number], fov = Math.PI / 4): void {
-    this.camera = {
-      ...this.camera,
-      position,
-      target,
-      fov,
-      useOrthographic: false
-    };
-    this.updateViewProjectionMatrix();
-  }
-
-  setOrthographicCamera(bounds: { left: number; right: number; top: number; bottom: number }): void {
-    this.camera = {
-      ...this.camera,
-      useOrthographic: true,
-      orthoBounds: bounds
-    };
-    this.updateViewProjectionMatrix();
-  }
-
-  private updateViewProjectionMatrix(): void {
-    const viewProjectionMatrix = this.createViewProjectionMatrix();
-    this.device.queue.writeBuffer(this.uniformBuffer, 0, viewProjectionMatrix.buffer);
   }
 
   render(): void {
@@ -545,39 +410,4 @@ export class WebGPURendererV2 {
     this.textureRegistry.clear();
     this.entities = [];
   }
-}
-
-// Utility function for transform matrix creation
-export function makeTransformMatrix(
-  x: number, y: number, z: number,
-  scale: number = 1, // TODO: xyz scaling
-  _rotation: [number, number, number] = [0, 0, 0] // TODO: add rotation
-): Float32Array {
-  // Create column-major transform matrix for WebGPU
-  return new Float32Array([
-    scale, 0, 0, 0,     // column 0: [scale, 0, 0, 0]
-    0, scale, 0, 0,     // column 1: [0, scale, 0, 0]
-    0, 0, scale, 0,     // column 2: [0, 0, scale, 0]
-    x, y, z, 1          // column 3: [x, y, z, 1] - translation
-  ]);
-}
-
-function multiplyMat4(a: Float32Array, b: Float32Array): Float32Array {
-  if (a.length !== 16 || b.length !== 16) {
-    throw new Error('Invalid matrix size');
-  }
-  const out = new Float32Array(16);
-
-  // WebGPU uses column-major storage, so both matrices are stored column-major
-  // out[col*4 + row] = sum of (a[k*4 + row] * b[col*4 + k]) for k=0..3
-  for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      out[col * 4 + row] =
-        a[0 * 4 + row]! * b[col * 4 + 0]! +
-        a[1 * 4 + row]! * b[col * 4 + 1]! +
-        a[2 * 4 + row]! * b[col * 4 + 2]! +
-        a[3 * 4 + row]! * b[col * 4 + 3]!;
-    }
-  }
-  return out;
 }

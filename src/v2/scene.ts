@@ -1,4 +1,6 @@
-import { WebGPURendererV2, MeshData, makeTransformMatrix, Entity } from './webgpu.renderer';
+import { WebGPURendererV2, MeshData, Entity } from './webgpu.renderer';
+import { Camera } from './camera';
+import { makeTransformMatrix } from './math-utils';
 
 // Utility to create a simple triangle for testing
 function createTriangleMesh(): MeshData {
@@ -58,8 +60,16 @@ async function main() {
       throw new Error('WebGPU is not supported in this browser');
     }
 
+    // Create camera
+    const camera = new Camera([0, 0, -10], [0, 0, 0]); // Camera behind scene, looking forward
+
     const renderer = new WebGPURendererV2();
     await renderer.init(canvas);
+
+    // Set view-projection matrix once (calculated by camera)
+    const aspect = canvas.width / canvas.height;
+    const viewProjectionMatrix = camera.getViewProjectionMatrix(aspect);
+    renderer.setViewProjectionMatrix(viewProjectionMatrix);
 
     // Test with a simple triangle first
     const triangleMesh = createTriangleMesh();
@@ -68,9 +78,6 @@ async function main() {
     // Register a cube mesh
     const cubeMesh = createCubeMesh(2);
     renderer.registerMesh('cube', cubeMesh);
-
-    // Set up perspective camera
-    renderer.setPerspectiveCamera([0, 0, -10], [0, 0, 0]); // Camera behind scene, looking forward
 
     // Add cubes - position them in positive Z (in front of camera)
     const cube1Transform = makeTransformMatrix(-3, 0, 5, 1);
