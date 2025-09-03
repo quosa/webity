@@ -90,6 +90,7 @@ async function startDemo(): Promise<void> {
     defaultScene.setEngine(engine);
     defaultScene.setEntropy(engine.getEntropy());
 
+    /*
     // Simple 3x3 grid of spheres at different heights
     const gridSpacing = 1.5; // Space between spheres
     const baseHeight = 4; // Lower starting height for quicker settling
@@ -107,7 +108,20 @@ async function startDemo(): Promise<void> {
 
     // Add a cube resting on the floor as a static obstacle
     // Floor level = -world_bounds.y + radius = -8.0 + 0.5 = -7.5
-    defaultScene.createCubeGameObject('FloorCube', 0, -7.5, 0, 1.0);
+    // But position higher to be visible: Y = -1 (just below the falling spheres)
+    defaultScene.createCubeGameObject('FloorCube', 0, -1.0, 0, 1.5);
+
+    // TEST: Add one more sphere AFTER the cube to test the sphere→cube→sphere pattern
+    defaultScene.createSphereGameObject('TestSphere_After_Cube', 2.5, 5, 0, 0.5);
+
+    // TEST: add again a cube AFTER the sphere to cause problems?
+    defaultScene.createCubeGameObject('FloorCube2', 2, 2.0, 0, 0.5);
+    */
+
+    defaultScene.createSphereGameObject('S1', -4, 4, 0, 0.5);
+    defaultScene.createCubeGameObject('C1', -2, 2.0, 0, 0.5);
+
+    defaultScene.createSphereGameObject('S2', 2, 4, 0, 0.5);
 
     defaultScene.awake();
     defaultScene.start();

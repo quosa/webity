@@ -306,7 +306,7 @@ export class Scene {
 
   getWasmEntityPosition(wasmIndex: number): { x: number; y: number; z: number } | null {
     if (!this.engine || wasmIndex < 0) return null;
-    
+
     return this.engine.getWasmEntityPosition(wasmIndex);
   }
 
@@ -335,6 +335,7 @@ export class Scene {
     transform.setPosition(x, y, z);
 
     const rigidBody = gameObject.addComponent(RigidBody);
+    // TODO: real box collider! For now, use sphere collider that fits the cube
     rigidBody.setRadius(size * 0.866); // Sphere that encompasses cube
 
     const meshRenderer = gameObject.addComponent(MeshRenderer);

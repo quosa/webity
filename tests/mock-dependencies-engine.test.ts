@@ -34,10 +34,13 @@ const mockDevice = {
 
 const mockRenderer = {
   init: jest.fn().mockResolvedValue(undefined),
+  initUnifiedRenderer: jest.fn().mockResolvedValue(undefined),
   render: jest.fn(),
   renderMultipleEntitiesInstanced: jest.fn(),
   renderMixedMeshesInstanced: jest.fn(),
   renderFloorGridOnly: jest.fn(),
+  renderUnified: jest.fn(),
+  getRenderingStats: jest.fn().mockReturnValue({ renderingMode: 'mock' }),
   dispose: jest.fn(),
   getDevice: jest.fn().mockReturnValue(mockDevice)
 } as unknown as Renderer;
@@ -170,19 +173,29 @@ describe('Renderer', () => {
     expect(initResult).toBeUndefined();
   });
 
-  it('should render a frame with instanced rendering', async () => {
+  it('should render a frame with unified rendering', async () => {
     await renderer.init(mockCanvas);
-    // Create mock WASM instance with required methods
+    // Create mock WASM instance with required methods for unified renderer
     const mockWASM = {
-      get_entity_position_x: jest.fn().mockReturnValue(1.0),
-      get_entity_position_y: jest.fn().mockReturnValue(2.0),
-      get_entity_position_z: jest.fn().mockReturnValue(3.0),
-      get_grid_buffer_offset: jest.fn().mockReturnValue(800), // Use valid offset within 1024 byte buffer
-      get_grid_vertex_count: jest.fn().mockReturnValue(10)  // Smaller count to fit in buffer
+      get_sphere_count: jest.fn().mockReturnValue(1),
+      get_cube_count: jest.fn().mockReturnValue(0),
+      get_sphere_position_x: jest.fn().mockReturnValue(1.0),
+      get_sphere_position_y: jest.fn().mockReturnValue(2.0),
+      get_sphere_position_z: jest.fn().mockReturnValue(3.0),
+      get_grid_buffer_offset: jest.fn().mockReturnValue(800),
+      get_grid_vertex_count: jest.fn().mockReturnValue(10),
+      generate_sphere_mesh: jest.fn(),
+      get_sphere_vertex_buffer_offset: jest.fn().mockReturnValue(100),
+      get_sphere_vertex_count: jest.fn().mockReturnValue(1024),
+      generate_cube_mesh: jest.fn(),
+      get_cube_vertex_buffer_offset: jest.fn().mockReturnValue(200),
+      get_cube_vertex_count: jest.fn().mockReturnValue(24),
+      memory: { buffer: new ArrayBuffer(2048) }
     };
     
-    const renderResult = renderer.renderMultipleEntitiesInstanced(
-      new ArrayBuffer(1024), 0, 100, 500, mockWASM, 2
+    // Test that renderUnified works (will use fallback since unified renderer not initialized in mock)
+    const renderResult = await renderer.renderUnified(
+      new ArrayBuffer(1024), 500, mockWASM
     );
     expect(renderResult).toBeUndefined();
   });

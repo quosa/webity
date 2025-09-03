@@ -95,24 +95,19 @@ export interface WASMExports {
   generate_grid_floor(grid_size: number): void;
   get_grid_buffer_offset(): number;
   get_grid_vertex_count(): number;
-  // Phase 7 Multi-mesh exports
+  // Phase 7 Multi-mesh exports (consolidated)
   generate_cube_mesh(size: number): void;
   spawn_entity_with_mesh(x: number, y: number, z: number, radius: number, mesh_type: number): number;
   get_entity_mesh_type(index: number): number;
+  
+  // Mesh type counts and vertex counts (maintained for compatibility)
   get_sphere_count(): number;
   get_cube_count(): number;
-  get_sphere_position_x(index: number): number;
-  get_sphere_position_y(index: number): number;
-  get_sphere_position_z(index: number): number;
-  get_cube_position_x(index: number): number;
-  get_cube_position_y(index: number): number;
-  get_cube_position_z(index: number): number;
-
-  // Separate mesh vertex buffer exports
-  get_sphere_vertex_buffer_offset(): number;
   get_sphere_vertex_count(): number;
-  get_cube_vertex_buffer_offset(): number;
   get_cube_vertex_count(): number;
+  
+  // Note: Separate mesh position getters and vertex buffer exports removed
+  // Use get_entity_position_x/y/z(index) and get_vertex_buffer_offset() instead
   
   // Debug exports
   get_debug_floating_entity_index(): number;

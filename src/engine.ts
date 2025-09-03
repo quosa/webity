@@ -58,6 +58,9 @@ export class Engine implements GameEngine {
       // 3. Initialize renderer (will set device on BufferManager)
       await this.renderer.init(this.canvas);
 
+      // 3.5. Initialize unified renderer with WASM exports
+      await this.renderer.initUnifiedRenderer(this.wasm);
+
       // 4. Initialize input manager
       this.input.init((key: number, pressed: boolean) => {
         this.wasm?.set_input(key, pressed);
@@ -128,6 +131,22 @@ export class Engine implements GameEngine {
     return this.physicsConfig.entropy;
   }
 
+  // Get rendering statistics for debugging
+  getRenderingStats(): any {
+    if (!this.renderer) {
+      return { error: 'Renderer not initialized' };
+    }
+    return this.renderer.getRenderingStats();
+  }
+
+  // Initialize unified renderer (for use by main.ts)
+  async initUnifiedRenderer(): Promise<void> {
+    if (!this.renderer || !this.wasm) {
+      throw new EngineError('Engine not fully initialized', 'NOT_INITIALIZED');
+    }
+    await this.renderer.initUnifiedRenderer(this.wasm);
+  }
+
   // WASM wrapper methods - provide controlled access to WASM functionality
   // These methods encapsulate WASM calls and provide validation/error handling
   
@@ -156,25 +175,16 @@ export class Engine implements GameEngine {
   private getTotalRenderedVertexCount(): number {
     if (!this.wasm) return 0;
     
-    // Sum up all vertices that are actually being rendered
-    let totalVertices = 0;
+    // With unified renderer, vertex count calculation is handled by the mesh registry
+    // Get entity count as a proxy for rendering complexity
+    const entityCount = this.wasm.get_entity_count();
+    const gridVertices = this.wasm.get_grid_vertex_count();
     
-    // Add sphere vertices if spheres exist
-    const sphereCount = this.wasm.get_sphere_count();
-    if (sphereCount > 0) {
-      totalVertices += this.wasm.get_sphere_vertex_count();
-    }
+    // Estimate total rendered vertices: entities + grid
+    // Each entity type has different vertex counts, but this gives a reasonable estimate
+    const estimatedEntityVertices = entityCount * 200; // Rough estimate per entity
     
-    // Add cube vertices if cubes exist
-    const cubeCount = this.wasm.get_cube_count();
-    if (cubeCount > 0) {
-      totalVertices += this.wasm.get_cube_vertex_count();
-    }
-    
-    // Add grid vertices (always rendered)
-    totalVertices += this.wasm.get_grid_vertex_count();
-    
-    return totalVertices;
+    return estimatedEntityVertices + gridVertices;
   }
 
   getWasmEntityPosition(index: number): { x: number; y: number; z: number } | null {
@@ -268,7 +278,7 @@ export class Engine implements GameEngine {
   }
 
 
-  private gameLoop = (): void => {
+  private gameLoop = async (): Promise<void> => {
     if (!this.running) return;
 
     const currentTime = performance.now();
@@ -302,26 +312,13 @@ export class Engine implements GameEngine {
         console.log(`🎾 Entities: ${entityCount} | Vertices: ${vertexCount}`);
       }
 
-      // Check for mixed mesh types and choose appropriate renderer
-      const sphereCount = this.wasm!.get_sphere_count();
-      const cubeCount = this.wasm!.get_cube_count();
-      
-      if (sphereCount > 0 || cubeCount > 0) {
-        // Use multi-mesh renderer for all cases (single or mixed mesh types)
-        // This ensures spheres and cubes use their separate vertex buffers
-        this.renderer.renderMixedMeshesInstanced(
-          this.wasm!.memory.buffer,
-          uniformOffset,
-          this.wasm!
-        );
-      } else {
-        // No entities - just render floor grid and clear the scene
-        this.renderer.renderFloorGridOnly(
-          this.wasm!.memory.buffer,
-          uniformOffset,
-          this.wasm!
-        );
-      }
+      // Use unified renderer for all rendering
+      // This automatically handles mixed mesh types, grid floor, and empty scenes
+      await this.renderer.renderUnified(
+        this.wasm!.memory.buffer,
+        uniformOffset,
+        this.wasm!
+      );
 
     } catch (error) {
       console.error('Game loop error:', error);

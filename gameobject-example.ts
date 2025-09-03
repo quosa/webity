@@ -47,11 +47,11 @@ function createCubeStackScene(scene: Scene): void {
     const wreckingBall = new GameObject("WreckingBall");
     const wbTransform = wreckingBall.addComponent(Transform);
     const ballHeight = floorLevel + (stackHeight / 2) * actualCubeSize; // Middle of stack height
-    wbTransform.setPosition(-6, ballHeight, 0); // Start closer for impact
+    wbTransform.setPosition(-3, ballHeight, 0); // Start much closer for guaranteed impact
     
     const wbRigidBody = wreckingBall.addComponent(RigidBody);
     wbRigidBody.mass = 3.0; // Heavy wrecking ball
-    wbRigidBody.setVelocity(4.0, 0, 0); // Fast approach velocity for maximum impact
+    wbRigidBody.setVelocity(6.0, 0, 0); // Faster approach velocity for maximum carnage
     
     const wbRenderer = wreckingBall.addComponent(MeshRenderer);
     wbRenderer.setMeshType(MeshType.SPHERE);
