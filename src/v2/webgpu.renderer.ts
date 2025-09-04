@@ -18,6 +18,7 @@ export type Entity = {
   meshId: string;
   transform: Float32Array; // 4x4 matrix
   color: [number, number, number, number]; // RGBA
+  renderMode?: 'triangle' | 'line'; // NEW: rendering mode
   textureId?: string;
 }
 
@@ -74,7 +75,8 @@ export class WebGPURendererV2 {
   private context!: GPUCanvasContext;
   private presentationFormat!: GPUTextureFormat;
 
-  private renderPipeline!: GPURenderPipeline;
+  private renderPipeline!: GPURenderPipeline; // main triangle pipeline
+  private linePipeline!: GPURenderPipeline; // line pipeline (for grid)
   private uniformBuffer!: GPUBuffer;
   private bindGroup!: GPUBindGroup;
 
@@ -218,7 +220,7 @@ export class WebGPURendererV2 {
       bindGroupLayouts: [bindGroupLayout],
     });
 
-    // Create render pipeline
+    // Create triangle render pipeline
     this.renderPipeline = this.device.createRenderPipeline({
       layout: pipelineLayout,
       vertex: {
@@ -233,6 +235,30 @@ export class WebGPURendererV2 {
       },
       primitive: {
         topology: 'triangle-list',
+        cullMode: 'none',
+      },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      },
+    });
+
+    // Create line render pipeline (reuse shaders, change topology)
+    this.linePipeline = this.device.createRenderPipeline({
+      layout: pipelineLayout,
+      vertex: {
+        module: vertexModule,
+        entryPoint: 'main',
+        buffers: [vertexBufferLayout, instanceBufferLayout] as any,
+      },
+      fragment: {
+        module: fragmentModule,
+        entryPoint: 'main',
+        targets: [{ format: this.presentationFormat }],
+      },
+      primitive: {
+        topology: 'line-list',
         cullMode: 'none',
       },
       depthStencil: {
@@ -365,6 +391,13 @@ export class WebGPURendererV2 {
       }
 
       const instances = meshGroups[meshId]!;
+      if (instances.length === 0) continue;
+
+      // Determine render mode (default triangle)
+      const renderMode = instances[0]!.renderMode ?? 'triangle';
+      const pipeline = renderMode === 'line' ? this.linePipeline : this.renderPipeline;
+      renderPass.setPipeline(pipeline);
+      renderPass.setBindGroup(0, this.bindGroup);
 
       // Create instance data: [transform matrix (16 floats) + color (4 floats)] per instance
       const instanceData = new Float32Array(instances.length * 20); // 20 floats per instance

@@ -1,55 +1,7 @@
 import { WebGPURendererV2, MeshData, Entity } from './webgpu.renderer';
 import { Camera } from './camera';
 import { makeTransformMatrix } from './math-utils';
-
-// Utility to create a simple triangle for testing
-function createTriangleMesh(): MeshData {
-  const vertices = new Float32Array([
-    // Triangle vertices (x, y, z) - reasonable size triangle
-    0.0,  1.5, 0.0,  // Top vertex
-    -1.5, -1.5, 0.0,  // Bottom left
-    1.5, -1.5, 0.0,  // Bottom right
-  ]);
-
-  const indices = new Uint16Array([0, 1, 2]);
-
-  return { vertices, indices };
-}
-
-function createCubeMesh(size: number): MeshData {
-  const s = size / 2;
-  // 8 vertices, each with x, y, z
-  const vertices = new Float32Array([
-    // Back face (z = -s)
-    -s, -s, -s,  // 0
-    s, -s, -s,   // 1
-    s,  s, -s,   // 2
-    -s,  s, -s,  // 3
-    // Front face (z = s)
-    -s, -s,  s,  // 4
-    s, -s,  s,   // 5
-    s,  s,  s,   // 6
-    -s,  s,  s,  // 7
-  ]);
-
-  // Indices for 12 triangles (2 per face) - counter-clockwise winding
-  const indices = new Uint16Array([
-    // Back face (z = -s)
-    0, 1, 2,  2, 3, 0,
-    // Front face (z = s)
-    4, 6, 5,  6, 4, 7,
-    // Left face (x = -s)
-    4, 0, 3,  3, 7, 4,
-    // Right face (x = s)
-    1, 5, 6,  6, 2, 1,
-    // Bottom face (y = -s)
-    4, 5, 1,  1, 0, 4,
-    // Top face (y = s)
-    3, 2, 6,  6, 7, 3,
-  ]);
-
-  return { vertices, indices };
-}
+import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
 
 async function main() {
   const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
@@ -79,6 +31,10 @@ async function main() {
     const cubeMesh = createCubeMesh(2);
     renderer.registerMesh('cube', cubeMesh);
 
+    // Register a grid mesh for the floor
+    const gridMesh = createGridMesh(20, 20);
+    renderer.registerMesh('floor', gridMesh);
+
     // Add cubes - position them in positive Z (in front of camera)
     let cube1Transform = makeTransformMatrix([-3, 0, 5], 1);
     let cube2Transform = makeTransformMatrix([3, 0, 5], 1);
@@ -105,6 +61,15 @@ async function main() {
       meshId: 'triangle',
       transform: triangleTransform,
       color: [1, 0, 0, 1] // Red
+    } as Entity);
+
+    // Add floor entity (XZ plane at y = -2) with line render mode
+    renderer.addEntity({
+      id: 'floor',
+      meshId: 'floor',
+      transform: makeTransformMatrix([0, -2, 0], 1),
+      color: [0.2, 0.8, 0.2, 1], // Greenish grid lines for visibility
+      renderMode: 'line'
     } as Entity);
 
     // Render once (single pass)

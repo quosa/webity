@@ -1,4 +1,6 @@
-import { WebGPURendererV2, MeshData, Entity } from './webgpu.renderer';
+import { WebGPURendererV2, Entity } from './webgpu.renderer';
+import { createCubeMesh } from './mesh-utils';
+import { makeTransformMatrix } from './math-utils';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const vertexCountEl = document.getElementById('vertexCount')!;
@@ -7,41 +9,6 @@ const fpsEl = document.getElementById('fps')!;
 
 const renderer = new WebGPURendererV2();
 await renderer.init(canvas);
-
-// Cube mesh (1x1x1, centered at origin)
-// TODO: Move to shared mesh utils
-function createCubeMesh(): MeshData {
-  const s = 0.5;
-  const vertices = new Float32Array([
-    -s, -s,  s,
-     s, -s,  s,
-     s,  s,  s,
-    -s,  s,  s,
-    -s, -s, -s,
-     s, -s, -s,
-     s,  s, -s,
-    -s,  s, -s,
-  ]);
-  const indices = new Uint16Array([
-    0, 1, 2, 0, 2, 3,
-    1, 5, 6, 1, 6, 2,
-    5, 4, 7, 5, 7, 6,
-    4, 0, 3, 4, 3, 7,
-    3, 2, 6, 3, 6, 7,
-    4, 5, 1, 4, 1, 0,
-  ]);
-  return { vertices, indices };
-}
-
-// Utility: 4x4 matrix from translation, scale
-function makeTransform(tx: number, ty: number, tz: number, sx: number, sy: number, sz: number): Float32Array {
-  return new Float32Array([
-    sx, 0,  0,  0,
-    0,  sy, 0,  0,
-    0,  0,  sz, 0,
-    tx, ty, tz, 1,
-  ]);
-}
 
 // Brick wall parameters
 const brickW = 1, brickH = 0.5, brickD = 1;
@@ -53,8 +20,8 @@ const halfBrickColor: [number, number, number, number] = [0.7, 0.2, 0.1, 1.0];
 
 const meshId = 'brick';
 const halfMeshId = 'halfBrick';
-renderer.registerMesh(meshId, createCubeMesh());
-renderer.registerMesh(halfMeshId, createCubeMesh());
+renderer.registerMesh(meshId, createCubeMesh(brickW));
+renderer.registerMesh(halfMeshId, createCubeMesh(halfBrickW));
 
 const brickQueue: Entity[] = [];
 let vertexCount = 0;
@@ -70,7 +37,7 @@ for (let row = 0; row < rows; row++) {
     brickQueue.push({
       id: `half-left-${row}`,
       meshId: halfMeshId,
-      transform: makeTransform(hx, y, 0, halfBrickW, halfBrickH, halfBrickD),
+      transform: makeTransformMatrix([hx, y, 0], [halfBrickW, halfBrickH, halfBrickD]),
       color: halfBrickColor,
     });
   }
@@ -81,7 +48,7 @@ for (let row = 0; row < rows; row++) {
     brickQueue.push({
       id: `brick-${row}-${col}`,
       meshId,
-      transform: makeTransform(x, y, 0, brickW, brickH, brickD),
+      transform: makeTransformMatrix([x, y, 0], [brickW, brickH, brickD]),
       color: brickColor,
     });
   }
@@ -93,7 +60,7 @@ for (let row = 0; row < rows; row++) {
     brickQueue.push({
       id: `half-right-${row}`,
       meshId: halfMeshId,
-      transform: makeTransform(hx, y, 0, halfBrickW, halfBrickH, halfBrickD),
+      transform: makeTransformMatrix([hx, y, 0], [halfBrickW, halfBrickH, halfBrickD]),
       color: halfBrickColor,
     });
   }
