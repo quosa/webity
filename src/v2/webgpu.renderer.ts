@@ -267,6 +267,9 @@ export class WebGPURendererV2 {
         depthCompare: 'less',
       },
     });
+
+    // TODO: consider a point pipeline for point clouds
+    // would have primitive.topology: 'point-list'
   }
 
   private createUniformBuffer(): void {
