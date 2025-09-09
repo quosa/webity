@@ -31,11 +31,11 @@ if ! command -v claude &> /dev/null; then
 fi
 
 # mitm
-# export http_proxy=http://127.0.0.1:8080
-# export https_proxy=http://127.0.0.1:8080
-export HTTP_PROXY="http://127.0.0.1:8080"
-export HTTPS_PROXY="http://127.0.0.1:8080"
-export NODE_EXTRA_CA_CERTS="/Users/jussiku/.mitmproxy/mitmproxy-ca-cert.pem"
+# NO export http_proxy=http://127.0.0.1:8080
+# NO export https_proxy=http://127.0.0.1:8080
+# export HTTP_PROXY="http://127.0.0.1:8080"
+# export HTTPS_PROXY="http://127.0.0.1:8080"
+# export NODE_EXTRA_CA_CERTS="/Users/jussiku/.mitmproxy/mitmproxy-ca-cert.pem"
 
 # Start Claude Code
 claude "$@"
