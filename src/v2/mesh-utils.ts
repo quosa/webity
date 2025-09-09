@@ -8,6 +8,7 @@ import { MeshData } from './webgpu.renderer';
  */
 export function createCubeMesh(size: number = 1): MeshData {
     const s = size / 2;
+    /* eslint-disable indent */
     const vertices = new Float32Array([
         // Back face (z = -s)
         -s, -s, -s,
@@ -20,6 +21,7 @@ export function createCubeMesh(size: number = 1): MeshData {
          s,  s, s,
         -s,  s, s,
     ]);
+    /* eslint-enable indent */
     const indices = new Uint16Array([
         // Back face
         0, 1, 2, 2, 3, 0,
@@ -41,11 +43,13 @@ export function createCubeMesh(size: number = 1): MeshData {
  * Create a simple triangle mesh centered at origin
  */
 export function createTriangleMesh(): MeshData {
+    /* eslint-disable indent */
     const vertices = new Float32Array([
          0.0,  1.5, 0.0,
         -1.5, -1.5, 0.0,
          1.5, -1.5, 0.0,
     ]);
+    /* eslint-enable indent */
     const indices = new Uint16Array([0, 1, 2]);
     return { vertices, indices };
 }

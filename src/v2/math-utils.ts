@@ -111,10 +111,10 @@ export function createOrthographicMatrix(
     const transZ = -near / (far - near);
 
     return new Float32Array([
-    scaleX, 0,      0,     0,
-    0,      scaleY, 0,     0,
-    0,      0,      scaleZ,0,
-    transX, transY, transZ,1
+        scaleX, 0,      0,     0,
+        0,      scaleY, 0,     0,
+        0,      0,      scaleZ,0,
+        transX, transY, transZ,1
     ]);
 }
 

@@ -193,9 +193,9 @@ export class Transform extends Component {
         const rz = (rot.z * Math.PI) / 180;
 
         // Calculate rotation matrix elements
-    const cx = Math.cos(rx), sx = Math.sin(rx);
-    const cy = Math.cos(ry), sy = Math.sin(ry);
-    const cz = Math.cos(rz), sz = Math.sin(rz);
+        const cx = Math.cos(rx), sx = Math.sin(rx);
+        const cy = Math.cos(ry), sy = Math.sin(ry);
+        const cz = Math.cos(rz), sz = Math.sin(rz);
 
         // Combined rotation matrix (ZYX order)
         const m00 = cy * cz;
