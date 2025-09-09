@@ -1,6 +1,5 @@
-import { WebGPURendererV2, Entity } from './webgpu.renderer';
+import { WebGPURendererV2 } from './webgpu.renderer';
 import { Camera } from './camera';
-import { makeTransformMatrix } from './math-utils';
 import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
 
 declare global {
@@ -43,32 +42,51 @@ window.runRenderingTest = async function (testName: string) {
         renderer.addEntity({
             id: 'triangle1',
             meshId: 'triangle',
-            transform: makeTransformMatrix([0, 0, 5], 1),
+            transform: {
+                position: [0, 0, 5],
+                rotation: [0, 0, 0],
+                scale: [3, 3, 3] // triangle mesh was downsized to 0.5 units from 1.5
+            },
             color: [1, 0, 0, 1], // Red
-        } as Entity);
+            renderMode: 'triangles'
+        });
     } else if (testName === 'cubes') {
         renderer.addEntity({
             id: 'cube1',
             meshId: 'cube',
-            transform: makeTransformMatrix([-3, 0, 5], 1),
+            transform: {
+                position: [-3, 0, 5],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1]
+            },
             color: [0, 1, 0, 1], // Green
-        } as Entity);
+            renderMode: 'triangles'
+        });
         renderer.addEntity({
             id: 'cube2',
             meshId: 'cube',
-            transform: makeTransformMatrix([3, 0, 5], 1),
+            transform: {
+                position: [3, 0, 5],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1]
+            },
             color: [0, 0, 1, 1], // Blue
-        } as Entity);
+            renderMode: 'triangles'
+        });
     }
 
     // Always add the floor
     renderer.addEntity({
         id: 'floor',
         meshId: 'floor',
-        transform: makeTransformMatrix([0, -2, 0], 1),
+        transform: {
+            position: [0, -2, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+        },
         color: [0.2, 0.8, 0.2, 1],
-        renderMode: 'line',
-    } as Entity);
+        renderMode: 'lines'
+    });
 
     renderer.render();
 };

@@ -40,14 +40,14 @@ export function createCubeMesh(size: number = 1): MeshData {
 }
 
 /**
- * Create a simple triangle mesh centered at origin
+ * Create a simple triangle mesh - small triangle in NDC space for debugging
  */
 export function createTriangleMesh(): MeshData {
     /* eslint-disable indent */
     const vertices = new Float32Array([
-         0.0,  1.5, 0.0,
-        -1.5, -1.5, 0.0,
-         1.5, -1.5, 0.0,
+         0.0,  0.5, 0.0,  // Top center
+        -0.5, -0.5, 0.0,  // Bottom left
+         0.5, -0.5, 0.0,  // Bottom right
     ]);
     /* eslint-enable indent */
     const indices = new Uint16Array([0, 1, 2]);

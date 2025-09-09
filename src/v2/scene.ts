@@ -1,10 +1,11 @@
-import { WebGPURendererV2, Entity } from './webgpu.renderer';
+import { WebGPURendererV2 } from './webgpu.renderer';
 import { Camera } from './camera';
-import { makeTransformMatrix } from './math-utils';
 import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
 
 async function main() {
+    console.log('🚀 Scene script starting...');
     const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+    console.log('Canvas element:', canvas);
 
     try {
         // Check WebGPU support
@@ -23,68 +24,70 @@ async function main() {
         const viewProjectionMatrix = camera.getViewProjectionMatrix(aspect);
         renderer.setViewProjectionMatrix(viewProjectionMatrix);
 
-        // Test with a simple triangle first
+        // Register triangle mesh
         const triangleMesh = createTriangleMesh();
         renderer.registerMesh('triangle', triangleMesh);
 
-        // Register a cube mesh
-        const cubeMesh = createCubeMesh(2);
+        // Register cube mesh
+        const cubeMesh = createCubeMesh(1);
         renderer.registerMesh('cube', cubeMesh);
 
         // Register a grid mesh for the floor
         const gridMesh = createGridMesh(20, 20);
         renderer.registerMesh('floor', gridMesh);
 
-        // Add cubes - position them in positive Z (in front of camera)
-        let cube1Transform = makeTransformMatrix([-3, 0, 5], 1);
-        let cube2Transform = makeTransformMatrix([3, 0, 5], 1);
-
         renderer.addEntity({
             id: 'cube1',
             meshId: 'cube',
-            transform: cube1Transform,
+            transform: {
+                position: [-2, 0, -5],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1]
+            },
             color: [0, 1, 0, 1], // Green
-        } as Entity);
+            renderMode: 'triangles'
+        });
 
         renderer.addEntity({
             id: 'cube2',
             meshId: 'cube',
-            transform: cube2Transform,
+            transform: {
+                position: [2, 0, -5],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1]
+            },
             color: [0, 0, 1, 1], // Blue
-        } as Entity);
+            renderMode: 'triangles'
+        });
 
-        // Add triangle in front of cubes
-        const triangleTransform = makeTransformMatrix([0, 0, 5], 1);
-
+        // Add triangle in front
         renderer.addEntity({
-            id: 'triangle1',
+            id: 'center-triangle',
             meshId: 'triangle',
-            transform: triangleTransform,
+            transform: {
+                position: [0, 0, -5], // In front of cubes, same height level
+                rotation: [0, 0, 0],
+                scale: [2, 2, 2]
+            },
             color: [1, 0, 0, 1], // Red
-        } as Entity);
+            renderMode: 'triangles'
+        });
 
-        // Add floor entity (XZ plane at y = -2) with line render mode
         renderer.addEntity({
             id: 'floor',
             meshId: 'floor',
-            transform: makeTransformMatrix([0, -2, 0], 1),
-            color: [0.2, 0.8, 0.2, 1], // Greenish grid lines for visibility
-            renderMode: 'line',
-        } as Entity);
+            transform: {
+                position: [0, -2, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1]
+            },
+            color: [1, 1, 0, 1], // Yellow grid lines
+            renderMode: 'lines'
+        });
 
-        // Render once (single pass)
-        let i = 0;
-        while (i < 180) {
-            cube1Transform = makeTransformMatrix([-3 + i / 100, 0, 5], 1); // move right
-            renderer.updateEntity('cube1', { transform: cube1Transform });
-            cube2Transform = makeTransformMatrix([3, 0, 5], 1, [0, 0 + i / 100, 0]); // rotate on Y-axis
-            renderer.updateEntity('cube2', { transform: cube2Transform });
-            await new Promise(resolve => setTimeout(resolve, 100));
-            renderer.render();
-            i++;
-        }
-        console.log('🎥 Animation complete 🏆');
-        // renderer.render();
+        // Render static scene
+        renderer.render();
+        console.log('🎥 Static render complete 🏆');
     } catch (error) {
         console.error('❌ Error initializing WebGPU renderer:', error);
         const errorDiv = document.getElementById('error-message');

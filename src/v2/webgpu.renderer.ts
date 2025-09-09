@@ -2,60 +2,20 @@
 // Clean WebGPU renderer focused on GPU resource management and rendering
 /// <reference types="@webgpu/types" />
 
-// Types
-export interface MeshData {
-    vertices: Float32Array; // [x0, y0, z0, x1, y1, z1, ...]
-    indices: Uint16Array; // [v0, v1, v2, v1, v2, v4, ...]
-}
+import { EntityManager, EntityData, Entity } from './entities';
+import { MegaBufferManager } from './buffer-manager';
+import { MeshData } from './mesh-registry';
 
+// Types
 export type TextureData = {
     image: HTMLImageElement | ImageBitmap;
     // ...other texture params
 };
 
-export type Entity = {
-    id: string; // Unique identifier
-    meshId: string;
-    transform: Float32Array; // 4x4 matrix
-    color: [number, number, number, number]; // RGBA
-    renderMode?: 'triangle' | 'line'; // NEW: rendering mode
-    textureId?: string;
-};
+// Re-export types for convenience
+export type { MeshData } from './mesh-registry';
+export type { EntityData, Entity } from './entities';
 
-class Mesh {
-    vertexBuffer: GPUBuffer;
-    indexBuffer: GPUBuffer;
-    indexCount: number;
-    constructor(device: GPUDevice, mesh: MeshData) {
-        if (mesh.indices.length % 3 !== 0) {
-            throw new Error(
-                `Invalid triangle mesh: index count ${mesh.indices.length} not divisible by 3`
-            );
-        }
-
-        this.vertexBuffer = device.createBuffer({
-            // WebGPU buffers need to be aligned to 4-byte boundaries for performance reasons.
-            size: Math.ceil(mesh.vertices.byteLength / 4) * 4, // Round up to multiple of 4 bytes
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true,
-        });
-        new Float32Array(this.vertexBuffer.getMappedRange()).set(mesh.vertices);
-        //               ^- ArrayBuffer pointing directly to GPU memory
-        //         Float32Array view into the same memory and copy across -^
-        this.vertexBuffer.unmap(); // release buffer for GPU to use
-
-        this.indexBuffer = device.createBuffer({
-            // WebGPU buffers need to be aligned to 4-byte boundaries for performance reasons.
-            size: Math.ceil(mesh.indices.byteLength / 4) * 4, // Round up to multiple of 4 bytes
-            usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true,
-        });
-        new Uint16Array(this.indexBuffer.getMappedRange()).set(mesh.indices);
-        this.indexBuffer.unmap(); // see vertexBuffer for description
-
-        this.indexCount = mesh.indices.length;
-    }
-}
 
 class Texture {
     gpuTexture: any; // GPUTexture (use 'any' for now to avoid type errors)
@@ -81,9 +41,15 @@ export class WebGPURendererV2 {
     private uniformBuffer!: GPUBuffer;
     private bindGroup!: GPUBindGroup;
 
-    private meshRegistry = new Map<string, Mesh>();
     private textureRegistry = new Map<string, Texture>();
-    private entities: Entity[] = [];
+
+    // New architecture components
+    private entityManager = new EntityManager();
+    private bufferManager!: MegaBufferManager;
+
+    // Depth testing feature flag - set to false to easily disable
+    private static readonly ENABLE_DEPTH_TESTING = true;
+    private depthTexture?: any; // GPUTexture
 
     async init(canvas: HTMLCanvasElement): Promise<void> {
         // Setup device/context
@@ -95,11 +61,28 @@ export class WebGPURendererV2 {
         this.context.configure({
             device: this.device,
             format: this.presentationFormat,
+            alphaMode: 'opaque',
         });
+
+        // Initialize buffer manager
+        this.bufferManager = new MegaBufferManager(this.device);
+
+        // Create depth texture if depth testing is enabled
+        if (WebGPURendererV2.ENABLE_DEPTH_TESTING) {
+            this.createDepthTexture(canvas);
+        }
 
         // Create shaders and pipeline
         this.createRenderPipeline();
         this.createUniformBuffer();
+    }
+
+    private createDepthTexture(canvas: HTMLCanvasElement): void {
+        this.depthTexture = this.device.createTexture({
+            size: [canvas.width, canvas.height],
+            format: 'depth24plus',
+            usage: 0x10, // GPUTextureUsage.RENDER_ATTACHMENT
+        });
     }
 
     private createRenderPipeline(): void {
@@ -154,7 +137,7 @@ export class WebGPURendererV2 {
       }
     `;
 
-        // Fragment shader: simple color output
+        // Fragment shader: use instance color
         const fragmentShader = `
       struct FragmentInput {
         @location(0) color: vec4<f32>,
@@ -164,7 +147,8 @@ export class WebGPURendererV2 {
       fn main(input: FragmentInput) -> @location(0) vec4<f32> {
         return input.color;
       }
-    `; // Create shader modules with error checking
+    `;
+        // Create shader modules with error checking
         let vertexModule, fragmentModule;
         try {
             vertexModule = this.device.createShaderModule({ code: vertexShader });
@@ -178,7 +162,9 @@ export class WebGPURendererV2 {
         } catch (error) {
             console.error('❌ Fragment shader compilation failed:', error);
             throw error;
-        } // Define vertex buffer layout
+        }
+
+        // Define vertex buffer layout
         const vertexBufferLayout = {
             arrayStride: 3 * 4, // 3 floats * 4 bytes = 12 bytes per vertex
             attributes: [
@@ -190,7 +176,7 @@ export class WebGPURendererV2 {
             ],
         };
 
-        // Define instance buffer layout (transform matrix + color)
+        // Define instance buffer layout (transform matrix + color) - back to slot 1
         const instanceBufferLayout = {
             arrayStride: (16 + 4) * 4, // 16 floats (4x4 matrix) + 4 floats (color) * 4 bytes = 80 bytes
             stepMode: 'instance',
@@ -221,7 +207,7 @@ export class WebGPURendererV2 {
             bindGroupLayouts: [bindGroupLayout],
         });
 
-        // Create triangle render pipeline
+        // Create triangle render pipeline (vertex buffer + instance buffer)
         this.renderPipeline = this.device.createRenderPipeline({
             layout: pipelineLayout,
             vertex: {
@@ -236,13 +222,17 @@ export class WebGPURendererV2 {
             },
             primitive: {
                 topology: 'triangle-list',
-                cullMode: 'none',
+                cullMode: 'back',
+                frontFace: 'ccw', // counter-clockwise front face - i.e. right-handed system
+                // stripIndexFormat: undefined,
             },
-            depthStencil: {
-                format: 'depth24plus',
-                depthWriteEnabled: true,
-                depthCompare: 'less',
-            },
+            ...(WebGPURendererV2.ENABLE_DEPTH_TESTING && {
+                depthStencil: {
+                    format: 'depth24plus',
+                    depthWriteEnabled: true,
+                    depthCompare: 'less',
+                }
+            }),
         });
 
         // Create line render pipeline (reuse shaders, change topology)
@@ -260,13 +250,15 @@ export class WebGPURendererV2 {
             },
             primitive: {
                 topology: 'line-list',
-                cullMode: 'none',
+                cullMode: 'back',
             },
-            depthStencil: {
-                format: 'depth24plus',
-                depthWriteEnabled: true,
-                depthCompare: 'less',
-            },
+            ...(WebGPURendererV2.ENABLE_DEPTH_TESTING && {
+                depthStencil: {
+                    format: 'depth24plus',
+                    depthWriteEnabled: true,
+                    depthCompare: 'less',
+                }
+            }),
         });
 
         // TODO: consider a point pipeline for point clouds
@@ -307,67 +299,39 @@ export class WebGPURendererV2 {
     }
 
     registerMesh(meshId: string, mesh: MeshData): void {
-        this.meshRegistry.set(meshId, new Mesh(this.device, mesh));
+        this.bufferManager.registerMesh(meshId, mesh);
     }
 
     registerTexture(textureId: string, texture: TextureData): void {
         this.textureRegistry.set(textureId, new Texture(this.device, texture));
     }
 
-    addEntity(entity: Entity): void {
-        this.entities.push(entity);
+    addEntity(entityData: EntityData): void {
+        this.entityManager.add(entityData);
     }
 
-    updateEntity(id: string, newData: Partial<Entity>): void {
-        const idx = this.entities.findIndex(e => e.id === id);
-        if (idx !== -1) {
-            // i.e. this.entities[idx] = { ...this.entities[idx], ...newData };
-            const entity = this.entities[idx]!;
-            const updatedEntity: Entity = {
-                id: newData.id ?? entity.id,
-                meshId: newData.meshId ?? entity.meshId,
-                transform: newData.transform ?? entity.transform,
-                color: newData.color ?? entity.color,
-            };
-
-            // Handle optional textureId property
-            if (newData.textureId !== undefined) {
-                updatedEntity.textureId = newData.textureId;
-            } else if (entity.textureId !== undefined) {
-                updatedEntity.textureId = entity.textureId;
-            }
-
-            this.entities[idx] = updatedEntity;
-        }
+    updateEntity(id: string, updates: Partial<EntityData>): void {
+        this.entityManager.update(id, updates);
     }
 
     removeEntity(id: string): void {
-        this.entities = this.entities.filter(e => e.id !== id);
+        this.entityManager.remove(id);
     }
 
     clearEntities(): void {
-        this.entities = [];
+        this.entityManager = new EntityManager();
     }
 
     render(): void {
-        // Group entities by meshId for instanced rendering
-        const meshGroups: Record<string, Entity[]> = {};
-        for (const entity of this.entities) {
-            if (!meshGroups[entity.meshId]) meshGroups[entity.meshId] = [];
-            meshGroups[entity.meshId]!.push(entity);
-        }
+        const megaBuffer = this.bufferManager.getMegaBuffer();
+        if (!megaBuffer) return;
 
-        // Create depth texture for depth testing
-        const canvas = this.context.canvas as HTMLCanvasElement;
-        const depthTexture = this.device.createTexture({
-            size: { width: canvas.width, height: canvas.height },
-            format: 'depth24plus',
-            usage: 0x10, // GPUTextureUsage.RENDER_ATTACHMENT
-        });
-
-        // Begin render pass
+        // Group entities by render mode first, then by mesh
+        const triangleEntities = this.entityManager.getByRenderMode('triangles');
+        const lineEntities = this.entityManager.getByRenderMode('lines');
+        // Begin render pass (with optional depth testing)
         const commandEncoder = this.device.createCommandEncoder();
-        const renderPass = commandEncoder.beginRenderPass({
+        const renderPassDescriptor: any = {
             colorAttachments: [
                 {
                     view: this.context.getCurrentTexture().createView(),
@@ -376,77 +340,111 @@ export class WebGPURendererV2 {
                     storeOp: 'store',
                 },
             ],
-            depthStencilAttachment: {
-                view: depthTexture.createView(),
+        };
+
+        // Add depth attachment if depth testing is enabled
+        if (WebGPURendererV2.ENABLE_DEPTH_TESTING && this.depthTexture) {
+            renderPassDescriptor.depthStencilAttachment = {
+                view: this.depthTexture.createView(),
                 depthClearValue: 1.0,
                 depthLoadOp: 'clear',
                 depthStoreOp: 'store',
-            },
-        });
+            };
+        }
 
-        // Set pipeline and bind group
-        renderPass.setPipeline(this.renderPipeline);
-        renderPass.setBindGroup(0, this.bindGroup);
+        const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
 
-        // For each mesh group, create instance buffer and draw
-        for (const meshId in meshGroups) {
-            const mesh = this.meshRegistry.get(meshId);
-            if (!mesh) {
-                console.warn(`Mesh not found: ${meshId}`);
-                continue;
-            }
+        // Render triangles
+        if (triangleEntities.length > 0) {
+            this.renderEntities(renderPass, this.renderPipeline, triangleEntities, megaBuffer);
+        }
 
-            const instances = meshGroups[meshId]!;
-            if (instances.length === 0) continue;
-
-            // Determine render mode (default triangle)
-            const renderMode = instances[0]!.renderMode ?? 'triangle';
-            const pipeline = renderMode === 'line' ? this.linePipeline : this.renderPipeline;
-            renderPass.setPipeline(pipeline);
-            renderPass.setBindGroup(0, this.bindGroup);
-
-            // Create instance data: [transform matrix (16 floats) + color (4 floats)] per instance
-            const instanceData = new Float32Array(instances.length * 20); // 20 floats per instance
-
-            for (let i = 0; i < instances.length; i++) {
-                const instance = instances[i]!;
-                const offset = i * 20;
-
-                // Copy transform matrix (16 floats)
-                instanceData.set(instance.transform, offset);
-
-                // Copy color (4 floats)
-                instanceData.set(instance.color, offset + 16);
-            }
-
-            // Create instance buffer
-            const instanceBuffer = this.device.createBuffer({
-                size: instanceData.byteLength,
-                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-                mappedAtCreation: true,
-            });
-            new Float32Array(instanceBuffer.getMappedRange()).set(instanceData);
-            instanceBuffer.unmap();
-
-            // Bind mesh vertex and index buffers
-            renderPass.setVertexBuffer(0, mesh.vertexBuffer); // Vertex positions
-            renderPass.setVertexBuffer(1, instanceBuffer); // Instance data
-            renderPass.setIndexBuffer(mesh.indexBuffer, 'uint16');
-
-            // Draw instances
-            renderPass.drawIndexed(mesh.indexCount, instances.length);
+        // Render lines
+        if (lineEntities.length > 0) {
+            this.renderEntities(renderPass, this.linePipeline, lineEntities, megaBuffer);
         }
 
         // End render pass and submit
         renderPass.end();
         const commandBuffer = commandEncoder.finish();
+
         this.device.queue.submit([commandBuffer]);
     }
 
+    private renderEntities(
+        renderPass: any, // GPURenderPassEncoder
+        pipeline: GPURenderPipeline,
+        entities: Entity[],
+        megaBuffer: GPUBuffer
+    ): void {
+        renderPass.setPipeline(pipeline);
+        renderPass.setBindGroup(0, this.bindGroup);
+
+        // Group by mesh for instanced rendering
+        const meshGroups = new Map<string, Entity[]>();
+        for (const entity of entities) {
+            const meshId = entity.data.meshId;
+            if (!meshGroups.has(meshId)) {
+                meshGroups.set(meshId, []);
+            }
+            meshGroups.get(meshId)!.push(entity);
+        }
+
+        // Render each mesh group
+        for (const [meshId, instances] of meshGroups) {
+            const allocation = this.bufferManager.getMeshAllocation(meshId);
+            if (!allocation) {
+                console.warn(`Mesh allocation not found: ${meshId}`);
+                continue;
+            }
+
+
+            // Create instance buffer for this group
+            const instanceBuffer = this.createInstanceBuffer(instances);
+
+            // Use mega buffer for all meshes
+            const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
+            renderPass.setVertexBuffer(0, megaBuffer, vertexOffset);
+            renderPass.setVertexBuffer(1, instanceBuffer);
+
+            const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
+            renderPass.setIndexBuffer(megaBuffer, 'uint16', indexOffset);
+            renderPass.drawIndexed(allocation.indexCount, instances.length);
+        }
+    }
+
+    private createInstanceBuffer(entities: Entity[]): GPUBuffer {
+        // Create instance data: [transform matrix (16 floats) + color (4 floats)] per instance
+        const instanceData = new Float32Array(entities.length * 20); // 20 floats per instance
+
+        for (let i = 0; i < entities.length; i++) {
+            const entity = entities[i]!;
+            const offset = i * 20;
+
+            // Get transform matrix from entity
+            const transform = entity.getTransformMatrix();
+            instanceData.set(transform, offset);
+
+            // Copy color (4 floats)
+            instanceData.set(entity.data.color, offset + 16);
+        }
+
+        // Create instance buffer
+        const instanceBuffer = this.device.createBuffer({
+            size: instanceData.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: true,
+        });
+        new Float32Array(instanceBuffer.getMappedRange()).set(instanceData);
+        instanceBuffer.unmap();
+
+        return instanceBuffer;
+    }
+
     dispose(): void {
-        // TODO: Cleanup GPU resources
-        this.meshRegistry.clear();
+        this.bufferManager?.dispose();
+        this.depthTexture?.destroy();
         this.textureRegistry.clear();
-        this.entities = [];
+        this.entityManager = new EntityManager();
     }
 }

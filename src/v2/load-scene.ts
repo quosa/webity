@@ -1,6 +1,5 @@
-import { WebGPURendererV2, Entity } from './webgpu.renderer';
+import { WebGPURendererV2, EntityData } from './webgpu.renderer';
 import { createCubeMesh } from './mesh-utils';
-import { makeTransformMatrix } from './math-utils';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const vertexCountEl = document.getElementById('vertexCount')!;
@@ -23,7 +22,7 @@ const halfMeshId = 'halfBrick';
 renderer.registerMesh(meshId, createCubeMesh(brickW));
 renderer.registerMesh(halfMeshId, createCubeMesh(halfBrickW));
 
-const brickQueue: Entity[] = [];
+const brickQueue: EntityData[] = [];
 let vertexCount = 0;
 for (let row = 0; row < rows; row++) {
     const y = row * brickH;
@@ -37,8 +36,13 @@ for (let row = 0; row < rows; row++) {
         brickQueue.push({
             id: `half-left-${row}`,
             meshId: halfMeshId,
-            transform: makeTransformMatrix([hx, y, 0], [halfBrickW, halfBrickH, halfBrickD]),
+            transform: {
+                position: [hx, y, 0],
+                rotation: [0, 0, 0],
+                scale: [halfBrickW, halfBrickH, halfBrickD]
+            },
             color: halfBrickColor,
+            renderMode: 'triangles'
         });
     }
     // Number of full bricks: even rows = bricksPerRow, odd rows = bricksPerRow - 1
@@ -48,8 +52,13 @@ for (let row = 0; row < rows; row++) {
         brickQueue.push({
             id: `brick-${row}-${col}`,
             meshId,
-            transform: makeTransformMatrix([x, y, 0], [brickW, brickH, brickD]),
+            transform: {
+                position: [x, y, 0],
+                rotation: [0, 0, 0],
+                scale: [brickW, brickH, brickD]
+            },
             color: brickColor,
+            renderMode: 'triangles'
         });
     }
     // Right half brick for odd rows
@@ -60,8 +69,13 @@ for (let row = 0; row < rows; row++) {
         brickQueue.push({
             id: `half-right-${row}`,
             meshId: halfMeshId,
-            transform: makeTransformMatrix([hx, y, 0], [halfBrickW, halfBrickH, halfBrickD]),
+            transform: {
+                position: [hx, y, 0],
+                rotation: [0, 0, 0],
+                scale: [halfBrickW, halfBrickH, halfBrickD]
+            },
             color: halfBrickColor,
+            renderMode: 'triangles'
         });
     }
 }
