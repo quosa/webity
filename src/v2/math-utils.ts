@@ -66,10 +66,10 @@ export function makeTransformMatrix(
 
     // Apply scale to rotation matrix and create column-major transform matrix for WebGPU
     return new Float32Array([
-    m00 * scaleX, m10 * scaleX, m20 * scaleX, 0,     // column 0
-    m01 * scaleY, m11 * scaleY, m21 * scaleY, 0,     // column 1
-    m02 * scaleZ, m12 * scaleZ, m22 * scaleZ, 0,     // column 2
-    x, y, z, 1                                       // column 3: translation
+        m00 * scaleX, m10 * scaleX, m20 * scaleX, 0,     // column 0
+        m01 * scaleY, m11 * scaleY, m21 * scaleY, 0,     // column 1
+        m02 * scaleZ, m12 * scaleZ, m22 * scaleZ, 0,     // column 2
+        x, y, z, 1                                       // column 3: translation
     ]);
 }
 
@@ -85,10 +85,10 @@ export function createPerspectiveMatrix(
     const f = 1.0 / Math.tan(fov / 2);
 
     return new Float32Array([
-    f / aspect, 0, 0, 0,                          // column 0
-    0, f, 0, 0,                                   // column 1
-    0, 0, -(far + near) / (far - near), -1,      // column 2
-    0, 0, -(2 * near * far) / (far - near), 0    // column 3
+        f / aspect, 0, 0, 0,                          // column 0
+        0, f, 0, 0,                                   // column 1
+        0, 0, -(far + near) / (far - near), -1,      // column 2
+        0, 0, -(2 * near * far) / (far - near), 0    // column 3
     ]);
 }
 
@@ -127,12 +127,12 @@ export function createLookAtMatrix(
     up: [number, number, number]
 ): Float32Array {
     // Calculate forward vector (from eye to target)
-  const forward: number[] = [
-    target[0] - eye[0],
-    target[1] - eye[1],
-    target[2] - eye[2]
-  ];
-  const forwardLength = Math.sqrt(forward[0]! * forward[0]! + forward[1]! * forward[1]! + forward[2]! * forward[2]!);
+    const forward: number[] = [
+        target[0] - eye[0],
+        target[1] - eye[1],
+        target[2] - eye[2]
+    ];
+    const forwardLength = Math.sqrt(forward[0]! * forward[0]! + forward[1]! * forward[1]! + forward[2]! * forward[2]!);
     forward[0] = forward[0]! / forwardLength;
     forward[1] = forward[1]! / forwardLength;
     forward[2] = forward[2]! / forwardLength;
@@ -159,12 +159,12 @@ export function createLookAtMatrix(
 
     // Create view matrix (column-major for WebGPU)
     return new Float32Array([
-    right[0]!, -trueUp[0]!, -forward[0]!, 0,                                      // column 0
-    right[1]!, -trueUp[1]!, -forward[1]!, 0,                                      // column 1
-    right[2]!, -trueUp[2]!, -forward[2]!, 0,                                      // column 2
-    -(right[0]! * eye[0] + right[1]! * eye[1] + right[2]! * eye[2]),            // column 3 x
-    -(-trueUp[0]! * eye[0] + -trueUp[1]! * eye[1] + -trueUp[2]! * eye[2]),       // column 3 y
-    -(-forward[0]! * eye[0] + -forward[1]! * eye[1] + -forward[2]! * eye[2]),   // column 3 z
-    1                                                                             // column 3 w
+        right[0]!, -trueUp[0]!, -forward[0]!, 0,                                      // column 0
+        right[1]!, -trueUp[1]!, -forward[1]!, 0,                                      // column 1
+        right[2]!, -trueUp[2]!, -forward[2]!, 0,                                      // column 2
+        -(right[0]! * eye[0] + right[1]! * eye[1] + right[2]! * eye[2]),            // column 3 x
+        -(-trueUp[0]! * eye[0] + -trueUp[1]! * eye[1] + -trueUp[2]! * eye[2]),       // column 3 y
+        -(-forward[0]! * eye[0] + -forward[1]! * eye[1] + -forward[2]! * eye[2]),   // column 3 z
+        1                                                                             // column 3 w
     ]);
 }

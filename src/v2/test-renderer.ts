@@ -4,7 +4,9 @@ import { makeTransformMatrix } from './math-utils';
 import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
 
 declare global {
+    // eslint-disable-next-line no-unused-vars
     interface Window {
+        // eslint-disable-next-line no-unused-vars
         runRenderingTest: (testName: string) => Promise<void>;
     }
 }

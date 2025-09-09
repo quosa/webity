@@ -1,4 +1,4 @@
-import { WebGPURendererV2, MeshData, Entity } from './webgpu.renderer';
+import { WebGPURendererV2, Entity } from './webgpu.renderer';
 import { Camera } from './camera';
 import { makeTransformMatrix } from './math-utils';
 import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';

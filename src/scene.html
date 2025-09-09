@@ -1,85 +1,137 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebAssembly Scene Demo</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: Arial, sans-serif;
-      background: #1a1a1a;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-    }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Rotating Ball Demo - WebAssembly + WebGPU</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                font-family: Arial, sans-serif;
+                background: #1a1a1a;
+                color: white;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                min-height: 100vh;
+            }
 
-    h1 {
-      margin-bottom: 20px;
-      color: #00ffff;
-    }
+            h1 {
+                margin-bottom: 20px;
+                color: #00ffff;
+            }
 
-    #canvas {
-      border: 2px solid #333;
-      background: #000;
-      display: block;
-    }
+            #canvas {
+                border: 2px solid #333;
+                background: #000;
+                display: block;
+            }
 
-    .controls {
-      margin-top: 20px;
-      text-align: center;
-    }
+            .controls {
+                margin-top: 20px;
+                text-align: center;
+            }
 
-    .error {
-      color: #ff4444;
-      background: rgba(255, 68, 68, 0.1);
-      padding: 20px;
-      border-radius: 8px;
-      margin-top: 20px;
-      max-width: 500px;
-    }
+            .error {
+                color: #ff4444;
+                background: rgba(255, 68, 68, 0.1);
+                padding: 20px;
+                border-radius: 8px;
+                margin-top: 20px;
+                max-width: 500px;
+            }
 
-    .loading {
-      color: #ffaa00;
-      margin-top: 20px;
-    }
+            .loading {
+                color: #ffaa00;
+                margin-top: 20px;
+            }
 
-    .info {
-      color: #aaa;
-      margin-top: 10px;
-      font-size: 14px;
-    }
-  </style>
-</head>
-<body>
-  <h1>WebAssembly Scene Demo</h1>
+            .info {
+                color: #aaa;
+                margin-top: 10px;
+                font-size: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Rotating Ball Demo</h1>
 
-  <!-- Performance Stats - moved above canvas for better visibility -->
-  <div id="performanceStats" style="font-family: monospace; font-size: 16px; font-weight: bold; text-align: center; display: flex; justify-content: center; gap: 30px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333;">
-    <div style="color: #00ff00;">FPS: <span id="currentFPS">--</span> (avg: <span id="averageFPS" style="color: #88ff88;">--</span>)</div>
-    <div style="color: #ffff88;">Frame: <span id="frameTime">--</span>ms</div>
-    <div style="color: #ff8888;">🎾 Entities: <span id="entityCount" style="font-size: 18px;">--</span></div>
-    <div style="color: #8888ff;">Vertices: <span id="vertexCount">--</span></div>
-    <div style="color: #ff88ff;">WASM: <span id="wasmTime">--</span>μs</div>
-  </div>
+        <!-- Performance Stats - moved above canvas for better visibility -->
+        <div
+            id="performanceStats"
+            style="
+                font-family: monospace;
+                font-size: 16px;
+                font-weight: bold;
+                text-align: center;
+                display: flex;
+                justify-content: center;
+                gap: 30px;
+                background: rgba(0, 0, 0, 0.8);
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                border: 1px solid #333;
+            "
+        >
+            <div style="color: #00ff00">
+                FPS: <span id="currentFPS">--</span> (avg:
+                <span id="averageFPS" style="color: #88ff88">--</span>)
+            </div>
+            <div style="color: #ffff88">Frame: <span id="frameTime">--</span>ms</div>
+            <div style="color: #ff8888">
+                🎾 Entities: <span id="entityCount" style="font-size: 18px">--</span>
+            </div>
+            <div style="color: #8888ff">Vertices: <span id="vertexCount">--</span></div>
+            <div style="color: #ff88ff">WASM: <span id="wasmTime">--</span>μs</div>
+        </div>
 
-  <canvas id="canvas" width="800" height="600"></canvas>
+        <canvas id="canvas" width="800" height="600"></canvas>
 
-  <div class="controls">
-    <p><strong>Camera Controls:</strong> WASD = Fly around (Forward/Left/Backward/Right)</p>
-    <button id="stopButton" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #ff4444; color: white; border: none; border-radius: 5px; cursor: pointer;">⏸️ Stop Engine</button>
-    <button id="startButton" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #44aa44; color: white; border: none; border-radius: 5px; cursor: pointer; display: none;">▶️ Start Engine</button>
-  </div>
+        <div class="controls">
+            <p><strong>Camera Controls:</strong> WASD = Fly around (Forward/Left/Backward/Right)</p>
+            <p>
+                <strong>Demo:</strong> Large rotating ball (radius 7.5) with custom GameObject
+                physics + rotation (32 segments)
+            </p>
+            <button
+                id="stopButton"
+                style="
+                    margin: 10px;
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    background: #ff4444;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                "
+            >
+                ⏸️ Stop Engine
+            </button>
+            <button
+                id="startButton"
+                style="
+                    margin: 10px;
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    background: #44aa44;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    display: none;
+                "
+            >
+                ▶️ Start Engine
+            </button>
+        </div>
 
-  <div id="loading" class="loading" style="display: none;">
-    Loading scene...
-  </div>
+        <div id="loading" class="loading" style="display: none">Loading scene...</div>
 
-  <div id="error" class="error" style="display: none;"></div>
+        <div id="error" class="error" style="display: none"></div>
 
-  <script type="module" src="./main-scene.ts"></script>
-</body>
+        <script type="module" src="./main-scene.ts"></script>
+    </body>
 </html>
