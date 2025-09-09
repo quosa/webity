@@ -4,7 +4,7 @@ import { Renderer } from './renderer.js';
 import { InputManager } from './input.js';
 import { BufferManager } from './buffer-manager.js';
 import { AssetConfig, EngineError, PerformanceStats } from './types.js';
-import { createCubeStackScene } from '../gameobject-example.js';
+import { createCubeStackScene } from './gameobject-scenes.js';
 import { Scene } from './scene.js';
 import {
     createSingleBallScene,
