@@ -41,6 +41,7 @@ const MeshType = enum(u8) {
 const Entity = struct {
     position: core.Vec3,
     velocity: core.Vec3,
+    rotation: core.Vec3, // Rotation in radians (x, y, z)
     radius: f32,
     mesh_type: MeshType,
     active: bool,
@@ -61,6 +62,7 @@ fn initEntities() void {
         entity.* = Entity{
             .position = .{ .x = 0, .y = 0, .z = 0 },
             .velocity = .{ .x = 0, .y = 0, .z = 0 },
+            .rotation = .{ .x = 0, .y = 0, .z = 0 },
             .radius = 0.5,
             .mesh_type = MeshType.SPHERE,
             .active = false,
@@ -80,6 +82,7 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
     entities[index] = Entity{
         .position = .{ .x = x, .y = y, .z = z },
         .velocity = .{ .x = 0, .y = 0, .z = 0 },
+        .rotation = .{ .x = 0, .y = 0, .z = 0 },
         .radius = radius,
         .mesh_type = mesh_type,
         .active = true,
@@ -416,8 +419,13 @@ pub export fn set_input(key: u8, pressed: bool) void {
 }
 
 pub export fn generate_sphere_mesh(segments: u32) void {
-    // Generate sphere mesh into main vertex buffer (consolidate to main buffer)
-    const radius = 0.5; // Standard radius for mesh generation
+    // Generate sphere mesh with default radius (for backwards compatibility)
+    const radius = 0.5; // Default radius
+    vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
+}
+
+pub export fn generate_sphere_mesh_with_radius(segments: u32, radius: f32) void {
+    // Generate sphere mesh with specified radius
     vertex_count = core.generateWireframeSphere(&vertex_buffer, segments, radius);
 }
 
@@ -653,6 +661,11 @@ pub export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {
 pub export fn set_entity_velocity(index: u32, x: f32, y: f32, z: f32) void {
     if (index >= MAX_ENTITIES or !entities[index].active) return;
     entities[index].velocity = .{ .x = x, .y = y, .z = z };
+}
+
+pub export fn set_entity_rotation(index: u32, x: f32, y: f32, z: f32) void {
+    if (index >= MAX_ENTITIES or !entities[index].active) return;
+    entities[index].rotation = .{ .x = x, .y = y, .z = z };
 }
 
 pub export fn get_entity_mesh_type(index: u32) u8 {
