@@ -1,0 +1,58 @@
+# Buffer Management: WASM+WebGPU vs. TypeScript Renderer (v2)
+
+## WASM+WebGPU (game_engine.zig)
+
+### CPU (WASM/Zig) Buffers
+- **vertex_buffer**: `[10000]f32` - unified buffer for all mesh vertices.
+- **grid_buffer**: `[5000]f32` - grid floor vertices.
+- **entities**: `[MAX_ENTITIES]Entity` - up to 10,000 entities, each with position, velocity, rotation, radius, mesh_type, active.
+- **uniforms**: `core.Uniforms` - model, view, projection matrices.
+- **Bookkeeping**: Mesh offsets, entity counts, mesh types tracked in WASM.
+
+### Shared Buffers (WASM <-> JS)
+- JS/TS accesses WASM memory via buffer offsets (e.g., `get_vertex_buffer_offset()`).
+- Mesh/entity data is packed in WASM memory and read by TS for GPU upload.
+
+### GPU Buffers (WebGPU)
+- **Vertex Buffer**: Typically a single large buffer for all mesh vertices.
+- **Index Buffer**: (If used) single large buffer for all mesh indices.
+- **Instance Buffer**: Packed per frame from WASM entity data (transform, mesh_type, etc.).
+- **Uniform Buffer**: Camera/view/projection matrix.
+
+### Data Flow
+- Mesh data uploaded to GPU only when new meshes are generated.
+- Instance buffer updated every frame from WASM entity array.
+- Draw calls use mesh offsets/lengths from WASM bookkeeping.
+
+---
+
+## TypeScript Renderer (v2)
+
+### CPU (TS) Buffers
+- **MeshData**: Per mesh type, vertices and indices as `Float32Array`/`Uint16Array`.
+- **Entities**: Array of entity objects (id, meshId, transform, color).
+
+### GPU Buffers (WebGPU)
+- **Vertex Buffer**: One per mesh type.
+- **Index Buffer**: One per mesh type.
+- **Instance Buffer**: One per mesh group per frame (transform + color).
+- **Uniform Buffer**: View-projection matrix.
+
+### Data Flow
+- Mesh buffers uploaded once per mesh registration.
+- Instance buffer generated per frame from TS entity data.
+- Draw calls per mesh type, using shared mesh buffers and per-frame instance buffer.
+
+---
+
+## Scalability (100+ meshes, up to 100 instances each)
+- **WASM**: Handles up to 10,000 entities, mesh offsets, and unified vertex buffer.
+- **TS/v2**: Handles 100+ mesh buffers, 100+ instance buffers per frame.
+- **GPU**: Vertex/index buffers only updated on new mesh; instance buffer updated per frame.
+
+---
+
+## Compatibility
+- Both approaches use similar GPU buffer models.
+- Main difference: WASM uses unified buffers and handles all simulation/bookkeeping; TS/v2 uses per-mesh buffers and manages entities in JS.
+- Mating the two: Standardize buffer layouts, let TS upload data from WASM
