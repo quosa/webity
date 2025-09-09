@@ -2,6 +2,9 @@
 game_core_test*
 game_engine_test*
 
+# browser test results
+browser-tests/test-results/.last-run.json
+
 # Dependencies
 node_modules/
 npm-debug.log*

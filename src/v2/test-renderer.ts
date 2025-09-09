@@ -42,20 +42,20 @@ window.runRenderingTest = async function (testName: string) {
             id: 'triangle1',
             meshId: 'triangle',
             transform: makeTransformMatrix([0, 0, 5], 1),
-            color: [1, 0, 0, 1] // Red
+            color: [1, 0, 0, 1], // Red
         } as Entity);
     } else if (testName === 'cubes') {
         renderer.addEntity({
             id: 'cube1',
             meshId: 'cube',
             transform: makeTransformMatrix([-3, 0, 5], 1),
-            color: [0, 1, 0, 1] // Green
+            color: [0, 1, 0, 1], // Green
         } as Entity);
         renderer.addEntity({
             id: 'cube2',
             meshId: 'cube',
             transform: makeTransformMatrix([3, 0, 5], 1),
-            color: [0, 0, 1, 1] // Blue
+            color: [0, 0, 1, 1], // Blue
         } as Entity);
     }
 
@@ -65,7 +65,7 @@ window.runRenderingTest = async function (testName: string) {
         meshId: 'floor',
         transform: makeTransformMatrix([0, -2, 0], 1),
         color: [0.2, 0.8, 0.2, 1],
-        renderMode: 'line'
+        renderMode: 'line',
     } as Entity);
 
     renderer.render();

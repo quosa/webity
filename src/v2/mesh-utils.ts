@@ -7,34 +7,34 @@ import { MeshData } from './webgpu.renderer';
  * @param size Length of cube edge (default 1)
  */
 export function createCubeMesh(size: number = 1): MeshData {
-  const s = size / 2;
-  const vertices = new Float32Array([
-    // Back face (z = -s)
+    const s = size / 2;
+    const vertices = new Float32Array([
+        // Back face (z = -s)
     -s, -s, -s,
     s, -s, -s,
     s,  s, -s,
     -s,  s, -s,
-    // Front face (z = s)
+        // Front face (z = s)
     -s, -s,  s,
     s, -s,  s,
     s,  s,  s,
     -s,  s,  s,
-  ]);
-  const indices = new Uint16Array([
-    // Back face
-    0, 1, 2, 2, 3, 0,
-    // Front face
-    4, 6, 5, 6, 4, 7,
-    // Left face
-    4, 0, 3, 3, 7, 4,
-    // Right face
-    1, 5, 6, 6, 2, 1,
-    // Bottom face
-    4, 5, 1, 1, 0, 4,
-    // Top face
-    3, 2, 6, 6, 7, 3,
-  ]);
-  return { vertices, indices };
+    ]);
+    const indices = new Uint16Array([
+        // Back face
+        0, 1, 2, 2, 3, 0,
+        // Front face
+        4, 6, 5, 6, 4, 7,
+        // Left face
+        4, 0, 3, 3, 7, 4,
+        // Right face
+        1, 5, 6, 6, 2, 1,
+        // Bottom face
+        4, 5, 1, 1, 0, 4,
+        // Top face
+        3, 2, 6, 6, 7, 3,
+    ]);
+    return { vertices, indices };
 }
 
 /**
@@ -46,8 +46,8 @@ export function createTriangleMesh(): MeshData {
     -1.5, -1.5, 0.0,
     1.5, -1.5, 0.0,
   ]);
-  const indices = new Uint16Array([0, 1, 2]);
-  return { vertices, indices };
+    const indices = new Uint16Array([0, 1, 2]);
+    return { vertices, indices };
 }
 
 /**
@@ -56,27 +56,27 @@ export function createTriangleMesh(): MeshData {
  * @param divisions Number of grid lines per axis
  */
 export function createGridMesh(size: number = 10, divisions: number = 10): MeshData {
-  const half = size / 2;
-  const step = size / divisions;
-  const vertices: number[] = [];
-  const indices: number[] = [];
-  let idx = 0;
-  // Lines parallel to X (vary Z)
-  for (let i = 0; i <= divisions; i++) {
-    const z = -half + i * step;
-    vertices.push(-half, 0, z, half, 0, z);
-    indices.push(idx, idx + 1);
-    idx += 2;
-  }
-  // Lines parallel to Z (vary X)
-  for (let i = 0; i <= divisions; i++) {
-    const x = -half + i * step;
-    vertices.push(x, 0, -half, x, 0, half);
-    indices.push(idx, idx + 1);
-    idx += 2;
-  }
-  return {
-    vertices: new Float32Array(vertices),
-    indices: new Uint16Array(indices)
-  };
+    const half = size / 2;
+    const step = size / divisions;
+    const vertices: number[] = [];
+    const indices: number[] = [];
+    let idx = 0;
+    // Lines parallel to X (vary Z)
+    for (let i = 0; i <= divisions; i++) {
+        const z = -half + i * step;
+        vertices.push(-half, 0, z, half, 0, z);
+        indices.push(idx, idx + 1);
+        idx += 2;
+    }
+    // Lines parallel to Z (vary X)
+    for (let i = 0; i <= divisions; i++) {
+        const x = -half + i * step;
+        vertices.push(x, 0, -half, x, 0, half);
+        indices.push(idx, idx + 1);
+        idx += 2;
+    }
+    return {
+        vertices: new Float32Array(vertices),
+        indices: new Uint16Array(indices),
+    };
 }

@@ -15,7 +15,7 @@
   },
   "globals": {
     "GPUDevice": "readonly",
-    "GPUBuffer": "readonly", 
+    "GPUBuffer": "readonly",
     "GPUBufferUsage": "readonly",
     "GPUShaderStage": "readonly",
     "GPUCanvasContext": "readonly",
@@ -36,7 +36,7 @@
     "no-implied-eval": "error",
     "semi": ["error", "always"],
     "quotes": ["error", "single"],
-    "indent": ["error", 2]
+    "indent": ["error", 4]
   },
   "ignorePatterns": [
     "dist/",
