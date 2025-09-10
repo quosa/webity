@@ -1,0 +1,45 @@
+/* eslint-disable */
+// @ts-nocheck
+
+
+Exported Classes
+WebGPURendererV2 (webgpu.renderer.ts)
+MegaBufferManager (buffer-manager.ts)
+MeshRegistry (mesh-registry.ts)
+Entity (entities.ts)
+EntityManager (entities.ts)
+Camera (camera.ts)
+    OrthographicCamera (camera.ts)
+    BaseCamera (abstract, camera.ts)
+
+Exported Functions
+createCubeMesh(size?: number): MeshData (mesh-utils.ts)
+createTriangleMesh(): MeshData (mesh-utils.ts)
+createGridMesh(size?: number, divisions?: number): MeshData (mesh-utils.ts)
+
+multiplyMat4(a: Float32Array, b: Float32Array): Float32Array (math-utils.ts)
+makeTransformMatrix(...) (math-utils.ts)
+createPerspectiveMatrix(...) (math-utils.ts)
+createOrthographicMatrix(...) (math-utils.ts)
+createLookAtMatrix(...) (math-utils.ts)
+
+Exported Types/Interfaces
+TextureData (webgpu.renderer.ts)
+MeshData (mesh-registry.ts)
+MeshAllocation (mesh-registry.ts)
+Transform (entities.ts)
+EntityData (entities.ts)
+
+Public Methods (WebGPURendererV2)
+init(canvas: HTMLCanvasElement): Promise<void>
+setViewProjectionMatrix(matrix: Float32Array): void
+registerMesh(meshId: string, mesh: MeshData): void
+registerTexture(textureId: string, texture: TextureData): void
+addEntity(entityData: EntityData): void
+updateEntity(id: string, updates: Partial<EntityData>): void
+removeEntity(id: string): void
+clearEntities(): void
+render(): void
+dispose(): void
+
+No exported variables/constants were found.

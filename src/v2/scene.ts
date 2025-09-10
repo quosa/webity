@@ -14,7 +14,7 @@ async function main() {
         }
 
         // Create camera
-        const camera = new Camera([0, 0, -10], [0, 0, 0]); // Camera behind scene, looking forward
+        const camera = new Camera([0, 0, -10], [0, 0, 0]);
 
         const renderer = new WebGPURendererV2();
         await renderer.init(canvas);
