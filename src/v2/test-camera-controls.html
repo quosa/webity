@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Controls Test - Phase 4 Validation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        canvas {
+            border: 2px solid #333;
+            background-color: #000;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .control-panel {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+        
+        .control-panel h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:active {
+            background-color: #3d8b40;
+        }
+        
+        .movement-btn {
+            background-color: #2196F3;
+        }
+        
+        .movement-btn:hover {
+            background-color: #1976D2;
+        }
+        
+        .camera-btn {
+            background-color: #ff9800;
+        }
+        
+        .camera-btn:hover {
+            background-color: #e68900;
+        }
+        
+        .info {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .info h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .camera-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .info-item {
+            background-color: #1e1e1e;
+            padding: 8px;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        .info-label {
+            color: #888;
+            font-size: 10px;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        #error-message {
+            display: none;
+            background-color: #f44336;
+            color: white;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .instructions {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Camera Controls Test - Phase 4</h1>
+            <p>Interactive validation of enhanced camera system with movement and control methods</p>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+        </div>
+        
+        <div id="error-message"></div>
+        
+        <div class="controls">
+            <div class="control-panel">
+                <h3>🎮 Camera Movement</h3>
+                <div class="button-group">
+                    <button class="movement-btn" onclick="moveCamera(0, 1, 0)">⬆️ Forward</button>
+                    <button class="movement-btn" onclick="moveCamera(0, -1, 0)">⬇️ Backward</button>
+                </div>
+                <div class="button-group">
+                    <button class="movement-btn" onclick="moveCamera(-1, 0, 0)">⬅️ Left</button>
+                    <button class="movement-btn" onclick="moveCamera(1, 0, 0)">➡️ Right</button>
+                </div>
+                <div class="button-group">
+                    <button class="movement-btn" onclick="moveCamera(0, 0, 1)">🔺 Up</button>
+                    <button class="movement-btn" onclick="moveCamera(0, 0, -1)">🔻 Down</button>
+                </div>
+            </div>
+            
+            <div class="control-panel">
+                <h3>🌀 Camera Rotation</h3>
+                <div class="button-group">
+                    <button class="camera-btn" onclick="orbitCamera(-0.1, 0)">↪️ Orbit Left</button>
+                    <button class="camera-btn" onclick="orbitCamera(0.1, 0)">↩️ Orbit Right</button>
+                </div>
+                <div class="button-group">
+                    <button class="camera-btn" onclick="orbitCamera(0, 0.1)">🔼 Orbit Up</button>
+                    <button class="camera-btn" onclick="orbitCamera(0, -0.1)">🔽 Orbit Down</button>
+                </div>
+                <div class="button-group">
+                    <button class="camera-btn" onclick="resetCamera()">🏠 Reset Camera</button>
+                    <button class="camera-btn" onclick="lookAtCenter()">🎯 Look at Center</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="info">
+            <h3>📊 Camera Information</h3>
+            <div class="camera-info">
+                <div class="info-item">
+                    <div class="info-label">Position</div>
+                    <div class="info-value" id="camera-position">(0, 0, 0)</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Target</div>
+                    <div class="info-value" id="camera-target">(0, 0, 0)</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Distance</div>
+                    <div class="info-value" id="camera-distance">0.0</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>📝 Instructions</h3>
+            <ul>
+                <li><strong>Movement buttons:</strong> Move the camera in world space</li>
+                <li><strong>Orbit buttons:</strong> Rotate around the center point</li>
+                <li><strong>Reset Camera:</strong> Return to default position</li>
+                <li><strong>Look at Center:</strong> Point camera toward scene center</li>
+            </ul>
+            <p><strong>Expected behavior:</strong> Camera should move smoothly and update the scene view in real-time. All objects should remain visible and properly lit from different angles.</p>
+        </div>
+    </div>
+
+    <script type="module" src="./test-camera-controls.ts"></script>
+    <script>
+        let scene = null;
+        
+        // Camera control functions (called from buttons)
+        function moveCamera(right, forward, up) {
+            if (scene && scene.camera) {
+                scene.camera.move(forward, right, up);
+                updateCameraInfo();
+                console.log(`📷 Moved camera: forward=${forward}, right=${right}, up=${up}`);
+            }
+        }
+        
+        function orbitCamera(yaw, pitch) {
+            if (scene && scene.camera) {
+                scene.camera.orbitAroundTarget(yaw, pitch);
+                updateCameraInfo();
+                console.log(`🌀 Orbited camera: yaw=${yaw.toFixed(2)}, pitch=${pitch.toFixed(2)}`);
+            }
+        }
+        
+        function resetCamera() {
+            if (scene && scene.camera) {
+                scene.camera.setPosition([0, 5, -10]);
+                scene.camera.setTarget([0, 0, 0]);
+                updateCameraInfo();
+                console.log('🏠 Reset camera to default position');
+            }
+        }
+        
+        function lookAtCenter() {
+            if (scene && scene.camera) {
+                scene.camera.lookAt([0, 0, 0]);
+                updateCameraInfo();
+                console.log('🎯 Camera looking at center');
+            }
+        }
+        
+        function updateCameraInfo() {
+            if (scene && scene.camera) {
+                const position = scene.camera.getPosition();
+                const target = scene.camera.getTarget();
+                
+                document.getElementById('camera-position').textContent = 
+                    `(${position[0].toFixed(1)}, ${position[1].toFixed(1)}, ${position[2].toFixed(1)})`;
+                document.getElementById('camera-target').textContent = 
+                    `(${target[0].toFixed(1)}, ${target[1].toFixed(1)}, ${target[2].toFixed(1)})`;
+                    
+                const distance = Math.sqrt(
+                    Math.pow(position[0] - target[0], 2) + 
+                    Math.pow(position[1] - target[1], 2) + 
+                    Math.pow(position[2] - target[2], 2)
+                );
+                document.getElementById('camera-distance').textContent = distance.toFixed(1);
+            }
+        }
+        
+        // Update camera info periodically
+        setInterval(updateCameraInfo, 100);
+        
+        // Wait for module to load and initialize scene
+        setTimeout(() => {
+            if (window.cameraTestScene) {
+                scene = window.cameraTestScene;
+                updateCameraInfo();
+                console.log('🎥 Camera test scene loaded successfully');
+            }
+        }, 2000);
+        
+        // Export functions for module access
+        window.moveCamera = moveCamera;
+        window.orbitCamera = orbitCamera;
+        window.resetCamera = resetCamera;
+        window.lookAtCenter = lookAtCenter;
+        window.updateCameraInfo = updateCameraInfo;
+    </script>
+</body>
+</html>

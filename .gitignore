@@ -4,6 +4,8 @@ game_engine_test*
 
 # browser test results
 browser-tests/test-results/.last-run.json
+# debug output screenshots from browser tests
+browser-tests/output-*.png
 
 # MCP screenshots
 .playwright-mcp/*.png

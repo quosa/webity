@@ -689,11 +689,16 @@ function createControllableScene(): Scene {
 - [x] **Architecture**: Entity lifecycle management with automatic physics registration/cleanup
 - [x] **Deliverable**: Physics entities synchronized with rendering + interactive testing interface
 
-### Phase 4: Camera Integration (Week 3)
-- [ ] Port v2 Camera class to new system
-- [ ] Update uniform buffer management for camera matrices
-- [ ] Remove hardcoded camera transforms from WASM
-- [ ] **Deliverable**: Dynamic camera control in new architecture
+### Phase 4: Camera Integration (Week 3) ✅ COMPLETED
+- [x] Port v2 Camera class to new system (enhanced BaseCamera with movement methods)
+- [x] Update uniform buffer management for camera matrices (integrated with WebGPU renderer)
+- [x] Remove hardcoded camera transforms from WASM (dynamic camera control implemented)
+- [x] **Additional**: Created CameraComponent for GameObject-based camera management
+- [x] **Additional**: Built interactive camera controls demo (test-camera-controls.html/.ts)
+- [x] **Additional**: Added comprehensive camera movement methods (move, orbitAroundTarget, lookAt)
+- [x] **Validation**: All browser tests (5/5) and physics tests (47/47) still passing
+- [x] **Architecture**: Camera system properly integrated with Scene and GameObject lifecycle
+- [x] **Deliverable**: Dynamic camera control in new architecture + interactive testing interface
 
 ### Phase 5: Complete Integration (Week 4)
 - [ ] Full scene lifecycle (awake → start → update → render)  

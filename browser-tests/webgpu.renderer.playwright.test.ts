@@ -9,7 +9,7 @@ import { PNG } from 'pngjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // List your test cases (scene names)
-const TEST_CASES = ['triangle', 'cubes'];
+const TEST_CASES = ['triangle', 'cubes', 'camera-controls'];
 
 test('webgl test page loads', async ({ page }) => {
     await page.goto('https://get.webgl.org/');

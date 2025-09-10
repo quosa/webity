@@ -1,6 +1,9 @@
 import { WebGPURendererV2 } from './webgpu.renderer';
 import { Camera } from './camera';
 import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
+import { Scene } from './scene-system';
+import { GameObject } from './gameobject';
+import { CameraComponent, MeshRenderer } from './components';
 
 declare global {
     // eslint-disable-next-line no-unused-vars
@@ -73,6 +76,10 @@ window.runRenderingTest = async function (testName: string) {
             color: [0, 0, 1, 1], // Blue
             renderMode: 'triangles'
         });
+    } else if (testName === 'camera-controls') {
+        // Camera controls validation using new v2 Scene system
+        await setupCameraControlsTest(canvas, renderer);
+        return; // Skip the standard render() call
     }
 
     // Always add the floor
@@ -90,3 +97,78 @@ window.runRenderingTest = async function (testName: string) {
 
     renderer.render();
 };
+
+// Camera controls test setup function
+async function setupCameraControlsTest(canvas: HTMLCanvasElement, renderer: WebGPURendererV2): Promise<void> {
+    console.log('🎥 Setting up camera controls validation test...');
+    
+    // Register meshes for the scene
+    renderer.registerMesh('cube', createCubeMesh(1));
+    renderer.registerMesh('grid', createGridMesh(20, 20));
+    
+    // Create Scene with v2 system
+    const scene = new Scene();
+    await scene.init(renderer);
+    
+    // Create floor grid
+    const floor = GameObject.createGrid('test-floor', { x: 0, y: -3, z: 0 });
+    scene.addGameObject(floor);
+    
+    // Create reference cubes for spatial awareness
+    const positions = [
+        { x: -5, y: 2, z: -5, color: { x: 0, y: 1, z: 0, w: 1 } }, // Green
+        { x: 5, y: 2, z: -5, color: { x: 0, y: 0, z: 1, w: 1 } },  // Blue
+        { x: -5, y: 2, z: 5, color: { x: 1, y: 1, z: 0, w: 1 } },  // Yellow
+        { x: 5, y: 2, z: 5, color: { x: 1, y: 0, z: 1, w: 1 } }    // Magenta
+    ];
+    
+    positions.forEach((pos, index) => {
+        const cube = new GameObject(`ref-cube-${index}`, `RefCube${index}`);
+        cube.transform.setPosition(pos.x, pos.y, pos.z);
+        cube.transform.setScale(0.7, 0.7, 0.7);
+        
+        const meshRenderer = new MeshRenderer('cube', 'default', 'triangles', pos.color);
+        cube.addComponent(meshRenderer);
+        scene.addGameObject(cube);
+    });
+    
+    // Add center reference cube (red, rotating)
+    const centerCube = new GameObject('center-cube', 'CenterReference');
+    centerCube.transform.setPosition(0, 0, 0);
+    const centerMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
+    centerCube.addComponent(centerMeshRenderer);
+    scene.addGameObject(centerCube);
+    
+    // Create camera GameObject with CameraComponent
+    const cameraGameObject = new GameObject('test-camera', 'TestCamera');
+    cameraGameObject.transform.setPosition(-8, 3, -8);
+    
+    const cameraComponent = new CameraComponent(true, Math.PI / 3, 0.1, 100);
+    cameraGameObject.addComponent(cameraComponent);
+    scene.addGameObject(cameraGameObject);
+    
+    // Set initial camera position for good view of the scene
+    scene.camera.setPosition([0, 8, -15]);
+    scene.camera.lookAt([0, 1, 0]);
+    
+    // Test camera movement to demonstrate functionality
+    scene.camera.move(1, 0, 0); // Move forward slightly
+    scene.camera.orbitAroundTarget(0.1, 0); // Slight orbit for dynamic view
+    
+    // Start the scene
+    scene.start();
+    
+    // Render the scene multiple times to ensure stable output
+    for (let i = 0; i < 5; i++) {
+        scene.update(1/60);
+    }
+    
+    console.log('✅ Camera controls test setup complete');
+    console.log(`📊 Scene entities: ${scene.getEntityCount()}`);
+    
+    // Export for debugging (if needed)
+    if (typeof window !== 'undefined') {
+        (window as any).cameraControlsScene = scene;
+        (window as any).cameraComponent = cameraComponent;
+    }
+}

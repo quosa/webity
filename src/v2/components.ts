@@ -310,3 +310,128 @@ export class RigidBody extends Component {
         this.physicsBridge = bridge;
     }
 }
+
+// Camera component - allows GameObjects to act as cameras
+export class CameraComponent extends Component {
+    public isPerspective: boolean;
+    public fov: number; // For perspective cameras (in radians)
+    public near: number;
+    public far: number;
+    
+    // For orthographic cameras
+    public left: number;
+    public right: number;
+    public top: number;
+    public bottom: number;
+    
+    // Camera control settings
+    public isActiveCamera: boolean; // Whether this camera is currently active
+    
+    constructor(
+        isPerspective: boolean = true,
+        fov: number = Math.PI / 4, // 45 degrees
+        near: number = 0.1,
+        far: number = 100,
+        orthoBounds: { left: number; right: number; top: number; bottom: number } = { left: -5, right: 5, top: 5, bottom: -5 }
+    ) {
+        super();
+        this.isPerspective = isPerspective;
+        this.fov = fov;
+        this.near = near;
+        this.far = far;
+        this.left = orthoBounds.left;
+        this.right = orthoBounds.right;
+        this.top = orthoBounds.top;
+        this.bottom = orthoBounds.bottom;
+        this.isActiveCamera = false;
+    }
+    
+    // Set this camera as the active scene camera
+    setAsActiveCamera(): void {
+        this.isActiveCamera = true;
+        
+        // Update scene camera if this GameObject is in a scene
+        if (this.gameObject?.scene) {
+            this.updateSceneCamera();
+        }
+    }
+    
+    // Update the scene's camera with this component's settings
+    private updateSceneCamera(): void {
+        if (!this.gameObject?.scene) return;
+        
+        const sceneCamera = this.gameObject.scene.camera;
+        const transform = this.gameObject.transform;
+        
+        // Update camera position based on GameObject transform
+        sceneCamera.setPosition([transform.position.x, transform.position.y, transform.position.z]);
+        
+        // Calculate target based on GameObject's forward direction
+        // For now, assume looking down negative Z axis (standard forward direction)
+        const forward = this.getForwardDirection();
+        const target: [number, number, number] = [
+            transform.position.x + forward[0],
+            transform.position.y + forward[1], 
+            transform.position.z + forward[2]
+        ];
+        sceneCamera.setTarget(target);
+        
+        // Update projection settings
+        sceneCamera.setClipPlanes(this.near, this.far);
+        
+        if (this.isPerspective && 'setFov' in sceneCamera) {
+            (sceneCamera as any).setFov(this.fov);
+        }
+        
+        console.log(`📷 Updated scene camera from GameObject "${this.gameObject.name}"`);
+    }
+    
+    // Calculate forward direction based on GameObject rotation
+    private getForwardDirection(): [number, number, number] {
+        if (!this.gameObject) return [0, 0, -1];
+        
+        const transform = this.gameObject.transform;
+        
+        // Convert rotation from degrees to radians
+        const pitch = transform.rotation.x * Math.PI / 180;
+        const yaw = transform.rotation.y * Math.PI / 180;
+        // Roll not used for forward vector calculation
+        // const roll = transform.rotation.z * Math.PI / 180;
+        
+        // Calculate forward vector from rotation
+        // Standard forward is negative Z, modified by pitch and yaw
+        const forward: [number, number, number] = [
+            Math.sin(yaw) * Math.cos(pitch),
+            -Math.sin(pitch),
+            -Math.cos(yaw) * Math.cos(pitch)
+        ];
+        
+        return forward;
+    }
+    
+    override update(_deltaTime: number): void {
+        // Update scene camera if this is the active camera
+        if (this.isActiveCamera) {
+            this.updateSceneCamera();
+        }
+    }
+    
+    // Set perspective projection settings
+    setPerspective(fov: number, near: number = this.near, far: number = this.far): void {
+        this.isPerspective = true;
+        this.fov = fov;
+        this.near = near;
+        this.far = far;
+    }
+    
+    // Set orthographic projection settings
+    setOrthographic(left: number, right: number, top: number, bottom: number, near: number = this.near, far: number = this.far): void {
+        this.isPerspective = false;
+        this.left = left;
+        this.right = right;
+        this.top = top;
+        this.bottom = bottom;
+        this.near = near;
+        this.far = far;
+    }
+}
