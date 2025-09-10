@@ -46,6 +46,11 @@ export abstract class BaseCamera {
         this.far = far;
     }
 
+    // Getters for accessing protected properties
+    getPosition(): [number, number, number] {
+        return [...this.position] as [number, number, number];
+    }
+
     abstract getProjectionMatrix(_aspect: number): Float32Array;
 
     getViewMatrix(): Float32Array {

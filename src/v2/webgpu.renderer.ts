@@ -431,6 +431,25 @@ export class WebGPURendererV2 {
         return instanceBuffer;
     }
 
+    // Scene system integration methods
+    updateEntities(entities: EntityData[]): void {
+        // Clear existing entities and add new ones
+        this.clearEntities();
+        for (const entity of entities) {
+            this.addEntity(entity);
+        }
+    }
+
+    updateCamera(viewProjectionMatrix: Float32Array): void {
+        this.setViewProjectionMatrix(viewProjectionMatrix);
+    }
+
+    getAspectRatio(): number {
+        // Get aspect ratio from canvas
+        const canvas = this.context.canvas;
+        return canvas.width / canvas.height;
+    }
+
     dispose(): void {
         this.bufferManager?.dispose();
         this.depthTexture?.destroy();
