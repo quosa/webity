@@ -199,4 +199,20 @@ export class WasmPhysicsBridge {
     public hasWasmModule(): boolean {
         return !!this.wasm;
     }
+
+    // Phase 5: Get WASM memory for zero-copy buffer access
+    public getWasmMemory(): ArrayBuffer | null {
+        if (!this.wasm?.memory) {
+            return null;
+        }
+        return this.wasm.memory.buffer;
+    }
+
+    // Phase 5: Get offset for entity transforms in WASM memory
+    public getEntityTransformsOffset(): number | undefined {
+        if (!this.wasm) {
+            return undefined;
+        }
+        return this.wasm.get_entity_transforms_offset();
+    }
 }

@@ -99,7 +99,7 @@ window.runRenderingTest = async function (testName: string) {
 };
 
 // Camera controls test setup function
-async function setupCameraControlsTest(canvas: HTMLCanvasElement, renderer: WebGPURendererV2): Promise<void> {
+async function setupCameraControlsTest(_canvas: HTMLCanvasElement, renderer: WebGPURendererV2): Promise<void> {
     console.log('🎥 Setting up camera controls validation test...');
     
     // Register meshes for the scene

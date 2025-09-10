@@ -431,6 +431,99 @@ export class WebGPURendererV2 {
         return instanceBuffer;
     }
 
+    // Phase 5: Zero-copy WASM buffer integration
+    mapInstanceDataFromWasm(wasmMemory: ArrayBuffer, offset: number, count: number): void {
+        console.log(`🚀 WebGPURendererV2: Mapping ${count} instances from WASM buffer`);
+
+        // Validate WASM buffer access
+        if (!this.bufferManager.validateWasmBufferAccess(wasmMemory, offset, count)) {
+            console.error('❌ WASM buffer validation failed');
+            return;
+        }
+
+        // Map WASM data directly to GPU instance buffer
+        this.bufferManager.mapInstanceDataFromWasm(wasmMemory, offset, count);
+    }
+
+    // Phase 5: Zero-copy rendering with WASM instance buffer
+    renderFromWasmBuffers(): void {
+        const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
+        const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
+        const instanceBuffer = this.bufferManager.getInstanceBuffer();
+
+        if (!sharedVertexBuffer || !sharedIndexBuffer || !instanceBuffer) {
+            console.warn('⚠️ Required buffers not available for WASM rendering');
+            return;
+        }
+
+        console.log('🚀 Phase 5: Zero-copy rendering from WASM instance buffer');
+
+        // Begin render pass with depth testing
+        const commandEncoder = this.device.createCommandEncoder();
+        const renderPass = commandEncoder.beginRenderPass({
+            colorAttachments: [
+                {
+                    view: this.context.getCurrentTexture().createView(),
+                    clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 },
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                },
+            ],
+            depthStencilAttachment: {
+                view: this.depthTexture.createView(),
+                depthClearValue: 1.0,
+                depthLoadOp: 'clear',
+                depthStoreOp: 'store',
+            },
+        });
+
+        // For Phase 5, render all instances using the WASM instance buffer
+        // TODO: Get instance count from WASM physics bridge
+        const instanceCount = this.bufferManager.getWasmEntityCount();
+        if (instanceCount > 0) {
+            this.renderWasmInstances(renderPass, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer);
+        }
+
+        // End render pass and submit
+        renderPass.end();
+        const commandBuffer = commandEncoder.finish();
+        this.device.queue.submit([commandBuffer]);
+    }
+
+    private renderWasmInstances(
+        renderPass: any, // GPURenderPassEncoder
+        instanceCount: number,
+        sharedVertexBuffer: GPUBuffer,
+        sharedIndexBuffer: GPUBuffer,
+        instanceBuffer: GPUBuffer
+    ): void {
+        renderPass.setPipeline(this.renderPipeline); // Use triangle pipeline for now
+        renderPass.setBindGroup(0, this.bindGroup);
+
+        // For Phase 5, we'll render all instances as the same mesh (e.g., cubes)
+        // In future phases, WASM could provide per-instance mesh IDs
+        const defaultMeshId = 'cube'; // Assume cube mesh is registered
+        const allocation = this.bufferManager.getMeshAllocation(defaultMeshId);
+
+        if (!allocation) {
+            console.warn(`⚠️ Default mesh '${defaultMeshId}' not found for WASM rendering`);
+            return;
+        }
+
+        // Use shared vertex and index buffers with WASM instance buffer
+        const vertexOffset = this.bufferManager.getVertexBufferOffset(defaultMeshId);
+        renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
+        renderPass.setVertexBuffer(1, instanceBuffer); // Use WASM instance buffer directly
+
+        const indexOffset = this.bufferManager.getIndexBufferOffset(defaultMeshId);
+        renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
+
+        // Render all WASM instances in one draw call
+        renderPass.drawIndexed(allocation.indexCount, instanceCount);
+
+        console.log(`✅ Rendered ${instanceCount} WASM instances using zero-copy buffers`);
+    }
+
     // Scene system integration methods
     updateEntities(entities: EntityData[]): void {
         // Clear existing entities and add new ones
