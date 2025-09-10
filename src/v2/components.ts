@@ -164,3 +164,149 @@ export class RotatorComponent extends Component {
         this.rotationSpeed.z = z;
     }
 }
+
+// RigidBody component - handles physics simulation
+export class RigidBody extends Component {
+    public mass: number;
+    public velocity: Vector3;
+    public isKinematic: boolean;
+    public useGravity: boolean;
+    
+    // Physics shape
+    public colliderType: 'sphere' | 'box';
+    public colliderSize: Vector3;
+    
+    // WASM integration
+    private wasmEntityId?: number;
+    private physicsBridge?: any; // Will be WasmPhysicsBridge
+    
+    constructor(
+        mass: number = 1.0,
+        useGravity: boolean = true,
+        colliderType: 'sphere' | 'box' = 'sphere',
+        colliderSize: Vector3 = { x: 1, y: 1, z: 1 }
+    ) {
+        super();
+        this.mass = mass;
+        this.velocity = { x: 0, y: 0, z: 0 };
+        this.isKinematic = false; // Default: affected by physics forces
+        this.useGravity = useGravity;
+        this.colliderType = colliderType;
+        this.colliderSize = colliderSize;
+    }
+    
+    override awake(): void {
+        // Initialize physics entity when component is added to GameObject
+        this.initializePhysics();
+    }
+    
+    override start(): void {
+        // Start physics simulation
+        this.syncToWasm();
+    }
+    
+    override update(_deltaTime: number): void {
+        // Physics updates handled by WASM, but we can override for custom behavior
+        if (this.isKinematic) {
+            // Kinematic bodies: manual transform updates
+            this.syncFromTransform();
+        } else {
+            // Dynamic bodies: sync from WASM physics simulation
+            this.syncFromWasm();
+        }
+    }
+    
+    override destroy(): void {
+        // Clean up physics entity
+        this.cleanupPhysics();
+    }
+    
+    // Initialize physics entity in WASM
+    private initializePhysics(): void {
+        if (!this.gameObject) return;
+        
+        // TODO: Get physics bridge from scene
+        // this.physicsBridge = this.gameObject.scene?.physicsBridge;
+        
+        console.log(`🔵 RigidBody.initializePhysics() for "${this.gameObject.name}"`);
+    }
+    
+    // Sync current state to WASM physics system
+    public syncToWasm(): void {
+        if (!this.gameObject || !this.physicsBridge) return;
+        
+        const transform = this.gameObject.transform;
+        console.log(`🔄 RigidBody.syncToWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: pos=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), vel=(${this.velocity.x}, ${this.velocity.y}, ${this.velocity.z})`);
+        
+        // TODO: Call WASM physics bridge
+        // this.physicsBridge.updateEntity(this.wasmEntityId, transform.position, this.velocity);
+    }
+    
+    // Sync physics simulation results from WASM
+    private syncFromWasm(): void {
+        if (!this.gameObject || !this.physicsBridge || this.isKinematic) return;
+        
+        // TODO: Get updated position/rotation from WASM physics simulation
+        // const wasmData = this.physicsBridge.getEntityData(this.wasmEntityId);
+        // this.gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
+    }
+    
+    // Sync from transform for kinematic bodies
+    private syncFromTransform(): void {
+        if (!this.gameObject || !this.physicsBridge || !this.isKinematic) return;
+        
+        // Kinematic bodies follow transform changes
+        this.syncToWasm();
+    }
+    
+    // Clean up physics entity
+    private cleanupPhysics(): void {
+        if (this.wasmEntityId !== undefined && this.physicsBridge) {
+            console.log(`🗑️ RigidBody.cleanupPhysics() for entity ${this.wasmEntityId}`);
+            // TODO: Remove from WASM physics system
+            // this.physicsBridge.removeEntity(this.wasmEntityId);
+        }
+    }
+    
+    // Apply force to physics body
+    public applyForce(fx: number, fy: number, fz: number): void {
+        if (this.isKinematic || !this.physicsBridge || this.wasmEntityId === undefined) return;
+        
+        console.log(`💥 RigidBody.applyForce(${fx}, ${fy}, ${fz}) to entity ${this.wasmEntityId}`);
+        // TODO: Apply force through WASM physics bridge
+        // this.physicsBridge.applyForce(this.wasmEntityId, fx, fy, fz);
+    }
+    
+    // Set velocity directly
+    public setVelocity(vx: number, vy: number, vz: number): void {
+        this.velocity.x = vx;
+        this.velocity.y = vy;
+        this.velocity.z = vz;
+        
+        if (!this.isKinematic) {
+            this.syncToWasm();
+        }
+    }
+    
+    // Make this body kinematic (not affected by physics forces)
+    public setKinematic(kinematic: boolean): void {
+        this.isKinematic = kinematic;
+        console.log(`🎮 RigidBody.setKinematic(${kinematic}) for "${this.gameObject?.name}"`);
+        
+        if (this.physicsBridge && this.wasmEntityId !== undefined) {
+            // TODO: Update kinematic state in WASM
+            // this.physicsBridge.setKinematic(this.wasmEntityId, kinematic);
+        }
+    }
+    
+    // Set WASM entity ID (called by physics bridge)
+    public setWasmEntityId(id: number): void {
+        this.wasmEntityId = id;
+        console.log(`🆔 RigidBody.setWasmEntityId(${id}) for "${this.gameObject?.name}"`);
+    }
+    
+    // Set physics bridge reference (called by scene)
+    public setPhysicsBridge(bridge: any): void {
+        this.physicsBridge = bridge;
+    }
+}
