@@ -47,9 +47,7 @@ export class WebGPURendererV2 {
     private entityManager = new EntityManager();
     private bufferManager!: MegaBufferManager;
 
-    // Depth testing feature flag - set to false to easily disable
-    private static readonly ENABLE_DEPTH_TESTING = true;
-    private depthTexture?: any; // GPUTexture
+    private depthTexture!: any; // GPUTexture
 
     async init(canvas: HTMLCanvasElement): Promise<void> {
         // Setup device/context
@@ -67,10 +65,8 @@ export class WebGPURendererV2 {
         // Initialize buffer manager
         this.bufferManager = new MegaBufferManager(this.device);
 
-        // Create depth texture if depth testing is enabled
-        if (WebGPURendererV2.ENABLE_DEPTH_TESTING) {
-            this.createDepthTexture(canvas);
-        }
+        // Create depth texture
+        this.createDepthTexture(canvas);
 
         // Create shaders and pipeline
         this.createRenderPipeline();
@@ -226,13 +222,11 @@ export class WebGPURendererV2 {
                 frontFace: 'ccw', // counter-clockwise front face - i.e. right-handed system
                 // stripIndexFormat: undefined,
             },
-            ...(WebGPURendererV2.ENABLE_DEPTH_TESTING && {
-                depthStencil: {
-                    format: 'depth24plus',
-                    depthWriteEnabled: true,
-                    depthCompare: 'less',
-                }
-            }),
+            depthStencil: {
+                format: 'depth24plus',
+                depthWriteEnabled: true,
+                depthCompare: 'less',
+            },
         });
 
         // Create line render pipeline (reuse shaders, change topology)
@@ -252,13 +246,11 @@ export class WebGPURendererV2 {
                 topology: 'line-list',
                 cullMode: 'back',
             },
-            ...(WebGPURendererV2.ENABLE_DEPTH_TESTING && {
-                depthStencil: {
-                    format: 'depth24plus',
-                    depthWriteEnabled: true,
-                    depthCompare: 'less',
-                }
-            }),
+            depthStencil: {
+                format: 'depth24plus',
+                depthWriteEnabled: true,
+                depthCompare: 'less',
+            },
         });
 
         // TODO: consider a point pipeline for point clouds
@@ -329,9 +321,9 @@ export class WebGPURendererV2 {
         // Group entities by render mode first, then by mesh
         const triangleEntities = this.entityManager.getByRenderMode('triangles');
         const lineEntities = this.entityManager.getByRenderMode('lines');
-        // Begin render pass (with optional depth testing)
+        // Begin render pass with depth testing
         const commandEncoder = this.device.createCommandEncoder();
-        const renderPassDescriptor: any = {
+        const renderPass = commandEncoder.beginRenderPass({
             colorAttachments: [
                 {
                     view: this.context.getCurrentTexture().createView(),
@@ -340,19 +332,13 @@ export class WebGPURendererV2 {
                     storeOp: 'store',
                 },
             ],
-        };
-
-        // Add depth attachment if depth testing is enabled
-        if (WebGPURendererV2.ENABLE_DEPTH_TESTING && this.depthTexture) {
-            renderPassDescriptor.depthStencilAttachment = {
+            depthStencilAttachment: {
                 view: this.depthTexture.createView(),
                 depthClearValue: 1.0,
                 depthLoadOp: 'clear',
                 depthStoreOp: 'store',
-            };
-        }
-
-        const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
+            },
+        });
 
         // Render triangles
         if (triangleEntities.length > 0) {
