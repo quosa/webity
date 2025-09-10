@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 // WebGPU and DOM mocks moved to tests/utils/dom-mocks.ts
 // Import and use setupWebGPUTestEnvironment() in tests that need WebGPU
 
@@ -6,13 +8,14 @@
 
 // Smart fetch mock that loads real WASM from disk
 Object.defineProperty(globalThis, 'fetch', {
-    value: jest.fn().mockImplementation(async (url: string) => {
+    value: jest.fn().mockImplementation(async (url: unknown) => {
+        const urlString = String(url);
         // If it's a WASM file, load real bytes from disk
-        if (url.endsWith('.wasm') || url.includes('game_engine')) {
+        if (urlString.endsWith('.wasm') || urlString.includes('game_engine')) {
             try {
                 const fs = await import('fs');
                 const path = await import('path');
-                const wasmPath = path.resolve(__dirname, '../public/game_engine.wasm');
+                const wasmPath = path.resolve(process.cwd(), 'public/game_engine.wasm');
                 const wasmBuffer = fs.readFileSync(wasmPath);
 
                 return {

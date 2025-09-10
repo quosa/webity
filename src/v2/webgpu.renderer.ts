@@ -3,7 +3,7 @@
 /// <reference types="@webgpu/types" />
 
 import { EntityManager, EntityData, Entity } from './entities';
-import { MegaBufferManager } from './buffer-manager';
+import { GPUBufferManager } from './gpu-buffer-manager';
 import { MeshData } from './mesh-registry';
 
 // Types
@@ -45,7 +45,7 @@ export class WebGPURendererV2 {
 
     // New architecture components
     private entityManager = new EntityManager();
-    private bufferManager!: MegaBufferManager;
+    private bufferManager!: GPUBufferManager;
 
     private depthTexture!: any; // GPUTexture
 
@@ -63,7 +63,7 @@ export class WebGPURendererV2 {
         });
 
         // Initialize buffer manager
-        this.bufferManager = new MegaBufferManager(this.device);
+        this.bufferManager = new GPUBufferManager(this.device);
 
         // Create depth texture
         this.createDepthTexture(canvas);
@@ -292,6 +292,8 @@ export class WebGPURendererV2 {
 
     registerMesh(meshId: string, mesh: MeshData): void {
         this.bufferManager.registerMesh(meshId, mesh);
+        // Build buffers immediately after registering (for now - can be optimized later)
+        this.bufferManager.buildSharedBuffers();
     }
 
     registerTexture(textureId: string, texture: TextureData): void {
@@ -315,8 +317,9 @@ export class WebGPURendererV2 {
     }
 
     render(): void {
-        const megaBuffer = this.bufferManager.getMegaBuffer();
-        if (!megaBuffer) return;
+        const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
+        const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
+        if (!sharedVertexBuffer || !sharedIndexBuffer) return;
 
         // Group entities by render mode first, then by mesh
         const triangleEntities = this.entityManager.getByRenderMode('triangles');
@@ -342,12 +345,12 @@ export class WebGPURendererV2 {
 
         // Render triangles
         if (triangleEntities.length > 0) {
-            this.renderEntities(renderPass, this.renderPipeline, triangleEntities, megaBuffer);
+            this.renderEntities(renderPass, this.renderPipeline, triangleEntities, sharedVertexBuffer, sharedIndexBuffer);
         }
 
         // Render lines
         if (lineEntities.length > 0) {
-            this.renderEntities(renderPass, this.linePipeline, lineEntities, megaBuffer);
+            this.renderEntities(renderPass, this.linePipeline, lineEntities, sharedVertexBuffer, sharedIndexBuffer);
         }
 
         // End render pass and submit
@@ -361,7 +364,8 @@ export class WebGPURendererV2 {
         renderPass: any, // GPURenderPassEncoder
         pipeline: GPURenderPipeline,
         entities: Entity[],
-        megaBuffer: GPUBuffer
+        sharedVertexBuffer: GPUBuffer,
+        sharedIndexBuffer: GPUBuffer
     ): void {
         renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, this.bindGroup);
@@ -388,13 +392,13 @@ export class WebGPURendererV2 {
             // Create instance buffer for this group
             const instanceBuffer = this.createInstanceBuffer(instances);
 
-            // Use mega buffer for all meshes
+            // Use shared vertex and index buffers with offsets
             const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
-            renderPass.setVertexBuffer(0, megaBuffer, vertexOffset);
+            renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
             renderPass.setVertexBuffer(1, instanceBuffer);
 
             const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
-            renderPass.setIndexBuffer(megaBuffer, 'uint16', indexOffset);
+            renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
             renderPass.drawIndexed(allocation.indexCount, instances.length);
         }
     }

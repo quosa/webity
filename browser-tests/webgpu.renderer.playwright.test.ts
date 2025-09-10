@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
+
+// ES module equivalent of __dirname
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // List your test cases (scene names)
 const TEST_CASES = ['triangle', 'cubes'];

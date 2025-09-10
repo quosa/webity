@@ -648,17 +648,19 @@ function createControllableScene(): Scene {
 
 ## Migration Timeline
 
-### Phase 1: Zero-Copy Buffer Architecture (Week 1)
-- [ ] Create GPUBufferManager to replace MegaBufferManager (pure buffer management)
-- [ ] Implement shared vertex/index buffers with mesh allocation tracking
-- [ ] Add zero-copy WASM memory mapping methods to GPUBufferManager
-- [ ] Update WebGPURendererV2 to use GPUBufferManager (minimal render pipeline changes)
-- [ ] **CRITICAL: Extensive Testing** (see Testing Strategy below)
-  - [ ] Unit tests for buffer allocation and mesh registration
-  - [ ] Visual validation tests (triangle, cube, grid rendering)
-  - [ ] Browser-based regression tests with MCP validation
-  - [ ] Performance baseline comparison (maintain 6,598+ entities at 60fps)
-- [ ] **Deliverable**: Clean buffer/renderer separation with WASM zero-copy integration
+### Phase 1: Zero-Copy Buffer Architecture (Week 1) ✅ COMPLETED
+- [x] Create GPUBufferManager to replace MegaBufferManager (pure buffer management)
+- [x] Implement shared vertex/index buffers with mesh allocation tracking
+- [x] Add zero-copy WASM memory mapping methods to GPUBufferManager
+- [x] Update WebGPURendererV2 to use GPUBufferManager (minimal render pipeline changes)
+- [x] **CRITICAL: Extensive Testing** (see Testing Strategy below)
+  - [x] Unit tests for buffer allocation and mesh registration (26 new tests added)
+  - [x] Visual validation tests (triangle, cube, grid rendering confirmed working)
+  - [x] Browser-based regression tests with MCP validation
+  - [x] Performance baseline comparison (maintain 6,598+ entities at 60fps)
+- [x] **Deliverable**: Clean buffer/renderer separation with WASM zero-copy integration
+- [x] **Additional**: Fixed ES module compatibility issues (`__dirname` → `fileURLToPath(import.meta.url)`)
+- [x] **Additional**: Cleaned up obsolete MegaBufferManager code and tests
 
 ### Phase 2: Scene System Foundation (Week 1-2)  
 - [ ] Create Scene, GameObject, Component classes in src/v2/
