@@ -220,8 +220,8 @@ test "backward compatibility functions" {
     try testing.expectApproxEqAbs(@as(f32, 2.0), engine.get_ball_position_y(), 0.001);
     try testing.expectApproxEqAbs(@as(f32, 3.0), engine.get_ball_position_z(), 0.001);
     
-    // Test legacy force application
-    engine.apply_force(5.0, 10.0, 15.0);
+    // Test legacy force application (apply to entity 0)
+    engine.apply_force(0, 5.0, 10.0, 15.0);
     
     // Run update to apply force
     engine.update(0.016);
