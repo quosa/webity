@@ -57,6 +57,37 @@ pub fn dot(a: Vec3, b: Vec3) f32 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+// Create rotation matrix from Euler angles (in radians)
+pub fn createRotationMatrix(rotation: Vec3) Mat4 {
+    const cos_x = @cos(rotation.x);
+    const sin_x = @sin(rotation.x);
+    const cos_y = @cos(rotation.y);
+    const sin_y = @sin(rotation.y);
+    const cos_z = @cos(rotation.z);
+    const sin_z = @sin(rotation.z);
+    
+    // Combined XYZ rotation matrix (column-major)
+    return Mat4{ .data = .{
+        // Column 0
+        cos_y * cos_z,
+        cos_y * sin_z,
+        -sin_y,
+        0,
+        // Column 1
+        sin_x * sin_y * cos_z - cos_x * sin_z,
+        sin_x * sin_y * sin_z + cos_x * cos_z,
+        sin_x * cos_y,
+        0,
+        // Column 2
+        cos_x * sin_y * cos_z + sin_x * sin_z,
+        cos_x * sin_y * sin_z - sin_x * cos_z,
+        cos_x * cos_y,
+        0,
+        // Column 3
+        0, 0, 0, 1,
+    } };
+}
+
 // Matrix functions
 pub fn createLookAt(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
     const f = normalize(Vec3{
