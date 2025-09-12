@@ -5,7 +5,7 @@ import { Scene } from './scene-system';
 import { GameObject } from './gameobject';
 import { MeshRenderer } from './components';
 import { WebGPURendererV2 } from './webgpu.renderer';
-import { createTriangleMesh, createCubeMesh, createSphereMesh, createPyramidMesh } from './mesh-utils';
+import { createTriangleMesh, createCubeMesh, createSphereMesh, createPyramidMesh, createGridMesh } from './mesh-utils';
 
 async function createPyramidTestScene(): Promise<Scene> {
     const scene = new Scene();
@@ -52,7 +52,17 @@ async function createPyramidTestScene(): Promise<Scene> {
     scene.addGameObject(pyramid);
     console.log('🔺 Added purple pyramid at (6, 0, 0)');
     
-    console.log(`✅ Pyramid test scene created with ${scene.getEntityCount()} entities (4 different mesh types)`);
+    // 5. Grid Floor (Gray lines) - Ground plane
+    const gridFloor = new GameObject('grid-floor', 'Grid Floor');
+    gridFloor.transform.setPosition(0, -2, 0); // Below other objects
+    gridFloor.transform.setScale(1, 1, 1);
+    
+    const gridMeshRenderer = new MeshRenderer('grid', 'default', 'lines', { x: 0.3, y: 0.3, z: 0.3, w: 1 }); // Gray
+    gridFloor.addComponent(gridMeshRenderer);
+    scene.addGameObject(gridFloor);
+    console.log('⬜ Added gray grid floor at (0, -2, 0)');
+    
+    console.log(`✅ Pyramid test scene created with ${scene.getEntityCount()} entities (4 triangle meshes + 1 line mesh)`);
     return scene;
 }
 
@@ -74,7 +84,8 @@ async function testPyramidSceneRendering() {
         renderer.registerMesh('cube', createCubeMesh(1));
         renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
         renderer.registerMesh('pyramid', createPyramidMesh(1, 1.5)); // Taller pyramid for visibility
-        console.log('📦 Registered triangle, cube, sphere, and pyramid meshes');
+        renderer.registerMesh('grid', createGridMesh(16, 16)); // 16x16 grid floor
+        console.log('📦 Registered triangle, cube, sphere, pyramid, and grid meshes');
         
         // Create pyramid test scene
         const scene = await createPyramidTestScene();

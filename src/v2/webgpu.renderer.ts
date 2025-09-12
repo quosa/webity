@@ -445,8 +445,41 @@ export class WebGPURendererV2 {
         this.bufferManager.mapInstanceDataFromWasm(wasmMemory, offset, count);
     }
 
-    // Phase 5: Zero-copy rendering with WASM instance buffer
-    renderFromWasmBuffers(): void {
+    // Helper: Read mesh ID for specific entity from WASM metadata
+    private getEntityMeshId(wasmMemory: ArrayBuffer, metadataOffset: number, metadataSize: number, entityIndex: number): number {
+        // EntityMetadata structure in WASM (from game_engine.zig) - Zig struct alignment:
+        // id: u32 (offset 0, 4 bytes)
+        // mesh_id: u32 (offset 4, 4 bytes) ⭐ CORRECTED!
+        // material_id: u32 (offset 8, 4 bytes)
+        // active: bool (offset 12, 1 byte)
+        // physics_enabled: bool (offset 13, 1 byte)
+        // rendering_enabled: bool (offset 14, 1 byte)
+        // transform_dirty: bool (offset 15, 1 byte)
+        
+        const entityMetadataOffset = metadataOffset + (entityIndex * metadataSize);
+        const meshIdOffset = entityMetadataOffset + 4; // mesh_id is at offset 4 bytes (FIXED!)
+        
+        // Read mesh_id as u32 from WASM memory
+        const meshIdView = new Uint32Array(wasmMemory, meshIdOffset, 1);
+        return meshIdView[0]!;
+    }
+
+    // Helper: Convert WASM mesh ID to TypeScript mesh string
+    private wasmMeshIdToString(wasmMeshId: number): string {
+        switch (wasmMeshId) {
+        case 0: return 'triangle'; // WASM triangle mesh ID
+        case 1: return 'cube';     // WASM cube mesh ID
+        case 2: return 'sphere';   // WASM sphere mesh ID
+        case 3: return 'pyramid';  // WASM pyramid mesh ID
+        case 4: return 'grid';     // WASM grid mesh ID (lines)
+        default: 
+            console.warn(`⚠️ Unknown WASM mesh ID: ${wasmMeshId}, defaulting to triangle`);
+            return 'triangle';
+        }
+    }
+
+    // Phase 6: 2-pass WASM rendering (triangles + lines) - eliminates TypeScript rendering
+    renderFromWasmBuffers(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }): void {
         const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
         const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
         const instanceBuffer = this.bufferManager.getInstanceBuffer();
@@ -456,7 +489,7 @@ export class WebGPURendererV2 {
             return;
         }
 
-        console.log('🚀 Phase 5: Zero-copy rendering from WASM instance buffer');
+        console.log('🚀 Phase 6: 2-pass WASM rendering (triangles + lines)');
 
         // Begin render pass with depth testing
         const commandEncoder = this.device.createCommandEncoder();
@@ -477,14 +510,19 @@ export class WebGPURendererV2 {
             },
         });
 
-        // For Phase 5, render all instances using the WASM instance buffer
         const instanceCount = this.bufferManager.getWasmEntityCount();
         
         // 🔒 CRITICAL: Validate instance count before rendering to prevent ghost triangles
         const maxSafeInstanceCount = 1000; // Reasonable upper bound
         if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount) {
-            console.log(`🎯 Rendering ${instanceCount} validated WASM instances`);
-            this.renderWasmInstances(renderPass, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer);
+            console.log(`🎯 2-pass rendering of ${instanceCount} validated WASM instances`);
+            
+            // PASS 1: Render triangle entities (sphere, cube, pyramid) 
+            this.renderWasmInstancesByMode(renderPass, this.renderPipeline, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer, 'triangles', wasmModule);
+            
+            // PASS 2: Render line entities (grid)
+            this.renderWasmInstancesByMode(renderPass, this.linePipeline, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer, 'lines', wasmModule);
+            
         } else if (instanceCount > maxSafeInstanceCount) {
             console.error(`❌ Suspicious instance count ${instanceCount} - refusing to render (possible buffer corruption)`);
         }
@@ -495,81 +533,117 @@ export class WebGPURendererV2 {
         this.device.queue.submit([commandBuffer]);
     }
 
-    private renderWasmInstances(
+    // New method: Render WASM instances filtered by render mode (triangles or lines)
+    private renderWasmInstancesByMode(
         renderPass: any, // GPURenderPassEncoder
+        pipeline: GPURenderPipeline,
         instanceCount: number,
         sharedVertexBuffer: GPUBuffer,
         sharedIndexBuffer: GPUBuffer,
-        instanceBuffer: GPUBuffer
+        instanceBuffer: GPUBuffer,
+        renderMode: 'triangles' | 'lines',
+        wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }
     ): void {
-        renderPass.setPipeline(this.renderPipeline); // Triangle pipeline for physics entities
+        console.log(`🎯 Pass: ${renderMode} rendering`);
+        
+        renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, this.bindGroup);
 
-        // WASM mesh ID to TypeScript mesh name mapping (for future use)
-        // const wasmMeshIdToString: { [key: number]: string } = {
-        //     0: 'sphere',  // WASM SPHERE = 0
-        //     1: 'cube',    // WASM CUBE = 1
-        //     2: 'triangle' // We'll add TRIANGLE = 2 to WASM later
-        // };
-
-        // For now, since the scene has triangle/cube/sphere entities but WASM only has SPHERE/CUBE,
-        // we need to map based on the actual registered meshes and entity setup
-        // TODO: Fix WASM bridge to properly set mesh_id based on MeshRenderer.meshId
-        
-        // Since we can't read individual mesh IDs from WASM yet (they're set by collider type, not MeshRenderer),
-        // we'll use a temporary approach: render triangle/cube/sphere in sequence with correct counts
-        
-        // Get all registered mesh types that have allocations
-        const availableMeshes = ['triangle', 'cube', 'sphere', 'pyramid'].filter(meshId => 
-            this.bufferManager.getMeshAllocation(meshId) !== undefined
-        );
-        
-        if (availableMeshes.length === 0) {
-            console.warn('⚠️ No registered meshes found for WASM rendering');
+        if (!wasmModule?.memory) {
+            console.error(`❌ WASM module not available for ${renderMode} pass`);
             return;
         }
 
-        console.log(`🔍 Multi-mesh rendering: Found ${availableMeshes.length} registered meshes: ${availableMeshes.join(', ')}`);
+        // Get WASM metadata info
+        const metadataOffset = wasmModule.get_entity_metadata_offset();
+        let metadataSize: number;
+        if (typeof wasmModule.get_entity_metadata_size === 'function') {
+            metadataSize = wasmModule.get_entity_metadata_size();
+        } else {
+            metadataSize = 16; // Fallback size
+        }
         
-        // For the mixed scene, we know there are 3 entities (triangle, cube, sphere) 
-        // We'll render them with the correct meshes in order
-        const entitiesPerMesh = Math.floor(instanceCount / availableMeshes.length);
-        const remainder = instanceCount % availableMeshes.length;
+        const wasmMemory = wasmModule.memory.buffer;
+
+        // Determine which mesh types belong to this render mode
+        const triangleMeshes = ['triangle', 'cube', 'sphere', 'pyramid']; // Triangle meshes
+        const lineMeshes = ['grid']; // Line meshes
+        const targetMeshes = renderMode === 'triangles' ? triangleMeshes : lineMeshes;
+
+        console.log(`🔍 ${renderMode} pass: Looking for meshes: ${targetMeshes.join(', ')}`);
         
-        let currentInstanceOffset = 0;
-        
-        for (let i = 0; i < availableMeshes.length; i++) {
-            const meshId = availableMeshes[i]!;
-            const allocation = this.bufferManager.getMeshAllocation(meshId)!;
-            
-            // Calculate how many instances to render for this mesh
-            let instancesToRender = entitiesPerMesh;
-            if (i < remainder) instancesToRender += 1;
-            
-            if (instancesToRender === 0) continue;
-            
-            console.log(`🎯 Rendering ${instancesToRender} instances with '${meshId}' mesh (instances ${currentInstanceOffset} to ${currentInstanceOffset + instancesToRender - 1})`);
-            
-            // Set vertex buffer with mesh-specific offset
+        // Debug: Check what mesh IDs WASM actually stored using the debug function
+        if (renderMode === 'triangles' && 'debug_get_entity_mesh_id' in wasmModule) { // Only log once per render cycle
+            console.log('🔧 WASM Debug - Stored mesh IDs:');
+            for (let i = 0; i < instanceCount; i++) {
+                const storedMeshId = (wasmModule as any).debug_get_entity_mesh_id(i);
+                console.log(`  Entity ${i}: stored mesh_id=${storedMeshId}`);
+            }
+        }
+
+        // Group entities by mesh type, filtering for this render mode
+        const meshGroups = new Map<string, number[]>(); // meshId -> array of entity indices
+
+        for (let entityIndex = 0; entityIndex < instanceCount; entityIndex++) {
+            try {
+                const wasmMeshId = this.getEntityMeshId(wasmMemory, metadataOffset, metadataSize, entityIndex);
+                const meshId = this.wasmMeshIdToString(wasmMeshId);
+                console.log(`🔍 Entity ${entityIndex}: WASM mesh_id=${wasmMeshId} → "${meshId}"`);
+                
+                // Filter: only include meshes for this render mode
+                if (!targetMeshes.includes(meshId)) {
+                    continue; // Skip entities that don't match this render mode
+                }
+                
+                if (!meshGroups.has(meshId)) {
+                    meshGroups.set(meshId, []);
+                }
+                meshGroups.get(meshId)!.push(entityIndex);
+            } catch (error) {
+                console.error(`❌ Error reading mesh_id for entity ${entityIndex} in ${renderMode} pass:`, error);
+            }
+        }
+
+        const totalEntitiesForMode = Array.from(meshGroups.values()).reduce((sum, indices) => sum + indices.length, 0);
+        console.log(`🎯 ${renderMode} pass: Found ${totalEntitiesForMode} entities in ${meshGroups.size} mesh groups`);
+
+        // Render each mesh group for this mode
+        for (const [meshId, entityIndices] of meshGroups) {
+            if (entityIndices.length === 0) continue;
+
+            const allocation = this.bufferManager.getMeshAllocation(meshId);
+            if (!allocation) {
+                console.warn(`⚠️ Mesh allocation not found for '${meshId}' - skipping ${entityIndices.length} entities`);
+                continue;
+            }
+
+            console.log(`🎯 ${renderMode} pass: Rendering ${entityIndices.length} '${meshId}' entities`);
+
+            // Set vertex buffer with mesh-specific offset  
             const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
             renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
-            
-            // Set instance buffer with offset to current group
-            const instanceOffset = currentInstanceOffset * 20 * 4; // 20 floats * 4 bytes per instance
-            renderPass.setVertexBuffer(1, instanceBuffer, instanceOffset);
-            
+
             // Set index buffer with mesh-specific offset
             const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
             renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
-            
-            // Render this mesh group
-            renderPass.drawIndexed(allocation.indexCount, instancesToRender);
-            
-            currentInstanceOffset += instancesToRender;
+
+            // Render entities in batches
+            const batchSize = 100;
+            for (let i = 0; i < entityIndices.length; i += batchSize) {
+                const batchIndices = entityIndices.slice(i, Math.min(i + batchSize, entityIndices.length));
+                
+                const firstEntityIndex = batchIndices[0]!;
+                const instanceOffset = firstEntityIndex * 20 * 4; // 20 floats * 4 bytes per instance
+                renderPass.setVertexBuffer(1, instanceBuffer, instanceOffset);
+                
+                renderPass.drawIndexed(allocation.indexCount, batchIndices.length);
+            }
         }
 
-        console.log(`✅ Rendered ${instanceCount} WASM instances using ${availableMeshes.length} different meshes via zero-copy buffers`);
+        console.log(`✅ ${renderMode} pass complete: ${totalEntitiesForMode} entities rendered`);
     }
+
+
 
     // Scene system integration methods
     updateEntities(entities: EntityData[]): void {

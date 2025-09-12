@@ -46,8 +46,10 @@ describe('WasmPhysicsBridge', () => {
                 set_entity_velocity: jest.fn(),
                 get_entity_transforms_offset: jest.fn(() => 0),
                 get_entity_metadata_offset: jest.fn(() => 0),
+                get_entity_metadata_size: jest.fn(() => 16),
                 get_entity_size: jest.fn(() => 80),
                 get_entity_stride: jest.fn(() => 80),
+                debug_get_entity_mesh_id: jest.fn(() => 0),
                 memory: {
                     buffer: new ArrayBuffer(1024),
                     grow: jest.fn((_delta: number) => 0)

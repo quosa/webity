@@ -8,8 +8,8 @@ export class WasmLoader {
         try {
             console.log('🔄 Loading WASM physics module...');
 
-            // Load the compiled WASM module
-            const wasmResponse = await fetch('/game_engine.wasm');
+            // Load the compiled WASM module (with cache-busting timestamp)
+            const wasmResponse = await fetch(`/game_engine.wasm?t=${Date.now()}`);
             if (!wasmResponse.ok) {
                 throw new Error(`Failed to fetch WASM module: ${wasmResponse.status}`);
             }
@@ -25,8 +25,8 @@ export class WasmLoader {
             const requiredFunctions = [
                 'init', 'update', 'add_entity', 'remove_entity', 'get_entity_count',
                 'apply_force', 'set_entity_position', 'set_entity_velocity',
-                'get_entity_transforms_offset', 'get_entity_metadata_offset',
-                'get_entity_size', 'get_entity_stride'
+                'get_entity_transforms_offset', 'get_entity_metadata_offset', 'get_entity_metadata_size',
+                'get_entity_size', 'get_entity_stride', 'debug_get_entity_mesh_id'
             ];
 
             for (const func of requiredFunctions) {
@@ -62,10 +62,12 @@ export class WasmLoader {
                 // Zero-copy buffer access
                 get_entity_transforms_offset: wasmExports.get_entity_transforms_offset,
                 get_entity_metadata_offset: wasmExports.get_entity_metadata_offset,
+                get_entity_metadata_size: wasmExports.get_entity_metadata_size,
 
                 // Debug functions
                 get_entity_size: wasmExports.get_entity_size,
                 get_entity_stride: wasmExports.get_entity_stride,
+                debug_get_entity_mesh_id: wasmExports.debug_get_entity_mesh_id,
 
                 // Memory access
                 memory: wasmExports.memory

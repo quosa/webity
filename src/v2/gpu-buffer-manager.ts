@@ -185,6 +185,11 @@ export class GPUBufferManager {
         return allocation ? allocation.indexOffset : 0;
     }
 
+    getRegisteredMeshIds(): string[] {
+        const allocations = this.meshRegistry.getAllocations();
+        return Array.from(allocations.keys());
+    }
+
     // Clean up GPU resources
     dispose(): void {
         this.sharedVertexBuffer?.destroy();

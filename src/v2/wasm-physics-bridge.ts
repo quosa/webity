@@ -23,10 +23,12 @@ export interface WasmPhysicsInterface {
     // Zero-copy buffer access for GPU (future integration)
     get_entity_transforms_offset(): number;
     get_entity_metadata_offset(): number;
+    get_entity_metadata_size(): number;
     
     // Debug functions for buffer layout investigation
     get_entity_size(): number;
     get_entity_stride(): number;
+    debug_get_entity_mesh_id(_index: number): number;
 
     // WASM memory
     memory: WebAssembly.Memory;
@@ -71,13 +73,13 @@ export class WasmPhysicsBridge {
     }
 
     // Add GameObject to WASM for transform calculation (zero-copy rendering)
-    // 🔧 FILTER: Only triangle-renderable entities for WASM zero-copy
+    // 🔧 REGISTER ALL: All entities with MeshRenderer go to WASM (triangles AND lines)
     public addEntity(gameObject: GameObject): number | null {
         if (!this.isInitialized) {
             return null;
         }
 
-        // Send ALL entities with MeshRenderer to WASM (no filtering)
+        // All entities with MeshRenderer go to WASM (both triangles and lines)
         const meshRenderer = gameObject.getMeshRenderer();
         if (!meshRenderer) {
             console.log(`⚪ Skipping GameObject "${gameObject.name}" - no MeshRenderer`);
@@ -106,11 +108,11 @@ export class WasmPhysicsBridge {
             // Default values for non-physics entities
             const mass = rigidBody ? rigidBody.mass : 0;
             const isKinematic = rigidBody ? rigidBody.isKinematic : true; // Static by default
-            const meshId = rigidBody ? this.getMeshIdForCollider(rigidBody.colliderType) : 0; // Default to sphere
-
-            // Get color from MeshRenderer if it exists
+            
+            // Get color and mesh ID from MeshRenderer if it exists
             const meshRenderer = gameObject.getMeshRenderer();
             const color = meshRenderer ? meshRenderer.color : { x: 1, y: 1, z: 1, w: 1 }; // Default white
+            const meshId = meshRenderer ? this.getMeshIdFromString(meshRenderer.meshId) : 0; // Use actual mesh ID from renderer
             
             this.wasm.add_entity(
                 wasmEntityId,
@@ -230,12 +232,18 @@ export class WasmPhysicsBridge {
         }
     }
 
-    // Convert collider type to mesh ID for WASM
-    private getMeshIdForCollider(colliderType: 'sphere' | 'box'): number {
-        switch (colliderType) {
-        case 'sphere': return 0; // WASM sphere mesh ID
-        case 'box': return 1;    // WASM box mesh ID
-        default: return 0;
+
+    // Convert TypeScript mesh string to WASM mesh ID
+    private getMeshIdFromString(meshIdString: string): number {
+        switch (meshIdString) {
+        case 'triangle': return 0; // WASM triangle mesh ID
+        case 'cube': return 1;     // WASM cube mesh ID  
+        case 'sphere': return 2;   // WASM sphere mesh ID
+        case 'pyramid': return 3;  // WASM pyramid mesh ID
+        case 'grid': return 4;     // WASM grid mesh ID (lines)
+        default: 
+            console.warn(`⚠️ Unknown mesh ID "${meshIdString}", defaulting to triangle`);
+            return 0;
         }
     }
 
@@ -254,6 +262,11 @@ export class WasmPhysicsBridge {
     // Check if WASM module is available
     public hasWasmModule(): boolean {
         return !!this.wasm;
+    }
+
+    // Get WASM module for direct access (needed for mesh ID reading)
+    public getWasmModule(): WasmPhysicsInterface | undefined {
+        return this.wasm;
     }
 
     // Phase 5: Get WASM memory for zero-copy buffer access

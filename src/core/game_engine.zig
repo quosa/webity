@@ -34,8 +34,11 @@ const MAX_ENTITIES: u32 = 10000; // MAXIMUM POWER! 🚀💥
 
 // Mesh type enumeration
 const MeshType = enum(u8) {
-    SPHERE = 0,
+    TRIANGLE = 0,
     CUBE = 1,
+    SPHERE = 2,
+    PYRAMID = 3,
+    GRID = 4,
 };
 
 // =============================================================================
@@ -131,7 +134,7 @@ fn initEntities() void {
             .physics_enabled = false,
             .rendering_enabled = false,
             .transform_dirty = false,
-            .mesh_id = 0, // Default to sphere
+            .mesh_id = 0, // Default to triangle
             .material_id = 0, // Default material
         };
     }
@@ -357,8 +360,11 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
             x, y, z, 1.0,        // Column 3: [tx, ty, tz, 1]
         },
         .color = switch (mesh_type) {
-            .SPHERE => [_]f32{ 1.0, 0.8, 0.2, 1.0 }, // Golden yellow for spheres
-            .CUBE => [_]f32{ 0.2, 0.8, 1.0, 1.0 },   // Sky blue for cubes
+            .TRIANGLE => [_]f32{ 1.0, 0.0, 0.0, 1.0 }, // Red for triangles
+            .CUBE => [_]f32{ 0.2, 0.8, 1.0, 1.0 },     // Sky blue for cubes
+            .SPHERE => [_]f32{ 1.0, 0.8, 0.2, 1.0 },   // Golden yellow for spheres
+            .PYRAMID => [_]f32{ 1.0, 0.0, 1.0, 1.0 },  // Purple for pyramids
+            .GRID => [_]f32{ 0.3, 0.3, 0.3, 1.0 },     // Gray for grid
         },
     };
     
@@ -745,9 +751,12 @@ pub export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
 // Enhanced entity spawning with mesh type support for Phase 7
 pub export fn spawn_entity_with_mesh(x: f32, y: f32, z: f32, radius: f32, mesh_type_id: u8) u32 {
     const mesh_type: MeshType = switch (mesh_type_id) {
-        0 => MeshType.SPHERE,
+        0 => MeshType.TRIANGLE,
         1 => MeshType.CUBE,
-        else => MeshType.SPHERE, // Default to sphere for invalid types
+        2 => MeshType.SPHERE,
+        3 => MeshType.PYRAMID,
+        4 => MeshType.GRID,
+        else => MeshType.TRIANGLE, // Default to triangle for invalid types
     };
     return spawnEntityInternal(x, y, z, radius, mesh_type);
 }
@@ -843,6 +852,9 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
     
     const index = entity_count;
     
+    // Debug: Log what we're receiving
+    // Note: Can't use console.log from WASM, but this will be stored for later validation
+    
     // Initialize physics component
     physics_components[index] = PhysicsComponent{
         .position = .{ .x = x, .y = y, .z = z },
@@ -935,8 +947,12 @@ pub export fn get_entity_transforms_offset() u32 {
 }
 
 pub export fn get_entity_metadata_offset() u32 {
-    // Return byte offset to the mesh_id field of first entity metadata
-    return @intCast(@intFromPtr(&entity_metadata[0].mesh_id));
+    // Return byte offset to the start of entity metadata array
+    return @intCast(@intFromPtr(&entity_metadata[0]));
+}
+
+pub export fn get_entity_metadata_size() u32 {
+    return @sizeOf(EntityMetadata);
 }
 
 // Debug functions for buffer layout investigation
@@ -949,6 +965,12 @@ pub export fn get_entity_stride() u32 {
     const ptr0 = @intFromPtr(&rendering_components[0]);
     const ptr1 = @intFromPtr(&rendering_components[1]);
     return @intCast(ptr1 - ptr0);
+}
+
+// Debug function to get mesh_id for specific entity
+pub export fn debug_get_entity_mesh_id(index: u32) u32 {
+    if (index >= entity_count) return 999; // Invalid index marker
+    return entity_metadata[index].mesh_id;
 }
 
 // =============================================================================

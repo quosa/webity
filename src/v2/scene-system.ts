@@ -142,46 +142,45 @@ export class Scene {
         this.renderZeroCopy();
     }
 
-    // Phase 5: Zero-copy rendering - WASM buffers directly to GPU
+    // Phase 6: Pure WASM rendering - ALL entities via WASM buffers (2-pass: triangles + lines)
     renderZeroCopy(): void {
         if (!this.renderer) return;
 
-        console.log('🚀 Phase 5: Zero-copy rendering from WASM buffers');
+        console.log('🚀 Phase 6: Pure WASM rendering - ALL entities via WASM (triangles + lines)');
 
-        // Check if WASM has entities to render
-        const entityCount = this.physicsBridge.getStats().entityCount;
-        if (entityCount === 0) {
-            console.log('⚠️ No WASM entities to render - skipping frame');
-            return; // Just skip rendering instead of fallback
-        }
+        const wasmEntityCount = this.physicsBridge.getStats().entityCount;
+        console.log(`📊 Pure WASM rendering: ${wasmEntityCount} entities registered with WASM`);
 
-        // Phase 5: Direct WASM buffer to GPU mapping
+        // Phase 6: All entities go through WASM - no TypeScript rendering
         if (this.physicsBridge.hasWasmModule()) {
             // Get WASM memory and entity transform data
             const wasmMemory = this.physicsBridge.getWasmMemory();
             const transformsOffset = this.physicsBridge.getEntityTransformsOffset();
 
-            if (wasmMemory && transformsOffset !== undefined) {
+            if (wasmMemory && transformsOffset !== undefined && wasmEntityCount > 0) {
                 // Map WASM data directly to GPU instance buffer
-                this.renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, entityCount);
+                this.renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, wasmEntityCount);
 
-                console.log(`📊 Zero-copy: Mapped ${entityCount} entities from WASM to GPU`);
+                console.log(`📊 Zero-copy: Mapped ${wasmEntityCount} entities from WASM to GPU`);
             } else {
                 console.warn('⚠️ WASM memory or transforms offset not available - skipping frame');
-                return; // Skip instead of fallback
+                return;
             }
         } else {
             console.log('📊 Mock mode: WASM module not available - skipping frame');
-            return; // Skip instead of fallback
+            return;
         }
 
-        // Update camera matrices (still TypeScript-driven for now)
+        // Update camera matrices 
         const aspect = this.renderer.getAspectRatio();
         const viewProjectionMatrix = this.camera.getViewProjectionMatrix(aspect);
         this.renderer.updateCamera(viewProjectionMatrix);
 
-        // Execute zero-copy GPU rendering commands - ALL entities via WASM
-        this.renderer.renderFromWasmBuffers();
+        // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
+        const wasmModule = this.physicsBridge.getWasmModule();
+        this.renderer.renderFromWasmBuffers(wasmModule);
+        
+        console.log(`✅ Pure WASM rendering complete: ${wasmEntityCount} entities rendered via 2-pass WASM`);
     }
 
     // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
