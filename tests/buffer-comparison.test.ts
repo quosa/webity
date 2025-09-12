@@ -1,77 +1,18 @@
 // tests/buffer-comparison.test.ts
 // Unit tests comparing TypeScript vs WASM buffer outputs
-import { jest } from '@jest/globals';
 
 import { WebGPURendererV2 } from '../src/v2/webgpu.renderer';
 import { Scene } from '../src/v2/scene-system';
 import { GameObject } from '../src/v2/gameobject';
 import { MeshRenderer } from '../src/v2/components';
 import { createTriangleMesh } from '../src/v2/mesh-utils';
+import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
 
-// Mock WebGPU environment for testing
-Object.defineProperty(global, 'navigator', {
-    value: {
-        gpu: {
-            // @ts-ignore - Complex mock object with nested Jest functions
-            requestAdapter: jest.fn().mockResolvedValue({
-                // @ts-ignore - Complex mock object with nested Jest functions
-                requestDevice: jest.fn().mockResolvedValue({
-                    createBuffer: jest.fn().mockReturnValue({
-                        size: 1024,
-                        getMappedRange: jest.fn().mockReturnValue(new ArrayBuffer(1024)),
-                        // @ts-ignore
-                        mapAsync: jest.fn().mockResolvedValue(void 0),
-                        unmap: jest.fn()
-                    }),
-                    createShaderModule: jest.fn().mockReturnValue({ getBindGroupLayout: jest.fn() }),
-                    createRenderPipeline: jest.fn().mockReturnValue({ getBindGroupLayout: jest.fn() }),
-                    createTexture: jest.fn().mockReturnValue({ createView: jest.fn() }),
-                    createBindGroupLayout: jest.fn(),
-                    createPipelineLayout: jest.fn(),
-                    createBindGroup: jest.fn(),
-                    queue: {
-                        writeBuffer: jest.fn(),
-                        submit: jest.fn()
-                    }
-                })
-            }),
-            getPreferredCanvasFormat: jest.fn().mockReturnValue('bgra8unorm')
-        }
-    },
-    writable: true
-});
-
-// Mock WebGPU globals
-(global as any).GPUShaderStage = {
-    VERTEX: 1,
-    FRAGMENT: 2,
-    COMPUTE: 4
-};
-
-(global as any).GPUBufferUsage = {
-    MAP_READ: 1,
-    MAP_WRITE: 2,
-    COPY_SRC: 4,
-    COPY_DST: 8,
-    INDEX: 16,
-    VERTEX: 32,
-    UNIFORM: 64,
-    STORAGE: 128,
-    INDIRECT: 256,
-    QUERY_RESOLVE: 512
-};
+// Set up WebGPU mocking environment
+setupWebGPUTestEnvironment();
 
 // Mock canvas context
-const mockCanvas = {
-    getContext: jest.fn().mockReturnValue({
-        configure: jest.fn(),
-        getCurrentTexture: jest.fn().mockReturnValue({
-            createView: jest.fn()
-        })
-    }),
-    width: 800,
-    height: 600
-};
+const mockCanvas = WebGPUMockFactory.createMockCanvas();
 
 describe('Buffer Comparison: TypeScript vs WASM', () => {
     let renderer: WebGPURendererV2;
