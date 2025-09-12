@@ -122,3 +122,38 @@ export function createSphereMesh(radius: number = 1, segments: number = 16): Mes
         indices: new Uint16Array(indices)
     };
 }
+
+/**
+ * Create a pyramid (square base) mesh centered at origin
+ * @param size Length of base edge (default 1)
+ * @param height Height of pyramid (default 1)
+ */
+export function createPyramidMesh(size: number = 1, height: number = 1): MeshData {
+    const s = size / 2;
+    const h = height / 2;
+    
+    /* eslint-disable indent */
+    const vertices = new Float32Array([
+        // Base vertices (square on XZ plane)
+        -s, -h, -s,  // 0: Bottom-left
+         s, -h, -s,  // 1: Bottom-right
+         s, -h,  s,  // 2: Top-right
+        -s, -h,  s,  // 3: Top-left
+        // Apex vertex
+         0,  h,  0,  // 4: Top center
+    ]);
+    /* eslint-enable indent */
+    
+    const indices = new Uint16Array([
+        // Base (looking up from below)
+        0, 2, 1,  // Base triangle 1
+        0, 3, 2,  // Base triangle 2
+        // Side faces (triangles to apex)
+        0, 1, 4,  // Front face
+        1, 2, 4,  // Right face
+        2, 3, 4,  // Back face
+        3, 0, 4,  // Left face
+    ]);
+    
+    return { vertices, indices };
+}

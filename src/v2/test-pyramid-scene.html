@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pyramid Test Scene</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #222; 
+            font-family: Arial, sans-serif; 
+            color: white; 
+        }
+        canvas { 
+            display: block; 
+            margin: 20px auto; 
+            border: 2px solid #444; 
+        }
+        .info {
+            text-align: center;
+            margin: 20px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a99;
+        }
+        #error-message {
+            display: none;
+            background: #ff4444;
+            color: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 5px;
+        }
+        .shapes {
+            text-align: center;
+            margin: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+        .shape {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🔺 Pyramid Test Scene</h1>
+        <p>Testing 4 different mesh types: Triangle + Cube + Sphere + Pyramid through WASM zero-copy pipeline</p>
+    </div>
+
+    <canvas id="webgpu-canvas" width="1000" height="600"></canvas>
+
+    <div class="shapes">
+        <div class="shape">
+            <div>🔺</div>
+            <div>Red Triangle</div>
+            <div>(-6, 0, 0)</div>
+        </div>
+        <div class="shape">
+            <div>🧊</div>
+            <div>Blue Cube</div>
+            <div>(-2, 0, 0)</div>
+        </div>
+        <div class="shape">
+            <div>🟢</div>
+            <div>Green Sphere</div>
+            <div>(2, 0, 0)</div>
+        </div>
+        <div class="shape">
+            <div>🔺</div>
+            <div>Purple Pyramid</div>
+            <div>(6, 0, 0)</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="window.renderPyramidScene?.()">Re-render Scene</button>
+        <button onclick="window.debugPyramidScene?.()">Debug Info</button>
+        <button onclick="console.clear()">Clear Console</button>
+    </div>
+
+    <div id="error-message"></div>
+
+    <div class="info">
+        <p><strong>Expected:</strong> Four different shapes rendered simultaneously via WASM</p>
+        <p><strong>Test:</strong> Validates pyramid mesh creation and 4-mesh rendering</p>
+        <p><strong>Console:</strong> Open browser console (F12) to see detailed logs</p>
+    </div>
+
+    <script type="module" src="./test-pyramid-scene.ts"></script>
+</body>
+</html>

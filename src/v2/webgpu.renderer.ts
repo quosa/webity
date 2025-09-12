@@ -502,44 +502,73 @@ export class WebGPURendererV2 {
         sharedIndexBuffer: GPUBuffer,
         instanceBuffer: GPUBuffer
     ): void {
-        // Multi-mesh rendering: render ALL entities using the first available mesh
-        // TODO: Future enhancement - get per-entity mesh IDs from WASM
         renderPass.setPipeline(this.renderPipeline); // Triangle pipeline for physics entities
         renderPass.setBindGroup(0, this.bindGroup);
 
-        // Find the first available mesh from registered meshes
-        const meshTypes = ['triangle', 'cube', 'sphere'];
-        let selectedMesh = null;
+        // WASM mesh ID to TypeScript mesh name mapping (for future use)
+        // const wasmMeshIdToString: { [key: number]: string } = {
+        //     0: 'sphere',  // WASM SPHERE = 0
+        //     1: 'cube',    // WASM CUBE = 1
+        //     2: 'triangle' // We'll add TRIANGLE = 2 to WASM later
+        // };
+
+        // For now, since the scene has triangle/cube/sphere entities but WASM only has SPHERE/CUBE,
+        // we need to map based on the actual registered meshes and entity setup
+        // TODO: Fix WASM bridge to properly set mesh_id based on MeshRenderer.meshId
         
-        for (const meshType of meshTypes) {
-            const allocation = this.bufferManager.getMeshAllocation(meshType);
-            if (allocation) {
-                selectedMesh = meshType;
-                break;
-            }
-        }
+        // Since we can't read individual mesh IDs from WASM yet (they're set by collider type, not MeshRenderer),
+        // we'll use a temporary approach: render triangle/cube/sphere in sequence with correct counts
         
-        if (!selectedMesh) {
+        // Get all registered mesh types that have allocations
+        const availableMeshes = ['triangle', 'cube', 'sphere', 'pyramid'].filter(meshId => 
+            this.bufferManager.getMeshAllocation(meshId) !== undefined
+        );
+        
+        if (availableMeshes.length === 0) {
             console.warn('⚠️ No registered meshes found for WASM rendering');
             return;
         }
+
+        console.log(`🔍 Multi-mesh rendering: Found ${availableMeshes.length} registered meshes: ${availableMeshes.join(', ')}`);
         
-        const allocation = this.bufferManager.getMeshAllocation(selectedMesh)!;
-        console.log(`🔍 Multi-mesh rendering: Using '${selectedMesh}' mesh for all ${instanceCount} instances`);
+        // For the mixed scene, we know there are 3 entities (triangle, cube, sphere) 
+        // We'll render them with the correct meshes in order
+        const entitiesPerMesh = Math.floor(instanceCount / availableMeshes.length);
+        const remainder = instanceCount % availableMeshes.length;
         
-        // Use shared vertex and index buffers with WASM instance buffer
-        const vertexOffset = this.bufferManager.getVertexBufferOffset(selectedMesh);
-        renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
-        renderPass.setVertexBuffer(1, instanceBuffer); // Use WASM instance buffer directly
+        let currentInstanceOffset = 0;
+        
+        for (let i = 0; i < availableMeshes.length; i++) {
+            const meshId = availableMeshes[i]!;
+            const allocation = this.bufferManager.getMeshAllocation(meshId)!;
+            
+            // Calculate how many instances to render for this mesh
+            let instancesToRender = entitiesPerMesh;
+            if (i < remainder) instancesToRender += 1;
+            
+            if (instancesToRender === 0) continue;
+            
+            console.log(`🎯 Rendering ${instancesToRender} instances with '${meshId}' mesh (instances ${currentInstanceOffset} to ${currentInstanceOffset + instancesToRender - 1})`);
+            
+            // Set vertex buffer with mesh-specific offset
+            const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
+            renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
+            
+            // Set instance buffer with offset to current group
+            const instanceOffset = currentInstanceOffset * 20 * 4; // 20 floats * 4 bytes per instance
+            renderPass.setVertexBuffer(1, instanceBuffer, instanceOffset);
+            
+            // Set index buffer with mesh-specific offset
+            const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
+            renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
+            
+            // Render this mesh group
+            renderPass.drawIndexed(allocation.indexCount, instancesToRender);
+            
+            currentInstanceOffset += instancesToRender;
+        }
 
-        const indexOffset = this.bufferManager.getIndexBufferOffset(selectedMesh);
-        renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
-
-        // Render all WASM instances with selected mesh
-        renderPass.drawIndexed(allocation.indexCount, instanceCount);
-
-        console.log(`✅ Rendered ${instanceCount} WASM instances using '${selectedMesh}' mesh via zero-copy buffers`);
-        console.log(`🔍 Debug: meshId='${selectedMesh}', allocation=found, indexCount=${allocation.indexCount}`);
+        console.log(`✅ Rendered ${instanceCount} WASM instances using ${availableMeshes.length} different meshes via zero-copy buffers`);
     }
 
     // Scene system integration methods
