@@ -1,3 +1,9 @@
+This project was to vibe a ts -> wasm/zig -> webgpu pipeline with claude code.
+
+The initial step was to have a wasm module that calculates two numbers and logs to console.
+
+
+
 brew install zig
 zig version
   0.15.1
