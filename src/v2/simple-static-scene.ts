@@ -109,6 +109,20 @@ async function main() {
             console.log('📊 Current Scene Info:', info);
         };
         
+        // Phase 6: Test WASM physics integration
+        (window as any).testWasmPhysics = () => {
+            console.log('🧪 Testing WASM physics integration...');
+            const stats = scene.physicsBridge.getStats();
+            console.log('📊 Physics Stats:', stats);
+            
+            if (scene.physicsBridge.hasWasmModule()) {
+                console.log('✅ Real WASM module detected!');
+                console.log('🎯 Entity count from WASM:', stats.entityCount);
+            } else {
+                console.log('🔶 No WASM module, using mock mode');
+            }
+        };
+        
     } catch (error) {
         console.error('❌ Error in simple static scene test:', error);
         const errorDiv = document.getElementById('error-message');

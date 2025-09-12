@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Cube Test</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #222; 
+            font-family: Arial, sans-serif; 
+            color: white; 
+        }
+        canvas { 
+            display: block; 
+            margin: 20px auto; 
+            border: 2px solid #444; 
+        }
+        .info {
+            text-align: center;
+            margin: 20px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a99;
+        }
+        #error-message {
+            display: none;
+            background: #ff4444;
+            color: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🧊 WASM Cube Rendering Test</h1>
+        <p>Testing basic cube rendering through WASM zero-copy pipeline</p>
+    </div>
+
+    <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+
+    <div class="controls">
+        <button onclick="window.renderCube?.()">Re-render Cube</button>
+        <button onclick="window.debugCube?.()">Debug Info</button>
+        <button onclick="console.clear()">Clear Console</button>
+    </div>
+
+    <div id="error-message"></div>
+
+    <div class="info">
+        <p><strong>Expected:</strong> Blue cube rendered via WASM → WebGPU zero-copy pipeline</p>
+        <p><strong>Controls:</strong> Use buttons above to re-render or get debug info</p>
+        <p><strong>Console:</strong> Open browser console (F12) to see detailed logs</p>
+    </div>
+
+    <script type="module" src="./test-wasm-cube.ts"></script>
+</body>
+</html>

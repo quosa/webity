@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Zero-Copy Physics Rendering Test</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                background: #222;
+                color: white;
+                font-family: Arial, sans-serif;
+            }
+
+            canvas {
+                display: block;
+                margin: 20px auto;
+                background: #333;
+                border: 2px solid #555;
+            }
+
+            .info {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+
+            .controls {
+                text-align: center;
+                margin-top: 20px;
+            }
+
+            .error {
+                color: #ff6b6b;
+                text-align: center;
+                margin: 20px;
+                padding: 10px;
+                border: 1px solid #ff6b6b;
+                border-radius: 5px;
+                display: none;
+            }
+
+            button {
+                margin: 5px;
+                padding: 10px 20px;
+                font-size: 14px;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+            }
+            
+            .test-btn { background: #007acc; }
+            .info-btn { background: #28a745; }
+            .wasm-btn { background: #ff6600; }
+        </style>
+    </head>
+    <body>
+        <div class="info">
+            <h1>Zero-Copy Physics Rendering Test</h1>
+            <p><strong>Phase 6 Task 3</strong>: Validating zero-copy WASM → GPU rendering pipeline</p>
+            <p>Orange cube + cyan sphere with physics should enable zero-copy rendering</p>
+        </div>
+
+        <div class="error" id="error-message"></div>
+
+        <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+
+        <div class="controls">
+            <h3>🎮 Engine Controls</h3>
+            <button onclick="pauseEngine()" class="test-btn">
+                ⏸️ Pause Engine
+            </button>
+            <button onclick="resumeEngine()" class="test-btn">
+                ▶️ Resume Engine
+            </button>
+            
+            <h3>🧪 Zero-Copy Validation Tests</h3>
+            <button onclick="testZeroCopyRendering()" class="test-btn">
+                🚀 Test Zero-Copy Rendering
+            </button>
+            <button onclick="testWasmBuffers()" class="wasm-btn">
+                📦 Test WASM Buffers
+            </button>
+            <button onclick="logSceneInfo()" class="info-btn">
+                📊 Log Scene Info  
+            </button>
+            
+            <h3>📋 Expected Results</h3>
+            <ul style="text-align: left; display: inline-block; color: #ccc; font-size: 14px;">
+                <li>✅ Entity count > 0 (physics entities registered with WASM)</li>
+                <li>✅ Zero-copy rendering active (no fallback to TypeScript)</li>
+                <li>✅ WASM buffer access available</li>
+                <li>✅ Transform matrices updated in WASM</li>
+            </ul>
+            
+            <h3>🎮 Console Functions</h3>
+            <p style="color: #aaa; font-size: 12px;">
+                Open browser DevTools console to see detailed validation logs
+            </p>
+        </div>
+
+        <script type="module" src="./test-zero-copy-physics.ts"></script>
+    </body>
+</html>

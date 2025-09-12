@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Mixed Scene Test</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #222; 
+            font-family: Arial, sans-serif; 
+            color: white; 
+        }
+        canvas { 
+            display: block; 
+            margin: 20px auto; 
+            border: 2px solid #444; 
+        }
+        .info {
+            text-align: center;
+            margin: 20px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a99;
+        }
+        #error-message {
+            display: none;
+            background: #ff4444;
+            color: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 5px;
+        }
+        .shapes {
+            text-align: center;
+            margin: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+        }
+        .shape {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🎭 WASM Mixed Scene Test</h1>
+        <p>Testing triangle, cube, and sphere rendering through WASM zero-copy pipeline</p>
+    </div>
+
+    <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+
+    <div class="shapes">
+        <div class="shape">
+            <div>🔺</div>
+            <div>Red Triangle</div>
+            <div>Left (-3, 0, -5)</div>
+        </div>
+        <div class="shape">
+            <div>🧊</div>
+            <div>Blue Cube</div>
+            <div>Center (0, 0, -5)</div>
+        </div>
+        <div class="shape">
+            <div>🟢</div>
+            <div>Green Sphere</div>
+            <div>Right (3, 0, -5)</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="window.renderMixed?.()">Re-render Scene</button>
+        <button onclick="window.debugMixed?.()">Debug Info</button>
+        <button onclick="console.clear()">Clear Console</button>
+    </div>
+
+    <div id="error-message"></div>
+
+    <div class="info">
+        <p><strong>Expected:</strong> Three different shapes rendered simultaneously via WASM</p>
+        <p><strong>Test:</strong> Validates multiple mesh types in single WASM zero-copy call</p>
+        <p><strong>Console:</strong> Open browser console (F12) to see detailed logs</p>
+    </div>
+
+    <script type="module" src="./test-wasm-mixed.ts"></script>
+</body>
+</html>
