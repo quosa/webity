@@ -84,3 +84,41 @@ export function createGridMesh(size: number = 10, divisions: number = 10): MeshD
         indices: new Uint16Array(indices),
     };
 }
+
+/**
+ * Create a sphere mesh
+ * @param radius Sphere radius (default 1)
+ * @param segments Number of segments for sphere tessellation (default 16)
+ */
+export function createSphereMesh(radius: number = 1, segments: number = 16): MeshData {
+    const vertices = [];
+    const indices = [];
+    
+    for (let i = 0; i <= segments; i++) {
+        const theta = (i * Math.PI) / segments;
+        for (let j = 0; j <= segments; j++) {
+            const phi = (j * 2 * Math.PI) / segments;
+            
+            const x = radius * Math.sin(theta) * Math.cos(phi);
+            const y = radius * Math.cos(theta);
+            const z = radius * Math.sin(theta) * Math.sin(phi);
+            
+            vertices.push(x, y, z);
+        }
+    }
+    
+    for (let i = 0; i < segments; i++) {
+        for (let j = 0; j < segments; j++) {
+            const first = i * (segments + 1) + j;
+            const second = first + segments + 1;
+            
+            indices.push(first, second, first + 1);
+            indices.push(second, second + 1, first + 1);
+        }
+    }
+    
+    return {
+        vertices: new Float32Array(vertices),
+        indices: new Uint16Array(indices)
+    };
+}

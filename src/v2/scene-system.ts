@@ -34,12 +34,11 @@ export class Scene {
         this.entities.set(gameObject.id, gameObject);
         gameObject.setScene(this);
 
-        // Add to physics simulation if it has a RigidBody
+        // Add ALL GameObjects to WASM for zero-copy rendering (physics and static entities)
+        this.physicsBridge.addEntity(gameObject);
         const rigidBody = gameObject.getComponent(RigidBody);
-        if (rigidBody) {
-            this.physicsBridge.addPhysicsEntity(gameObject);
-            console.log(`🔵 Added GameObject "${gameObject.name}" to physics simulation`);
-        }
+        const entityType = rigidBody ? 'physics' : 'static';
+        console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity`);
     }
 
     removeGameObject(id: string): boolean {
@@ -152,9 +151,8 @@ export class Scene {
         // Check if WASM has entities to render
         const entityCount = this.physicsBridge.getStats().entityCount;
         if (entityCount === 0) {
-            console.log('⚠️ No WASM entities to render, falling back to TypeScript rendering');
-            this.render(); // Fallback to legacy rendering
-            return;
+            console.log('⚠️ No WASM entities to render - skipping frame');
+            return; // Just skip rendering instead of fallback
         }
 
         // Phase 5: Direct WASM buffer to GPU mapping
@@ -169,14 +167,12 @@ export class Scene {
 
                 console.log(`📊 Zero-copy: Mapped ${entityCount} entities from WASM to GPU`);
             } else {
-                console.warn('⚠️ WASM memory or transforms offset not available');
-                this.render(); // Fallback to legacy rendering
-                return;
+                console.warn('⚠️ WASM memory or transforms offset not available - skipping frame');
+                return; // Skip instead of fallback
             }
         } else {
-            console.log('📊 Mock mode: Using TypeScript rendering pipeline');
-            this.render(); // Fallback to legacy rendering
-            return;
+            console.log('📊 Mock mode: WASM module not available - skipping frame');
+            return; // Skip instead of fallback
         }
 
         // Update camera matrices (still TypeScript-driven for now)
@@ -184,9 +180,11 @@ export class Scene {
         const viewProjectionMatrix = this.camera.getViewProjectionMatrix(aspect);
         this.renderer.updateCamera(viewProjectionMatrix);
 
-        // Execute zero-copy GPU rendering commands
+        // Execute zero-copy GPU rendering commands - ALL entities via WASM
         this.renderer.renderFromWasmBuffers();
     }
+
+    // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
 
     // Legacy TypeScript rendering (Phase 4 and earlier) - kept for fallback
     render(): void {
@@ -229,23 +227,23 @@ export class Scene {
         this.renderer.render();
     }
 
-    // Phase 5: Register all entities with WASM physics system
+    // Phase 5: Register all entities with WASM (now that WASM is initialized)
     private registerEntitiesWithWasm(): void {
-        console.log('🔗 Registering entities with WASM physics system...');
+        console.log('🔗 Registering ALL entities with WASM (now that WASM is initialized)...');
 
         let registeredCount = 0;
         for (const gameObject of this.entities.values()) {
-            // Only register GameObjects that have RigidBody components
-            const rigidBody = gameObject.getComponent(RigidBody);
-            if (rigidBody) {
-                const wasmEntityId = this.physicsBridge.addPhysicsEntity(gameObject);
-                if (wasmEntityId !== null) {
-                    registeredCount++;
-                }
+            // Re-register ALL GameObjects with WASM now that it's initialized
+            // addGameObject() tried to register before WASM was ready
+            const wasmEntityId = this.physicsBridge.addEntity(gameObject);
+            if (wasmEntityId !== null) {
+                registeredCount++;
+                const entityType = gameObject.getComponent(RigidBody) ? 'physics' : 'static';
+                console.log(`🔗 Registered ${entityType} entity "${gameObject.name}" with WASM ID ${wasmEntityId}`);
             }
         }
 
-        console.log(`✅ Registered ${registeredCount} entities with WASM physics system`);
+        console.log(`✅ Registered ${registeredCount} entities with WASM system (after initialization)`);
     }
 
     // Phase 5: Sync camera state to WASM for view matrix calculation

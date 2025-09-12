@@ -1,5 +1,6 @@
 // tests/physics-bridge.test.ts
 // Unit tests for WasmPhysicsBridge and RigidBody integration
+import { jest } from '@jest/globals';
 
 import { WasmPhysicsBridge } from '../src/v2/wasm-physics-bridge';
 import { GameObject } from '../src/v2/gameobject';
@@ -7,21 +8,30 @@ import { RigidBody, MeshRenderer } from '../src/v2/components';
 
 describe('WasmPhysicsBridge', () => {
     let physicsBridge: WasmPhysicsBridge;
-    
+
+    // Helper function to create a complete GameObject with MeshRenderer
+    const createTestGameObject = (name: string, type?: string, meshId?: string): GameObject => {
+        const gameObject = new GameObject(name, type || 'TestObject');
+        // Add MeshRenderer required for WASM integration
+        const meshRenderer = new MeshRenderer(meshId || 'cube', 'default', 'triangles', { x: 1, y: 1, z: 1, w: 1 });
+        gameObject.addComponent(meshRenderer);
+        return gameObject;
+    };
+
     beforeEach(async () => {
         physicsBridge = new WasmPhysicsBridge();
         await physicsBridge.init(); // Initialize in mock mode
     });
 
     describe('Initialization', () => {
-        test('should initialize in mock mode without WASM module', async () => {
+        test('should initialize with real WASM module by default', async () => {
             const bridge = new WasmPhysicsBridge();
             await bridge.init();
-            
+
             const stats = bridge.getStats();
             expect(stats.isInitialized).toBe(true);
-            expect(stats.hasMockWasm).toBe(true);
-            expect(stats.entityCount).toBe(0);
+            expect(stats.hasMockWasm).toBe(false); // Phase 6: Now loads real WASM by default
+            expect(stats.entityCount).toBe(0); // No entities added yet
         });
 
         test('should initialize with WASM module when provided', async () => {
@@ -36,7 +46,9 @@ describe('WasmPhysicsBridge', () => {
                 set_entity_velocity: jest.fn(),
                 get_entity_transforms_offset: jest.fn(() => 0),
                 get_entity_metadata_offset: jest.fn(() => 0),
-                memory: { 
+                get_entity_size: jest.fn(() => 80),
+                get_entity_stride: jest.fn(() => 80),
+                memory: {
                     buffer: new ArrayBuffer(1024),
                     grow: jest.fn((_delta: number) => 0)
                 }
@@ -44,10 +56,10 @@ describe('WasmPhysicsBridge', () => {
 
             const bridge = new WasmPhysicsBridge();
             await bridge.init(mockWasm);
-            
+
             expect(mockWasm.init).toHaveBeenCalled();
             expect(bridge.hasWasmModule()).toBe(true);
-            
+
             const stats = bridge.getStats();
             expect(stats.isInitialized).toBe(true);
             expect(stats.hasMockWasm).toBe(false);
@@ -58,44 +70,49 @@ describe('WasmPhysicsBridge', () => {
         test('should add physics entity with RigidBody component', () => {
             const gameObject = new GameObject('test-cube', 'TestCube');
             gameObject.transform.setPosition(1, 2, 3);
-            
+
             const rigidBody = new RigidBody(2.0, true, 'box', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
+            // Add MeshRenderer required for WASM integration
+            const meshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 1, z: 1, w: 1 });
+            gameObject.addComponent(meshRenderer);
+
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
-            
+
             expect(entityId).not.toBeNull();
             expect(typeof entityId).toBe('number');
             expect(entityId).toBeGreaterThanOrEqual(0);
-            
+
             const stats = physicsBridge.getStats();
             expect(stats.entityCount).toBe(1);
         });
 
-        test('should not add entity without RigidBody component', () => {
+        test('should add entity without RigidBody component as static entity', () => {
             const gameObject = new GameObject('test-static', 'StaticObject');
             const meshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
             gameObject.addComponent(meshRenderer);
 
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
-            
-            expect(entityId).toBeNull();
-            
+
+            expect(entityId).not.toBeNull();
+            expect(typeof entityId).toBe('number');
+
             const stats = physicsBridge.getStats();
-            expect(stats.entityCount).toBe(0);
+            expect(stats.entityCount).toBe(1); // Now adds static entities too
         });
 
         test('should remove physics entity', () => {
-            const gameObject = new GameObject('test-removal', 'RemovalTest');
+            const gameObject = createTestGameObject('test-removal', 'RemovalTest');
             const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
             expect(entityId).not.toBeNull();
-            
+
             const removed = physicsBridge.removePhysicsEntity(gameObject.id);
             expect(removed).toBe(true);
-            
+
             const stats = physicsBridge.getStats();
             expect(stats.entityCount).toBe(0);
         });
@@ -106,19 +123,19 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should generate unique entity IDs for multiple entities', () => {
-            const gameObject1 = new GameObject('entity1', 'Entity1');
+            const gameObject1 = createTestGameObject('entity1', 'Entity1');
             gameObject1.addComponent(new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 }));
-            
-            const gameObject2 = new GameObject('entity2', 'Entity2');
+
+            const gameObject2 = createTestGameObject('entity2', 'Entity2');
             gameObject2.addComponent(new RigidBody(2.0, false, 'sphere', { x: 1, y: 1, z: 1 }));
 
             const entityId1 = physicsBridge.addPhysicsEntity(gameObject1);
             const entityId2 = physicsBridge.addPhysicsEntity(gameObject2);
-            
+
             expect(entityId1).not.toEqual(entityId2);
             expect(entityId1).not.toBeNull();
             expect(entityId2).not.toBeNull();
-            
+
             const stats = physicsBridge.getStats();
             expect(stats.entityCount).toBe(2);
         });
@@ -126,7 +143,7 @@ describe('WasmPhysicsBridge', () => {
 
     describe('Physics Operations', () => {
         test('should apply force to physics entity', () => {
-            const gameObject = new GameObject('force-test', 'ForceTest');
+            const gameObject = createTestGameObject('force-test', 'ForceTest');
             const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
@@ -140,7 +157,7 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should update entity transform', () => {
-            const gameObject = new GameObject('update-test', 'UpdateTest');
+            const gameObject = createTestGameObject('update-test', 'UpdateTest');
             const rigidBody = new RigidBody(1.0, false, 'box', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
@@ -150,15 +167,15 @@ describe('WasmPhysicsBridge', () => {
             // Should not throw in mock mode
             expect(() => {
                 physicsBridge.updateEntity(
-                    entityId!, 
-                    { x: 5, y: 10, z: -2 }, 
+                    entityId!,
+                    { x: 5, y: 10, z: -2 },
                     { x: 1, y: 0, z: 0 }
                 );
             }).not.toThrow();
         });
 
         test('should get entity data', () => {
-            const gameObject = new GameObject('data-test', 'DataTest');
+            const gameObject = createTestGameObject('data-test', 'DataTest');
             const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
@@ -174,7 +191,7 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should set kinematic state', () => {
-            const gameObject = new GameObject('kinematic-test', 'KinematicTest');
+            const gameObject = createTestGameObject('kinematic-test', 'KinematicTest');
             const rigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
@@ -201,7 +218,7 @@ describe('WasmPhysicsBridge', () => {
             gameObject.addComponent(rigidBody);
 
             physicsBridge.addPhysicsEntity(gameObject);
-            
+
             expect(() => {
                 physicsBridge.update(0.016);
             }).not.toThrow();
@@ -210,7 +227,7 @@ describe('WasmPhysicsBridge', () => {
 
     describe('RigidBody Integration', () => {
         test('should set WASM entity ID and physics bridge reference on RigidBody', () => {
-            const gameObject = new GameObject('integration-test', 'IntegrationTest');
+            const gameObject = createTestGameObject('integration-test', 'IntegrationTest');
             const rigidBody = new RigidBody(1.5, true, 'box', { x: 2, y: 2, z: 2 });
             gameObject.addComponent(rigidBody);
 
@@ -223,11 +240,11 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should handle different collider types', () => {
-            const sphereObject = new GameObject('sphere-test', 'SphereTest');
+            const sphereObject = createTestGameObject('sphere-test', 'SphereTest', 'sphere');
             const sphereRigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             sphereObject.addComponent(sphereRigidBody);
 
-            const boxObject = new GameObject('box-test', 'BoxTest');
+            const boxObject = createTestGameObject('box-test', 'BoxTest', 'cube');
             const boxRigidBody = new RigidBody(2.0, false, 'box', { x: 1, y: 1, z: 1 });
             boxObject.addComponent(boxRigidBody);
 
@@ -240,12 +257,12 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should handle kinematic vs dynamic bodies', () => {
-            const dynamicObject = new GameObject('dynamic-test', 'DynamicTest');
+            const dynamicObject = createTestGameObject('dynamic-test', 'DynamicTest');
             const dynamicRigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
             dynamicRigidBody.setKinematic(false); // Dynamic
             dynamicObject.addComponent(dynamicRigidBody);
 
-            const kinematicObject = new GameObject('kinematic-test', 'KinematicTest');
+            const kinematicObject = createTestGameObject('kinematic-test', 'KinematicTest');
             const kinematicRigidBody = new RigidBody(1.0, false, 'sphere', { x: 1, y: 1, z: 1 });
             kinematicRigidBody.setKinematic(true); // Kinematic
             kinematicObject.addComponent(kinematicRigidBody);
@@ -255,7 +272,7 @@ describe('WasmPhysicsBridge', () => {
 
             expect(dynamicId).not.toBeNull();
             expect(kinematicId).not.toBeNull();
-            
+
             const stats = physicsBridge.getStats();
             expect(stats.entityCount).toBe(2);
         });
@@ -266,7 +283,7 @@ describe('WasmPhysicsBridge', () => {
             const uninitializedBridge = new WasmPhysicsBridge();
             // Don't call init()
 
-            const gameObject = new GameObject('uninit-test', 'UninitTest');
+            const gameObject = createTestGameObject('uninit-test', 'UninitTest');
             const rigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
@@ -275,12 +292,13 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should handle null RigidBody component gracefully', () => {
-            const gameObject = new GameObject('null-rb-test', 'NullRBTest');
-            // Don't add RigidBody component
+            const gameObject = createTestGameObject('null-rb-test', 'NullRBTest');
+            // Don't add RigidBody component - but has MeshRenderer for static entities
 
             expect(() => {
                 const entityId = physicsBridge.addPhysicsEntity(gameObject);
-                expect(entityId).toBeNull();
+                expect(entityId).not.toBeNull(); // Now accepts static entities
+                expect(typeof entityId).toBe('number');
             }).not.toThrow();
         });
     });

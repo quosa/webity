@@ -1,5 +1,6 @@
 // tests/rigidbody-component.test.ts
 // Unit tests for RigidBody component
+import { jest } from '@jest/globals';
 
 import { RigidBody } from '../src/v2/components';
 import { GameObject } from '../src/v2/gameobject';
@@ -17,7 +18,7 @@ describe('RigidBody Component', () => {
     describe('Construction', () => {
         test('should create RigidBody with default values', () => {
             const rb = new RigidBody();
-            
+
             expect(rb.mass).toBe(1.0);
             expect(rb.useGravity).toBe(true);
             expect(rb.colliderType).toBe('sphere'); // Default is sphere, not box
@@ -28,7 +29,7 @@ describe('RigidBody Component', () => {
 
         test('should create RigidBody with custom values', () => {
             const rb = new RigidBody(2.5, false, 'sphere', { x: 2, y: 2, z: 2 });
-            
+
             expect(rb.mass).toBe(2.5);
             expect(rb.useGravity).toBe(false);
             expect(rb.colliderType).toBe('sphere');
@@ -49,17 +50,17 @@ describe('RigidBody Component', () => {
         test('should get and set gravity flag', () => {
             rigidBody.useGravity = false;
             expect(rigidBody.useGravity).toBe(false);
-            
+
             rigidBody.useGravity = true;
             expect(rigidBody.useGravity).toBe(true);
         });
 
         test('should get and set kinematic flag', () => {
             expect(rigidBody.isKinematic).toBe(false);
-            
+
             rigidBody.setKinematic(true);
             expect(rigidBody.isKinematic).toBe(true);
-            
+
             rigidBody.setKinematic(false);
             expect(rigidBody.isKinematic).toBe(false);
         });
@@ -67,7 +68,7 @@ describe('RigidBody Component', () => {
         test('should get and set collider properties', () => {
             rigidBody.colliderType = 'sphere';
             expect(rigidBody.colliderType).toBe('sphere');
-            
+
             rigidBody.colliderSize = { x: 3, y: 3, z: 3 };
             expect(rigidBody.colliderSize).toEqual({ x: 3, y: 3, z: 3 });
         });
@@ -77,13 +78,13 @@ describe('RigidBody Component', () => {
         test('should get and set velocity', () => {
             const newVelocity = { x: 10, y: -5, z: 2 };
             rigidBody.setVelocity(newVelocity.x, newVelocity.y, newVelocity.z);
-            
+
             expect(rigidBody.velocity).toEqual(newVelocity);
         });
 
         test('should set individual velocity components', () => {
             rigidBody.setVelocity(1, 2, 3);
-            
+
             expect(rigidBody.velocity.x).toBe(1);
             expect(rigidBody.velocity.y).toBe(2);
             expect(rigidBody.velocity.z).toBe(3);
@@ -92,7 +93,7 @@ describe('RigidBody Component', () => {
         test('should handle zero velocity', () => {
             rigidBody.setVelocity(5, 10, -3);
             rigidBody.setVelocity(0, 0, 0);
-            
+
             expect(rigidBody.velocity).toEqual({ x: 0, y: 0, z: 0 });
         });
     });
@@ -106,7 +107,7 @@ describe('RigidBody Component', () => {
             rigidBody.setWasmEntityId(42);
             rigidBody.setPhysicsBridge(mockBridge);
             rigidBody.setKinematic(false); // Make sure it's not kinematic
-            
+
             // The actual implementation doesn't call the bridge directly, it just logs
             // This test verifies the method doesn't throw
             expect(() => {
@@ -126,11 +127,11 @@ describe('RigidBody Component', () => {
             };
             rigidBody.setPhysicsBridge(mockBridge);
             // Don't set WASM entity ID
-            
+
             expect(() => {
                 rigidBody.applyForce(1, 2, 3);
             }).not.toThrow();
-            
+
             expect(mockBridge.applyForce).not.toHaveBeenCalled();
         });
     });
@@ -144,7 +145,7 @@ describe('RigidBody Component', () => {
 
         test('should set physics bridge', () => {
             const mockBridge = { test: 'mock-bridge' };
-            
+
             expect(() => {
                 rigidBody.setPhysicsBridge(mockBridge);
             }).not.toThrow();
@@ -157,7 +158,7 @@ describe('RigidBody Component', () => {
             rigidBody.setWasmEntityId(456);
             rigidBody.setPhysicsBridge(mockBridge);
             rigidBody.setVelocity(5, -2, 8);
-            
+
             // syncToWasm is a public method but doesn't actually call the bridge in current implementation
             expect(() => {
                 rigidBody.syncToWasm();
@@ -179,10 +180,10 @@ describe('RigidBody Component', () => {
             };
             rigidBody.setWasmEntityId(789);
             rigidBody.setPhysicsBridge(mockBridge);
-            
+
             // syncFromWasm is private, but we can test the update method which calls it for non-kinematic bodies
             rigidBody.setKinematic(false);
-            
+
             expect(() => {
                 rigidBody.update(0.016);
             }).not.toThrow();
@@ -198,9 +199,9 @@ describe('RigidBody Component', () => {
     describe('Kinematic Behavior', () => {
         test('should handle kinematic body properties', () => {
             rigidBody.setKinematic(true);
-            
+
             expect(rigidBody.isKinematic).toBe(true);
-            
+
             // Kinematic bodies should still allow manual velocity changes
             rigidBody.setVelocity(10, 0, 0);
             expect(rigidBody.velocity).toEqual({ x: 10, y: 0, z: 0 });
@@ -212,11 +213,11 @@ describe('RigidBody Component', () => {
             };
             rigidBody.setWasmEntityId(321);
             rigidBody.setPhysicsBridge(mockBridge);
-            
+
             expect(() => {
                 rigidBody.setKinematic(true);
             }).not.toThrow();
-            
+
             expect(rigidBody.isKinematic).toBe(true);
         });
     });
@@ -225,9 +226,9 @@ describe('RigidBody Component', () => {
         test('should initialize properly when added to GameObject', () => {
             const newGameObject = new GameObject('lifecycle-test', 'LifecycleTest');
             const newRigidBody = new RigidBody(2.0, false, 'sphere', { x: 0.5, y: 0.5, z: 0.5 });
-            
+
             newGameObject.addComponent(newRigidBody);
-            
+
             expect(newRigidBody.gameObject).toBe(newGameObject);
             expect(newGameObject.getComponent(RigidBody)).toBe(newRigidBody);
         });

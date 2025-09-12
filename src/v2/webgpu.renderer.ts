@@ -478,10 +478,15 @@ export class WebGPURendererV2 {
         });
 
         // For Phase 5, render all instances using the WASM instance buffer
-        // TODO: Get instance count from WASM physics bridge
         const instanceCount = this.bufferManager.getWasmEntityCount();
-        if (instanceCount > 0) {
+        
+        // 🔒 CRITICAL: Validate instance count before rendering to prevent ghost triangles
+        const maxSafeInstanceCount = 1000; // Reasonable upper bound
+        if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount) {
+            console.log(`🎯 Rendering ${instanceCount} validated WASM instances`);
             this.renderWasmInstances(renderPass, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer);
+        } else if (instanceCount > maxSafeInstanceCount) {
+            console.error(`❌ Suspicious instance count ${instanceCount} - refusing to render (possible buffer corruption)`);
         }
 
         // End render pass and submit
@@ -497,31 +502,44 @@ export class WebGPURendererV2 {
         sharedIndexBuffer: GPUBuffer,
         instanceBuffer: GPUBuffer
     ): void {
-        renderPass.setPipeline(this.renderPipeline); // Use triangle pipeline for now
+        // Multi-mesh rendering: render ALL entities using the first available mesh
+        // TODO: Future enhancement - get per-entity mesh IDs from WASM
+        renderPass.setPipeline(this.renderPipeline); // Triangle pipeline for physics entities
         renderPass.setBindGroup(0, this.bindGroup);
 
-        // For Phase 5, we'll render all instances as the same mesh (e.g., cubes)
-        // In future phases, WASM could provide per-instance mesh IDs
-        const defaultMeshId = 'cube'; // Assume cube mesh is registered
-        const allocation = this.bufferManager.getMeshAllocation(defaultMeshId);
-
-        if (!allocation) {
-            console.warn(`⚠️ Default mesh '${defaultMeshId}' not found for WASM rendering`);
+        // Find the first available mesh from registered meshes
+        const meshTypes = ['triangle', 'cube', 'sphere'];
+        let selectedMesh = null;
+        
+        for (const meshType of meshTypes) {
+            const allocation = this.bufferManager.getMeshAllocation(meshType);
+            if (allocation) {
+                selectedMesh = meshType;
+                break;
+            }
+        }
+        
+        if (!selectedMesh) {
+            console.warn('⚠️ No registered meshes found for WASM rendering');
             return;
         }
-
+        
+        const allocation = this.bufferManager.getMeshAllocation(selectedMesh)!;
+        console.log(`🔍 Multi-mesh rendering: Using '${selectedMesh}' mesh for all ${instanceCount} instances`);
+        
         // Use shared vertex and index buffers with WASM instance buffer
-        const vertexOffset = this.bufferManager.getVertexBufferOffset(defaultMeshId);
+        const vertexOffset = this.bufferManager.getVertexBufferOffset(selectedMesh);
         renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
         renderPass.setVertexBuffer(1, instanceBuffer); // Use WASM instance buffer directly
 
-        const indexOffset = this.bufferManager.getIndexBufferOffset(defaultMeshId);
+        const indexOffset = this.bufferManager.getIndexBufferOffset(selectedMesh);
         renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
 
-        // Render all WASM instances in one draw call
+        // Render all WASM instances with selected mesh
         renderPass.drawIndexed(allocation.indexCount, instanceCount);
 
-        console.log(`✅ Rendered ${instanceCount} WASM instances using zero-copy buffers`);
+        console.log(`✅ Rendered ${instanceCount} WASM instances using '${selectedMesh}' mesh via zero-copy buffers`);
+        console.log(`🔍 Debug: meshId='${selectedMesh}', allocation=found, indexCount=${allocation.indexCount}`);
     }
 
     // Scene system integration methods

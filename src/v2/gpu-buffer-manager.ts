@@ -36,14 +36,14 @@ export class GPUBufferManager {
         // Create separate shared vertex buffer (f32 data)
         this.sharedVertexBuffer = this.device.createBuffer({
             size: Math.max(totalVertexBytes, GPUBufferManager.INITIAL_VERTEX_SIZE),
-            usage: 0x20 | 0x04, // GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            usage: 0x20 | 0x08, // GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
             mappedAtCreation: true,
         });
 
         // Create separate shared index buffer (u16 data)
         this.sharedIndexBuffer = this.device.createBuffer({
             size: Math.max(totalIndexBytes, GPUBufferManager.INITIAL_INDEX_SIZE),
-            usage: 0x10 | 0x04, // GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
+            usage: 0x10 | 0x08, // GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
             mappedAtCreation: true,
         });
 
@@ -83,11 +83,22 @@ export class GPUBufferManager {
             return;
         }
 
+        // 🔒 CRITICAL: Validate buffer bounds before mapping
+        if (!this.validateWasmBufferAccess(wasmMemory, offset, count)) {
+            console.error('❌ WASM buffer validation failed - refusing to map corrupted data');
+            // Set safe count to prevent rendering garbage
+            this.setWasmEntityCount(0);
+            return;
+        }
+
         // Direct zero-copy mapping from WASM entity transforms
         // 20 floats per instance: 16 (transform matrix) + 4 (color)
         const wasmInstanceData = new Float32Array(wasmMemory, offset, count * 20);
 
         console.log(`🚀 Phase 5: Zero-copy mapping ${count} instances from WASM (${wasmInstanceData.length} floats)`);
+
+        // Track entity count for rendering (only after validation)
+        this.setWasmEntityCount(count);
 
         // Create or update instance buffer with WASM data
         if (!this.instanceBuffer || this.instanceBuffer.size < wasmInstanceData.byteLength) {
@@ -96,7 +107,7 @@ export class GPUBufferManager {
             this.instanceBuffer = this.device.createBuffer({
                 label: 'WASM Instance Data Buffer',
                 size: Math.max(wasmInstanceData.byteLength, 1024), // Minimum 1KB
-                usage: 0x20 | 0x04, // GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+                usage: 0x20 | 0x08, // GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
             });
         }
 
@@ -109,21 +120,45 @@ export class GPUBufferManager {
         return this.instanceBuffer;
     }
 
-    // Phase 5: WASM buffer access methods
+    // Phase 5: WASM buffer access methods  
+    private wasmEntityCount: number = 0;
+    
     getWasmEntityCount(): number {
-        // TODO: Get from WASM physics bridge
-        return 0;
+        return this.wasmEntityCount;
+    }
+    
+    // Called by mapInstanceDataFromWasm to track entity count
+    setWasmEntityCount(count: number): void {
+        this.wasmEntityCount = count;
     }
 
     validateWasmBufferAccess(wasmMemory: ArrayBuffer, offset: number, count: number): boolean {
         const requiredBytes = count * 20 * 4; // 20 floats * 4 bytes per float
         const availableBytes = wasmMemory.byteLength - offset;
 
+        // Enhanced validation with detailed logging
+        console.log(`🔍 WASM Buffer Validation:
+           Entity Count: ${count}
+           Required Bytes: ${requiredBytes} 
+           Available Bytes: ${availableBytes}
+           Buffer Size: ${wasmMemory.byteLength}
+           Offset: ${offset}`);
+
         if (requiredBytes > availableBytes) {
-            console.error(`WASM buffer overflow: need ${requiredBytes} bytes, have ${availableBytes}`);
+            console.error(`❌ WASM buffer overflow: need ${requiredBytes} bytes, have ${availableBytes}`);
             return false;
         }
 
+        if (count > 100) { // Sanity check for reasonable entity count
+            console.warn(`⚠️ Suspicious entity count: ${count} (over 100 entities - possible corruption?)`);
+        }
+
+        if (offset < 0 || offset >= wasmMemory.byteLength) {
+            console.error(`❌ Invalid WASM buffer offset: ${offset}`);
+            return false;
+        }
+
+        console.log('✅ WASM buffer validation passed');
         return true;
     }
 

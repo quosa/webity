@@ -275,7 +275,8 @@ fn updateECSPhysics(delta_time: f32) void {
         phys.position.z += phys.velocity.z * delta_time;
         
         // Apply world boundary constraints
-        _ = applyECSWorldBoundaryConstraints(&phys.position, &phys.velocity, phys.radius);
+        const entity_collision_flags = applyECSWorldBoundaryConstraints(&phys.position, &phys.velocity, phys.radius);
+        collision_state |= entity_collision_flags;
         
         // Mark transform as dirty for rendering update
         entity_metadata[i].transform_dirty = true;
@@ -682,12 +683,12 @@ pub export fn set_position(x: f32, y: f32, z: f32) void {
     }
 }
 
-pub export fn apply_force(x: f32, y: f32, z: f32) void {
-    // Apply force to first active entity for backward compatibility
-    if (entity_count > 0 and entity_metadata[0].active) {
-        physics_components[0].velocity.x += x;
-        physics_components[0].velocity.y += y;
-        physics_components[0].velocity.z += z;
+pub export fn apply_force(entity_id: u32, x: f32, y: f32, z: f32) void {
+    // Apply force to specified entity
+    if (entity_id < entity_count and entity_metadata[entity_id].active) {
+        physics_components[entity_id].velocity.x += x;
+        physics_components[entity_id].velocity.y += y;
+        physics_components[entity_id].velocity.z += z;
     }
 }
 
