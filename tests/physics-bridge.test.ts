@@ -32,7 +32,6 @@ describe('WasmPhysicsBridge', () => {
 
             const stats = bridge.getStats();
             expect(stats.isInitialized).toBe(true);
-            expect(stats.hasMockWasm).toBe(false); // Phase 6: Now loads real WASM by default
             expect(stats.entityCount).toBe(0); // No entities added yet
         });
 
@@ -66,7 +65,6 @@ describe('WasmPhysicsBridge', () => {
 
             const stats = bridge.getStats();
             expect(stats.isInitialized).toBe(true);
-            expect(stats.hasMockWasm).toBe(false);
         });
     });
 

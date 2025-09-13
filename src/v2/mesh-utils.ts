@@ -42,12 +42,13 @@ export function createCubeMesh(size: number = 1): MeshData {
 /**
  * Create a simple triangle mesh - small triangle in NDC space for debugging
  */
-export function createTriangleMesh(): MeshData {
+export function createTriangleMesh(size: number = 1): MeshData {
     /* eslint-disable indent */
+    const s = size / 2;
     const vertices = new Float32Array([
-         0.0,  0.5, 0.0,  // Top center
-        -0.5, -0.5, 0.0,  // Bottom left
-         0.5, -0.5, 0.0,  // Bottom right
+         0.0,  s, 0.0,  // Top center
+          -s, -s, 0.0,  // Bottom left
+           s, -s, 0.0,  // Bottom right
     ]);
     /* eslint-enable indent */
     const indices = new Uint16Array([0, 1, 2]);
@@ -93,30 +94,30 @@ export function createGridMesh(size: number = 10, divisions: number = 10): MeshD
 export function createSphereMesh(radius: number = 1, segments: number = 16): MeshData {
     const vertices = [];
     const indices = [];
-    
+
     for (let i = 0; i <= segments; i++) {
         const theta = (i * Math.PI) / segments;
         for (let j = 0; j <= segments; j++) {
             const phi = (j * 2 * Math.PI) / segments;
-            
+
             const x = radius * Math.sin(theta) * Math.cos(phi);
             const y = radius * Math.cos(theta);
             const z = radius * Math.sin(theta) * Math.sin(phi);
-            
+
             vertices.push(x, y, z);
         }
     }
-    
+
     for (let i = 0; i < segments; i++) {
         for (let j = 0; j < segments; j++) {
             const first = i * (segments + 1) + j;
             const second = first + segments + 1;
-            
+
             indices.push(first, second, first + 1);
             indices.push(second, second + 1, first + 1);
         }
     }
-    
+
     return {
         vertices: new Float32Array(vertices),
         indices: new Uint16Array(indices)
@@ -131,7 +132,7 @@ export function createSphereMesh(radius: number = 1, segments: number = 16): Mes
 export function createPyramidMesh(size: number = 1, height: number = 1): MeshData {
     const s = size / 2;
     const h = height / 2;
-    
+
     /* eslint-disable indent */
     const vertices = new Float32Array([
         // Base vertices (square on XZ plane)
@@ -143,7 +144,7 @@ export function createPyramidMesh(size: number = 1, height: number = 1): MeshDat
          0,  h,  0,  // 4: Top center
     ]);
     /* eslint-enable indent */
-    
+
     const indices = new Uint16Array([
         // Base (looking up from below)
         0, 2, 1,  // Base triangle 1
@@ -154,6 +155,6 @@ export function createPyramidMesh(size: number = 1, height: number = 1): MeshDat
         2, 3, 4,  // Back face
         3, 0, 4,  // Left face
     ]);
-    
+
     return { vertices, indices };
 }

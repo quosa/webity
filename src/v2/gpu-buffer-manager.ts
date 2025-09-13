@@ -76,7 +76,7 @@ export class GPUBufferManager {
         this.sharedIndexBuffer.unmap();
     }
 
-    // Phase 5: Zero-copy WASM memory mapping for instance data
+    // Phase 5: Copy WASM memory mapping for instance data
     mapInstanceDataFromWasm(wasmMemory: ArrayBuffer, offset: number, count: number): void {
         if (!this.device) {
             console.warn('Cannot map WASM data: Device not initialized');
@@ -93,9 +93,8 @@ export class GPUBufferManager {
 
         // Direct zero-copy mapping from WASM entity transforms
         // 20 floats per instance: 16 (transform matrix) + 4 (color)
+        // This is a typed array view into the WASM memory, not a copy!
         const wasmInstanceData = new Float32Array(wasmMemory, offset, count * 20);
-
-        console.log(`🚀 Phase 5: Zero-copy mapping ${count} instances from WASM (${wasmInstanceData.length} floats)`);
 
         // Track entity count for rendering (only after validation)
         this.setWasmEntityCount(count);
@@ -112,6 +111,8 @@ export class GPUBufferManager {
         }
 
         // Write WASM data directly to GPU buffer
+        // This is a necessary copy because WebGPU cannot directly access WASM memory. :-(
+        // https://toji.dev/webgpu-best-practices/buffer-uploads.html
         this.device.queue.writeBuffer(this.instanceBuffer, 0, wasmInstanceData);
     }
 
@@ -137,12 +138,12 @@ export class GPUBufferManager {
         const availableBytes = wasmMemory.byteLength - offset;
 
         // Enhanced validation with detailed logging
-        console.log(`🔍 WASM Buffer Validation:
-           Entity Count: ${count}
-           Required Bytes: ${requiredBytes}
-           Available Bytes: ${availableBytes}
-           Buffer Size: ${wasmMemory.byteLength}
-           Offset: ${offset}`);
+        // console.log(`🔍 WASM Buffer Validation:
+        //    Entity Count: ${count}
+        //    Required Bytes: ${requiredBytes}
+        //    Available Bytes: ${availableBytes}
+        //    Buffer Size: ${wasmMemory.byteLength}
+        //    Offset: ${offset}`);
 
         if (requiredBytes > availableBytes) {
             console.error(`❌ WASM buffer overflow: need ${requiredBytes} bytes, have ${availableBytes}`);
@@ -158,7 +159,6 @@ export class GPUBufferManager {
             return false;
         }
 
-        console.log('✅ WASM buffer validation passed');
         return true;
     }
 

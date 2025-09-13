@@ -114,6 +114,7 @@ export class WasmPhysicsBridge {
         if (meshIndex === undefined) {
             throw new Error(`❌ Mesh index not set for MeshRenderer in GameObject "${gameObject.name}" - ensure added to Scene after renderer initialized`);
         }
+        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, mass=${mass}, isKinematic=${isKinematic}`);
         this.wasm.add_entity(
             wasmEntityId,
             transform.position.x,
@@ -233,14 +234,15 @@ export class WasmPhysicsBridge {
 
 
     // Get statistics (Phase 6: Return real WASM entity count)
-    public getStats(): { entityCount: number; isInitialized: boolean; hasMockWasm: boolean } {
-        const mockEntityCount = this.entityIdMap.size; // TypeScript-side count
-        const realEntityCount = this.wasm ? this.wasm.get_entity_count() : 0; // WASM-side count
+    public getStats(): { entityCount: number; isInitialized: boolean; } {
+        if (!this.isInitialized) {
+            throw new Error('WASM module not initialized - cannot get stats');
+        }
+        const realEntityCount = this.wasm!.get_entity_count();
 
         return {
-            entityCount: this.wasm ? realEntityCount : mockEntityCount, // Use real count when available
+            entityCount: realEntityCount,
             isInitialized: this.isInitialized,
-            hasMockWasm: !this.wasm
         };
     }
 

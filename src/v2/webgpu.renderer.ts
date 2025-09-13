@@ -2,7 +2,7 @@
 // Clean WebGPU renderer focused on GPU resource management and rendering
 /// <reference types="@webgpu/types" />
 
-import { EntityManager, EntityData } from './entities';
+// import { EntityManager, EntityData } from './entities';
 import { GPUBufferManager } from './gpu-buffer-manager';
 import { MeshData } from './mesh-registry';
 
@@ -44,7 +44,7 @@ export class WebGPURendererV2 {
     private textureRegistry = new Map<string, Texture>();
 
     // New architecture components
-    private entityManager = new EntityManager();
+    // private entityManager = new EntityManager();
     private bufferManager!: GPUBufferManager;
 
     private depthTexture!: any; // GPUTexture
@@ -304,6 +304,7 @@ export class WebGPURendererV2 {
         this.textureRegistry.set(textureId, new Texture(this.device, texture));
     }
 
+    /*
     addEntity(entityData: EntityData): void {
         this.entityManager.add(entityData);
     }
@@ -324,7 +325,6 @@ export class WebGPURendererV2 {
         throw new Error('old rendering pipeline is deprecated!!! Use renderFromWasmBuffers() or mapInstanceDataFromWasm() instead.');
     }
 
-    /*
     render(): void {
         const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
         const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
@@ -490,7 +490,8 @@ export class WebGPURendererV2 {
     }
 
     // Phase 6: 2-pass WASM rendering (triangles + lines) - eliminates TypeScript rendering
-    renderFromWasmBuffers(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }): void {
+    // renderFromWasmBuffers(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }): void {
+    render(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }): void {
         const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
         const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
         const instanceBuffer = this.bufferManager.getInstanceBuffer();
@@ -499,8 +500,6 @@ export class WebGPURendererV2 {
             console.warn('⚠️ Required buffers not available for WASM rendering');
             return;
         }
-
-        console.log('🚀 Phase 6: 2-pass WASM rendering (triangles + lines)');
 
         // Begin render pass with depth testing
         const commandEncoder = this.device.createCommandEncoder();
@@ -521,14 +520,13 @@ export class WebGPURendererV2 {
             },
         });
 
+        const maxSafeInstanceCount = 1000; // Reasonable upper bound
         const instanceCount = this.bufferManager.getWasmEntityCount();
 
         // 🔒 CRITICAL: Validate instance count before rendering to prevent ghost triangles
-        const maxSafeInstanceCount = 1000; // Reasonable upper bound
         if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount) {
-            console.log(`🎯 2-pass rendering of ${instanceCount} validated WASM instances`);
 
-            // PASS 1: Render triangle entities (sphere, cube, pyramid)
+            // PASS 1: Render triangle entities (sphere, cube, pyramid...)
             this.renderWasmInstancesByMode(renderPass, this.renderPipeline, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer, 'triangles', wasmModule);
 
             // PASS 2: Render line entities (grid)
@@ -555,8 +553,6 @@ export class WebGPURendererV2 {
         renderMode: 'triangles' | 'lines',
         wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }
     ): void {
-        console.log(`🎯 Pass: ${renderMode} rendering`);
-
         renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, this.bindGroup);
 
@@ -567,30 +563,24 @@ export class WebGPURendererV2 {
 
         // Get WASM metadata info
         const metadataOffset = wasmModule.get_entity_metadata_offset();
-        let metadataSize: number;
-        if (typeof wasmModule.get_entity_metadata_size === 'function') {
-            metadataSize = wasmModule.get_entity_metadata_size();
-        } else {
-            metadataSize = 16; // Fallback size
-        }
+        const metadataSize = wasmModule.get_entity_metadata_size();
 
         const wasmMemory = wasmModule.memory.buffer;
 
+        // TODO: REMOVE HARD-CODED MESH LIST - registry needs to know the render mode of each mesh
         // Determine which mesh types belong to this render mode
         const triangleMeshes = ['triangle', 'cube', 'sphere', 'pyramid']; // Triangle meshes
         const lineMeshes = ['grid']; // Line meshes
         const targetMeshes = renderMode === 'triangles' ? triangleMeshes : lineMeshes;
 
-        console.log(`🔍 ${renderMode} pass: Looking for meshes: ${targetMeshes.join(', ')}`);
-
         // Debug: Check what mesh IDs WASM actually stored using the debug function
-        if (renderMode === 'triangles' && 'debug_get_entity_mesh_id' in wasmModule) { // Only log once per render cycle
-            console.log('🔧 WASM Debug - Stored mesh IDs:');
-            for (let i = 0; i < instanceCount; i++) {
-                const storedMeshId = (wasmModule as any).debug_get_entity_mesh_id(i);
-                console.log(`  Entity ${i}: stored mesh_id=${storedMeshId}`);
-            }
-        }
+        // if (renderMode === 'triangles' && 'debug_get_entity_mesh_id' in wasmModule) { // Only log once per render cycle
+        //     console.log('🔧 WASM Debug - Stored mesh IDs:');
+        //     for (let i = 0; i < instanceCount; i++) {
+        //         const storedMeshId = (wasmModule as any).debug_get_entity_mesh_id(i);
+        //         console.log(`  Entity ${i}: stored mesh_id=${storedMeshId}`);
+        //     }
+        // }
 
         // Group entities by mesh type, filtering for this render mode
         const meshGroups = new Map<string, number[]>(); // meshId -> array of entity indices
@@ -599,8 +589,10 @@ export class WebGPURendererV2 {
             try {
                 const wasmMeshId = this.getEntityMeshId(wasmMemory, metadataOffset, metadataSize, entityIndex);
                 const meshId = this.wasmMeshIdToString(wasmMeshId);
-                console.log(`🔍 Entity ${entityIndex}: WASM mesh_id=${wasmMeshId} → "${meshId}"`);
+                // console.log(`🔍 Entity ${entityIndex}: WASM mesh_id=${wasmMeshId} → "${meshId}"`);
 
+                // TODO: REMOVE - the entity list needs to come from registry
+                // Don't filter based on mesh names, but render mode associated with each mesh!
                 // Filter: only include meshes for this render mode
                 if (!targetMeshes.includes(meshId)) {
                     continue; // Skip entities that don't match this render mode
@@ -615,8 +607,8 @@ export class WebGPURendererV2 {
             }
         }
 
-        const totalEntitiesForMode = Array.from(meshGroups.values()).reduce((sum, indices) => sum + indices.length, 0);
-        console.log(`🎯 ${renderMode} pass: Found ${totalEntitiesForMode} entities in ${meshGroups.size} mesh groups`);
+        // const totalEntitiesForMode = Array.from(meshGroups.values()).reduce((sum, indices) => sum + indices.length, 0);
+        // console.log(`🎯 ${renderMode} pass: Found ${totalEntitiesForMode} entities in ${meshGroups.size} mesh groups`);
 
         // Render each mesh group for this mode
         for (const [meshId, entityIndices] of meshGroups) {
@@ -628,7 +620,7 @@ export class WebGPURendererV2 {
                 continue;
             }
 
-            console.log(`🎯 ${renderMode} pass: Rendering ${entityIndices.length} '${meshId}' entities`);
+            // console.log(`🎯 ${renderMode} pass: Rendering ${entityIndices.length} '${meshId}' entities`);
 
             // Set vertex buffer with mesh-specific offset
             const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
@@ -651,11 +643,11 @@ export class WebGPURendererV2 {
             }
         }
 
-        console.log(`✅ ${renderMode} pass complete: ${totalEntitiesForMode} entities rendered`);
+        // console.log(`✅ ${renderMode} pass complete: ${totalEntitiesForMode} entities rendered`);
     }
 
 
-
+    /*
     // Scene system integration methods
     updateEntities(entities: EntityData[]): void {
         // Clear existing entities and add new ones
@@ -664,6 +656,7 @@ export class WebGPURendererV2 {
             this.addEntity(entity);
         }
     }
+    */
 
     updateCamera(viewProjectionMatrix: Float32Array): void {
         this.setViewProjectionMatrix(viewProjectionMatrix);
@@ -679,6 +672,6 @@ export class WebGPURendererV2 {
         this.bufferManager?.dispose();
         this.depthTexture?.destroy();
         this.textureRegistry.clear();
-        this.entityManager = new EntityManager();
+        // this.entityManager = new EntityManager();
     }
 }

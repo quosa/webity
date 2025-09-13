@@ -30,18 +30,26 @@ export class Scene {
     }
     _addMeshIndex(gameObject: GameObject) {
         const meshRenderer = gameObject.getComponent(MeshRenderer);
-        if (!meshRenderer) return;
-        if (meshRenderer.meshIndex !== undefined) return; // Already has mesh index assigned
+        if (!meshRenderer) {
+            console.log(`⚪ GameObject "${gameObject.name}" has no MeshRenderer - skipping mesh index assignment`);
+            return;
+        }
+        if (meshRenderer.meshIndex !== undefined) {
+            console.log(`✅ GameObject "${gameObject.name}" already has mesh index ${meshRenderer.meshIndex}`);
+            return; // Already has mesh index assigned
+        }
 
         if (!this.renderer) {
             throw new Error('❌ Renderer not set in Scene - cannot get mesh index');
         }
 
+        console.log(`🔍 Getting mesh index for "${meshRenderer.meshId}" in GameObject "${gameObject.name}"`);
         const meshIndex = this.renderer.getMeshIndex(meshRenderer.meshId);
         if (meshIndex === undefined) {
-            throw new Error(`❌ Unknown mesh ID "${meshRenderer.meshId}" in GameObject "${gameObject.name}"`);
+            throw new Error(`❌ Unknown mesh ID "${meshRenderer.meshId}" in GameObject "${gameObject.name}" - make sure mesh is registered with renderer`);
         }
         meshRenderer.meshIndex = meshIndex;
+        console.log(`✅ Assigned mesh index ${meshIndex} for "${meshRenderer.meshId}" to GameObject "${gameObject.name}"`);
     }
 
     // Entity Management
@@ -49,12 +57,16 @@ export class Scene {
         this.entities.set(gameObject.id, gameObject);
         gameObject.setScene(this);
 
-        // Add ALL GameObjects to WASM for zero-copy rendering (physics and static entities)
-        this._addMeshIndex(gameObject);
-        this.physicsBridge.addEntity(gameObject);
-        const rigidBody = gameObject.getComponent(RigidBody);
-        const entityType = rigidBody ? 'physics' : 'static';
-        console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity`);
+        try {
+            // Add ALL GameObjects to WASM for zero-copy rendering (physics and static entities)
+            this._addMeshIndex(gameObject);
+            const wasmEntityId = this.physicsBridge.addEntity(gameObject);
+            const rigidBody = gameObject.getComponent(RigidBody);
+            const entityType = rigidBody ? 'physics' : 'static';
+            console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity (wasmId: ${wasmEntityId})`);
+        } catch (error) {
+            console.error(`❌ Failed to add GameObject "${gameObject.name}" to WASM:`, error);
+        }
     }
 
     removeGameObject(id: string): boolean {
@@ -155,52 +167,50 @@ export class Scene {
         this.syncCameraToWasm();
 
         // 5. Render with zero-copy buffer access (WASM buffers → GPU directly)
-        this.renderZeroCopy();
+        this.render();
     }
 
-    // Phase 6: Pure WASM rendering - ALL entities via WASM buffers (2-pass: triangles + lines)
-    renderZeroCopy(): void {
-        if (!this.renderer) return;
-
-        console.log('🚀 Phase 6: Pure WASM rendering - ALL entities via WASM (triangles + lines)');
+    // Phase 6: WASM instance buffer entity rendering (2-pass: triangles + lines)
+    render(): void {
+        if (!this.renderer) return; //TODO: throw error?
+        if (!this.physicsBridge.hasWasmModule()) return; //TODO: throw error?
 
         const wasmEntityCount = this.physicsBridge.getStats().entityCount;
+        if (wasmEntityCount === 0) return; // Nothing to render
+
         console.log(`📊 Pure WASM rendering: ${wasmEntityCount} entities registered with WASM`);
 
-        // Phase 6: All entities go through WASM - no TypeScript rendering
-        if (this.physicsBridge.hasWasmModule()) {
-            // Get WASM memory and entity transform data
-            const wasmMemory = this.physicsBridge.getWasmMemory();
-            const transformsOffset = this.physicsBridge.getEntityTransformsOffset();
-
-            if (wasmMemory && transformsOffset !== undefined && wasmEntityCount > 0) {
-                // Map WASM data directly to GPU instance buffer
-                this.renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, wasmEntityCount);
-
-                console.log(`📊 Zero-copy: Mapped ${wasmEntityCount} entities from WASM to GPU`);
-            } else {
-                console.warn('⚠️ WASM memory or transforms offset not available - skipping frame');
-                return;
-            }
-        } else {
-            console.log('📊 Mock mode: WASM module not available - skipping frame');
+        // Get WASM memory and entity transform data
+        const wasmMemory = this.physicsBridge.getWasmMemory();
+        if (!wasmMemory) {
+            console.warn('⚠️ WASM memory not available - skipping frame');
+            return;
+        }
+        const transformsOffset = this.physicsBridge.getEntityTransformsOffset();
+        if (transformsOffset === undefined) {
+            console.warn('⚠️ WASM transforms offset not available - skipping frame');
             return;
         }
 
+        // Map WASM data directly to GPU instance buffer
+        this.renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, wasmEntityCount);
+
         // Update camera matrices
         const aspect = this.renderer.getAspectRatio();
+        // TODO: camera view-projection goes directly to renderer still (ts->webgpu uniform)
+        //       not sure if this makes sense to move to WASM (only 1/frame update cost)
         const viewProjectionMatrix = this.camera.getViewProjectionMatrix(aspect);
         this.renderer.updateCamera(viewProjectionMatrix);
 
         // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
         const wasmModule = this.physicsBridge.getWasmModule();
-        this.renderer.renderFromWasmBuffers(wasmModule);
-
-        console.log(`✅ Pure WASM rendering complete: ${wasmEntityCount} entities rendered via 2-pass WASM`);
+        // this.renderer.renderFromWasmBuffers(wasmModule);
+        this.renderer.render(wasmModule);
     }
 
     // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
 
+    /*
     // Legacy TypeScript rendering (Phase 4 and earlier) - kept for fallback
     render(): void {
         if (!this.renderer) return;
@@ -241,6 +251,7 @@ export class Scene {
         this.renderer.updateCamera(viewProjectionMatrix);
         this.renderer.render();
     }
+    */
 
     // Phase 5: Register all entities with WASM (now that WASM is initialized)
     private registerEntitiesWithWasm(): void {
