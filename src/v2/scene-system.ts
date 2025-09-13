@@ -5,7 +5,7 @@ import { Camera } from './camera';
 import { GameObject } from './gameobject';
 import { WebGPURendererV2 } from './webgpu.renderer';
 import { WasmPhysicsBridge } from './wasm-physics-bridge';
-import { RigidBody } from './components';
+import { MeshRenderer, RigidBody } from './components';
 
 export class Scene {
     private entities = new Map<string, GameObject>();
@@ -28,6 +28,21 @@ export class Scene {
         // Initialize physics bridge
         this.physicsBridge = new WasmPhysicsBridge();
     }
+    _addMeshIndex(gameObject: GameObject) {
+        const meshRenderer = gameObject.getComponent(MeshRenderer);
+        if (!meshRenderer) return;
+        if (meshRenderer.meshIndex !== undefined) return; // Already has mesh index assigned
+
+        if (!this.renderer) {
+            throw new Error('❌ Renderer not set in Scene - cannot get mesh index');
+        }
+
+        const meshIndex = this.renderer.getMeshIndex(meshRenderer.meshId);
+        if (meshIndex === undefined) {
+            throw new Error(`❌ Unknown mesh ID "${meshRenderer.meshId}" in GameObject "${gameObject.name}"`);
+        }
+        meshRenderer.meshIndex = meshIndex;
+    }
 
     // Entity Management
     addGameObject(gameObject: GameObject): void {
@@ -35,6 +50,7 @@ export class Scene {
         gameObject.setScene(this);
 
         // Add ALL GameObjects to WASM for zero-copy rendering (physics and static entities)
+        this._addMeshIndex(gameObject);
         this.physicsBridge.addEntity(gameObject);
         const rigidBody = gameObject.getComponent(RigidBody);
         const entityType = rigidBody ? 'physics' : 'static';
@@ -171,7 +187,7 @@ export class Scene {
             return;
         }
 
-        // Update camera matrices 
+        // Update camera matrices
         const aspect = this.renderer.getAspectRatio();
         const viewProjectionMatrix = this.camera.getViewProjectionMatrix(aspect);
         this.renderer.updateCamera(viewProjectionMatrix);
@@ -179,7 +195,7 @@ export class Scene {
         // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
         const wasmModule = this.physicsBridge.getWasmModule();
         this.renderer.renderFromWasmBuffers(wasmModule);
-        
+
         console.log(`✅ Pure WASM rendering complete: ${wasmEntityCount} entities rendered via 2-pass WASM`);
     }
 

@@ -120,13 +120,13 @@ export class GPUBufferManager {
         return this.instanceBuffer;
     }
 
-    // Phase 5: WASM buffer access methods  
+    // Phase 5: WASM buffer access methods
     private wasmEntityCount: number = 0;
-    
+
     getWasmEntityCount(): number {
         return this.wasmEntityCount;
     }
-    
+
     // Called by mapInstanceDataFromWasm to track entity count
     setWasmEntityCount(count: number): void {
         this.wasmEntityCount = count;
@@ -139,7 +139,7 @@ export class GPUBufferManager {
         // Enhanced validation with detailed logging
         console.log(`🔍 WASM Buffer Validation:
            Entity Count: ${count}
-           Required Bytes: ${requiredBytes} 
+           Required Bytes: ${requiredBytes}
            Available Bytes: ${availableBytes}
            Buffer Size: ${wasmMemory.byteLength}
            Offset: ${offset}`);
@@ -188,6 +188,16 @@ export class GPUBufferManager {
     getRegisteredMeshIds(): string[] {
         const allocations = this.meshRegistry.getAllocations();
         return Array.from(allocations.keys());
+    }
+
+    // For WASM module to get mesh index by string ID
+    getMeshIndex(meshId: string): number | undefined {
+        return this.meshRegistry.getMeshIndex(meshId);
+    }
+
+    // Get reverse mapping from mesh index to mesh ID
+    getMeshIndexToIdMap(): Map<number, string> {
+        return this.meshRegistry.getMeshIndexToIdMap();
     }
 
     // Clean up GPU resources

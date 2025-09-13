@@ -24,7 +24,7 @@ export interface WasmPhysicsInterface {
     get_entity_transforms_offset(): number;
     get_entity_metadata_offset(): number;
     get_entity_metadata_size(): number;
-    
+
     // Debug functions for buffer layout investigation
     get_entity_size(): number;
     get_entity_stride(): number;
@@ -46,7 +46,6 @@ export class WasmPhysicsBridge {
         console.log('🌉 WasmPhysicsBridge created');
     }
 
-    // Initialize WASM physics module (Phase 6: Load real WASM by default)
     async init(wasmModule?: WasmPhysicsInterface): Promise<void> {
         if (wasmModule) {
             // Use provided module (for testing/custom scenarios)
@@ -55,20 +54,16 @@ export class WasmPhysicsBridge {
             this.isInitialized = true;
             console.log('✅ WasmPhysicsBridge initialized with provided WASM module');
         } else {
-            // Phase 6: Attempt to load real WASM physics module
             console.log('🔄 Loading real WASM physics module...');
             const loadedWasm = await WasmLoader.loadPhysicsModule();
-            
-            if (loadedWasm) {
-                this.wasm = loadedWasm;
-                this.wasm.init();
-                this.isInitialized = true;
-                console.log('✅ WasmPhysicsBridge initialized with real WASM physics module');
-            } else {
-                // Fallback to mock mode if WASM loading fails
-                this.isInitialized = true;
-                console.log('🔶 WasmPhysicsBridge fallback to mock mode (WASM loading failed)');
+
+            if (!loadedWasm) {
+                throw new Error('❌ Failed to load WASM physics module');
             }
+            this.wasm = loadedWasm;
+            this.wasm.init();
+            this.isInitialized = true;
+            console.log('✅ WasmPhysicsBridge initialized with real WASM physics module');
         }
     }
 
@@ -79,13 +74,18 @@ export class WasmPhysicsBridge {
             return null;
         }
 
+        if (!this.wasm) { // Safety check - remove?
+            throw new Error('WASM module not initialized - cannot add entity to physics and rendering system');
+        }
+
+
         // All entities with MeshRenderer go to WASM (both triangles and lines)
         const meshRenderer = gameObject.getMeshRenderer();
         if (!meshRenderer) {
             console.log(`⚪ Skipping GameObject "${gameObject.name}" - no MeshRenderer`);
             return null;
         }
-        
+
         console.log(`🔵 Registering GameObject "${gameObject.name}" with WASM (meshId: '${meshRenderer.meshId}', renderMode: '${meshRenderer.renderMode}')`);
 
         // Only register triangle-renderable entities with WASM
@@ -104,38 +104,37 @@ export class WasmPhysicsBridge {
         }
 
         // Add to WASM entity system (ALL entities for zero-copy rendering)
-        if (this.wasm) {
-            // Default values for non-physics entities
-            const mass = rigidBody ? rigidBody.mass : 0;
-            const isKinematic = rigidBody ? rigidBody.isKinematic : true; // Static by default
-            
-            // Get color and mesh ID from MeshRenderer if it exists
-            const meshRenderer = gameObject.getMeshRenderer();
-            const color = meshRenderer ? meshRenderer.color : { x: 1, y: 1, z: 1, w: 1 }; // Default white
-            const meshId = meshRenderer ? this.getMeshIdFromString(meshRenderer.meshId) : 0; // Use actual mesh ID from renderer
-            
-            this.wasm.add_entity(
-                wasmEntityId,
-                transform.position.x,
-                transform.position.y,
-                transform.position.z,
-                transform.scale.x,
-                transform.scale.y,
-                transform.scale.z,
-                color.x, // Red
-                color.y, // Green 
-                color.z, // Blue
-                color.w, // Alpha
-                meshId,
-                0, // material ID (TODO: implement material system)
-                mass,
-                isKinematic
-            );
+        // Default values for non-physics entities
+        const mass = rigidBody ? rigidBody.mass : 0;
+        const isKinematic = rigidBody ? rigidBody.isKinematic : true; // Static by default
 
-            // Set initial velocity if RigidBody exists and has velocity
-            if (rigidBody && (rigidBody.velocity.x !== 0 || rigidBody.velocity.y !== 0 || rigidBody.velocity.z !== 0)) {
-                this.wasm.set_entity_velocity(wasmEntityId, rigidBody.velocity.x, rigidBody.velocity.y, rigidBody.velocity.z);
-            }
+        // Get color and mesh ID from MeshRenderer if it exists
+        const color = meshRenderer ? meshRenderer.color : { x: 1, y: 1, z: 1, w: 1 }; // Default white
+        const meshIndex = meshRenderer.meshIndex;
+        if (meshIndex === undefined) {
+            throw new Error(`❌ Mesh index not set for MeshRenderer in GameObject "${gameObject.name}" - ensure added to Scene after renderer initialized`);
+        }
+        this.wasm.add_entity(
+            wasmEntityId,
+            transform.position.x,
+            transform.position.y,
+            transform.position.z,
+            transform.scale.x,
+            transform.scale.y,
+            transform.scale.z,
+            color.x, // Red
+            color.y, // Green
+            color.z, // Blue
+            color.w, // Alpha
+            meshIndex,
+            0, // material ID (TODO: implement material system)
+            mass,
+            isKinematic
+        );
+
+        // Set initial velocity if RigidBody exists and has velocity
+        if (rigidBody && (rigidBody.velocity.x !== 0 || rigidBody.velocity.y !== 0 || rigidBody.velocity.z !== 0)) {
+            this.wasm.set_entity_velocity(wasmEntityId, rigidBody.velocity.x, rigidBody.velocity.y, rigidBody.velocity.z);
         }
 
         const entityType = rigidBody ? 'physics' : 'static';
@@ -233,25 +232,11 @@ export class WasmPhysicsBridge {
     }
 
 
-    // Convert TypeScript mesh string to WASM mesh ID
-    private getMeshIdFromString(meshIdString: string): number {
-        switch (meshIdString) {
-        case 'triangle': return 0; // WASM triangle mesh ID
-        case 'cube': return 1;     // WASM cube mesh ID  
-        case 'sphere': return 2;   // WASM sphere mesh ID
-        case 'pyramid': return 3;  // WASM pyramid mesh ID
-        case 'grid': return 4;     // WASM grid mesh ID (lines)
-        default: 
-            console.warn(`⚠️ Unknown mesh ID "${meshIdString}", defaulting to triangle`);
-            return 0;
-        }
-    }
-
     // Get statistics (Phase 6: Return real WASM entity count)
     public getStats(): { entityCount: number; isInitialized: boolean; hasMockWasm: boolean } {
         const mockEntityCount = this.entityIdMap.size; // TypeScript-side count
         const realEntityCount = this.wasm ? this.wasm.get_entity_count() : 0; // WASM-side count
-        
+
         return {
             entityCount: this.wasm ? realEntityCount : mockEntityCount, // Use real count when available
             isInitialized: this.isInitialized,

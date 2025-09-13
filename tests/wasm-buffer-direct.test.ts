@@ -22,6 +22,7 @@ describe('Direct WASM Buffer Tests', () => {
         triangle.transform.setScale(1.5, 1.5, 1.5);
 
         const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+        meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(meshRenderer);
 
         // Add to WASM
@@ -47,7 +48,7 @@ describe('Direct WASM Buffer Tests', () => {
                 // Expected transform matrix (column-major)
                 const expectedMatrix = [
                     1.5, 0, 0, 0,    // Column 0 (scale X)
-                    0, 1.5, 0, 0,    // Column 1 (scale Y) 
+                    0, 1.5, 0, 0,    // Column 1 (scale Y)
                     0, 0, 1.5, 0,    // Column 2 (scale Z)
                     -2, 1, 0, 1      // Column 3 (translation)
                 ];
@@ -84,6 +85,7 @@ describe('Direct WASM Buffer Tests', () => {
         triangle.transform.setPosition(-2, 0, 0);
         triangle.transform.setScale(1, 1, 1);
         const triangleMeshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
+        triangleMeshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(triangleMeshRenderer);
 
         // Entity 2: Cube at (2, 0, 0), blue
@@ -91,6 +93,7 @@ describe('Direct WASM Buffer Tests', () => {
         cube.transform.setPosition(2, 0, 0);
         cube.transform.setScale(1, 1, 1);
         const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 });
+        cubeMeshRenderer.meshIndex = 1; // Simulate assigned mesh index
         cube.addComponent(cubeMeshRenderer);
 
         // Add to WASM
@@ -176,6 +179,7 @@ describe('Direct WASM Buffer Tests', () => {
                 'triangles',
                 { x: i * 0.2, y: (4 - i) * 0.25, z: 0.5, w: 1 } // Different colors
             );
+            meshRenderer.meshIndex = 0; // Simulate assigned mesh index
             entity.addComponent(meshRenderer);
             entities.push(entity);
 

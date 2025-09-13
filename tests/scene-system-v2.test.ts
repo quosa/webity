@@ -162,6 +162,8 @@ describe('GameObject System (v2)', () => {
     test('should add and retrieve components', () => {
         const gameObject = new GameObject();
         const meshRenderer = new MeshRenderer('cube');
+        // this is normally done by Scene when adding GameObject
+        meshRenderer.meshIndex = 0; // Simulate assigned mesh index
 
         gameObject.addComponent(meshRenderer);
 
@@ -185,7 +187,11 @@ describe('GameObject System (v2)', () => {
     test('should replace component of same type', () => {
         const gameObject = new GameObject();
         const meshRenderer1 = new MeshRenderer('cube');
+        // this is normally done by Scene when adding GameObject
+        meshRenderer1.meshIndex = 0; // Simulate assigned mesh index
         const meshRenderer2 = new MeshRenderer('sphere');
+        // this is normally done by Scene when adding GameObject
+        meshRenderer2.meshIndex = 0; // Simulate assigned mesh index
 
         gameObject.addComponent(meshRenderer1);
         gameObject.addComponent(meshRenderer2);

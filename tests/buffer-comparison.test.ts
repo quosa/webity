@@ -35,6 +35,8 @@ describe('Buffer Comparison: TypeScript vs WASM', () => {
         triangleGameObject.transform.setScale(2, 2, 2);
 
         const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
+        // this is normally done by Scene when adding GameObject
+        meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangleGameObject.addComponent(meshRenderer);
 
         scene.addGameObject(triangleGameObject);

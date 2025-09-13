@@ -47,39 +47,39 @@ const MeshType = enum(u8) {
 
 // Physics-only component (hot data - cache-friendly)
 const PhysicsComponent = struct {
-    position: core.Vec3,       // World position
-    velocity: core.Vec3,       // Movement velocity  
-    force: core.Vec3,          // Accumulated forces
-    rotation: core.Vec3,       // Rotation in radians (x, y, z)
-    scale: core.Vec3,          // Scale values (x, y, z)
-    mass: f32,                 // Physics mass
-    radius: f32,               // Collision radius/size
-    is_kinematic: bool,        // Kinematic vs dynamic
+    position: core.Vec3, // World position
+    velocity: core.Vec3, // Movement velocity
+    force: core.Vec3, // Accumulated forces
+    rotation: core.Vec3, // Rotation in radians (x, y, z)
+    scale: core.Vec3, // Scale values (x, y, z)
+    mass: f32, // Physics mass
+    radius: f32, // Collision radius/size
+    is_kinematic: bool, // Kinematic vs dynamic
 };
 
 // Rendering-only component (GPU buffer layout - exactly 20 floats)
 const RenderingComponent = struct {
     transform_matrix: [16]f32, // 4x4 world transform matrix (64 bytes)
-    color: [4]f32,            // RGBA color (16 bytes)
+    color: [4]f32, // RGBA color (16 bytes)
     // Total: exactly 80 bytes (20 floats) for zero-copy GPU mapping
 };
 
 // Entity metadata (lifecycle and dirty flags)
 const EntityMetadata = struct {
-    id: u32,                  // Entity ID for TypeScript mapping
-    active: bool,             // Entity active flag
-    physics_enabled: bool,    // Has physics simulation
-    rendering_enabled: bool,  // Has rendering data  
-    transform_dirty: bool,    // Transform matrix needs recalculation
-    mesh_id: u32,             // Mesh type identifier (moved from RenderingComponent)
-    material_id: u32,         // Material identifier (moved from RenderingComponent)
+    id: u32, // Entity ID for TypeScript mapping
+    active: bool, // Entity active flag
+    physics_enabled: bool, // Has physics simulation
+    rendering_enabled: bool, // Has rendering data
+    transform_dirty: bool, // Transform matrix needs recalculation
+    mesh_index: u32, // Mesh type identifier (moved from RenderingComponent)
+    material_id: u32, // Material identifier (moved from RenderingComponent)
 };
 
 // Rotator component for animation behavior
 const RotatorComponent = struct {
-    enabled: bool,            // Whether rotation is active
+    enabled: bool, // Whether rotation is active
     angular_velocity: core.Vec3, // Rotation speed in radians per second
-    axis_mask: u8,           // Bitmask: 1=X, 2=Y, 4=Z rotation axes
+    axis_mask: u8, // Bitmask: 1=X, 2=Y, 4=Z rotation axes
 };
 
 // Four component arrays for ECS
@@ -98,7 +98,7 @@ var debug_floating_entity_index: u32 = MAX_ENTITIES; // Index of floating entity
 
 fn initEntities() void {
     entity_count = 0;
-    
+
     // Initialize physics components
     for (&physics_components) |*phys| {
         phys.* = PhysicsComponent{
@@ -112,12 +112,12 @@ fn initEntities() void {
             .is_kinematic = false,
         };
     }
-    
+
     // Initialize rendering components
     for (&rendering_components) |*render| {
         render.* = RenderingComponent{
             .transform_matrix = [_]f32{
-                1.0, 0.0, 0.0, 0.0,  // Identity matrix
+                1.0, 0.0, 0.0, 0.0, // Identity matrix
                 0.0, 1.0, 0.0, 0.0,
                 0.0, 0.0, 1.0, 0.0,
                 0.0, 0.0, 0.0, 1.0,
@@ -125,7 +125,7 @@ fn initEntities() void {
             .color = [_]f32{ 1.0, 1.0, 1.0, 1.0 }, // Default white
         };
     }
-    
+
     // Initialize entity metadata
     for (&entity_metadata) |*meta| {
         meta.* = EntityMetadata{
@@ -134,11 +134,11 @@ fn initEntities() void {
             .physics_enabled = false,
             .rendering_enabled = false,
             .transform_dirty = false,
-            .mesh_id = 0, // Default to triangle
+            .mesh_index = 0, // Default to triangle
             .material_id = 0, // Default material
         };
     }
-    
+
     // Initialize rotator components
     for (&rotator_components) |*rotator| {
         rotator.* = RotatorComponent{
@@ -156,20 +156,20 @@ fn initEntities() void {
 // Update transform matrix for specific entity (ECS version)
 fn updateECSTransformMatrix(entity_index: u32) void {
     if (entity_index >= entity_count) return;
-    
+
     const phys = &physics_components[entity_index];
     const render = &rendering_components[entity_index];
-    
+
     // Create rotation matrix if entity has rotation
     var has_rotation = false;
     if (phys.rotation.x != 0.0 or phys.rotation.y != 0.0 or phys.rotation.z != 0.0) {
         has_rotation = true;
     }
-    
+
     if (has_rotation) {
         // Create combined transform matrix: T * R * S (column-major)
         const rotation_mat = core.createRotationMatrix(phys.rotation);
-        
+
         // Combine rotation and scale, then add translation (column-major)
         render.transform_matrix = [_]f32{
             // Column 0: Rotated & scaled X axis
@@ -188,22 +188,25 @@ fn updateECSTransformMatrix(entity_index: u32) void {
             rotation_mat.data[10] * phys.scale.z,
             0.0,
             // Column 3: Translation (position)
-            phys.position.x, phys.position.y, phys.position.z, 1.0,
+            phys.position.x,
+            phys.position.y,
+            phys.position.z,
+            1.0,
         };
     } else {
         // Simple scale + translate matrix (no rotation)
         render.transform_matrix = [_]f32{
             // Column 0: Scale X axis
-            phys.scale.x, 0.0, 0.0, 0.0,
-            // Column 1: Scale Y axis  
-            0.0, phys.scale.y, 0.0, 0.0,
+            phys.scale.x,    0.0,             0.0,             0.0,
+            // Column 1: Scale Y axis
+            0.0,             phys.scale.y,    0.0,             0.0,
             // Column 2: Scale Z axis
-            0.0, 0.0, phys.scale.z, 0.0,
+            0.0,             0.0,             phys.scale.z,    0.0,
             // Column 3: Translation (position)
             phys.position.x, phys.position.y, phys.position.z, 1.0,
         };
     }
-    
+
     // Clear dirty flag
     entity_metadata[entity_index].transform_dirty = false;
 }
@@ -220,10 +223,10 @@ fn updateDirtyTransforms() void {
 fn updateRotators(delta_time: f32) void {
     for (rotator_components[0..entity_count], 0..) |*rotator, i| {
         if (!rotator.enabled or !entity_metadata[i].active) continue;
-        
+
         const phys = &physics_components[i];
         var rotation_changed = false;
-        
+
         // Apply angular velocity to rotation based on axis mask
         if (rotator.axis_mask & 1 != 0) { // X-axis rotation
             phys.rotation.x += rotator.angular_velocity.x * delta_time;
@@ -237,7 +240,7 @@ fn updateRotators(delta_time: f32) void {
             phys.rotation.z += rotator.angular_velocity.z * delta_time;
             rotation_changed = true;
         }
-        
+
         // Mark transform as dirty if rotation changed
         if (rotation_changed) {
             entity_metadata[i].transform_dirty = true;
@@ -259,35 +262,35 @@ fn findECSEntityById(id: u32) ?u32 {
 fn updateECSPhysics(delta_time: f32) void {
     // Step 1: Physics simulation (hot path - only touch physics components)
     const force = core.Vec3{ .x = 0, .y = physics_gravity, .z = 0 };
-    
+
     for (physics_components[0..entity_count], 0..) |*phys, i| {
         if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
-        
+
         // Apply gravity and forces
         phys.velocity.x += force.x * delta_time;
         phys.velocity.y += force.y * delta_time;
         phys.velocity.z += force.z * delta_time;
-        
+
         // Apply damping
         phys.velocity.x *= physics_damping;
         phys.velocity.z *= physics_damping;
-        
+
         // Update position
         phys.position.x += phys.velocity.x * delta_time;
         phys.position.y += phys.velocity.y * delta_time;
         phys.position.z += phys.velocity.z * delta_time;
-        
+
         // Apply world boundary constraints
         const entity_collision_flags = applyECSWorldBoundaryConstraints(&phys.position, &phys.velocity, phys.radius);
         collision_state |= entity_collision_flags;
-        
+
         // Mark transform as dirty for rendering update
         entity_metadata[i].transform_dirty = true;
     }
-    
+
     // Step 2: Update rotator components (animation system)
     updateRotators(delta_time);
-    
+
     // Step 3: Update dirty transforms (selective - only changed entities)
     updateDirtyTransforms();
 }
@@ -295,7 +298,7 @@ fn updateECSPhysics(delta_time: f32) void {
 // ECS version of boundary constraints
 fn applyECSWorldBoundaryConstraints(position: *core.Vec3, velocity: *core.Vec3, radius: f32) u8 {
     var collision_flags: u8 = 0;
-    
+
     // X boundaries
     if (position.x - radius < -world_bounds.x) {
         position.x = -world_bounds.x + radius;
@@ -306,8 +309,8 @@ fn applyECSWorldBoundaryConstraints(position: *core.Vec3, velocity: *core.Vec3, 
         velocity.x = -velocity.x * physics_restitution;
         collision_flags |= 2;
     }
-    
-    // Y boundaries  
+
+    // Y boundaries
     if (position.y - radius < -world_bounds.y) {
         position.y = -world_bounds.y + radius;
         velocity.y = -velocity.y * physics_restitution;
@@ -317,7 +320,7 @@ fn applyECSWorldBoundaryConstraints(position: *core.Vec3, velocity: *core.Vec3, 
         velocity.y = -velocity.y * physics_restitution;
         collision_flags |= 8;
     }
-    
+
     // Z boundaries
     if (position.z - radius < -world_bounds.z) {
         position.z = -world_bounds.z + radius;
@@ -328,7 +331,7 @@ fn applyECSWorldBoundaryConstraints(position: *core.Vec3, velocity: *core.Vec3, 
         velocity.z = -velocity.z * physics_restitution;
         collision_flags |= 32;
     }
-    
+
     return collision_flags;
 }
 
@@ -338,7 +341,7 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
 
     const index = entity_count;
     const mesh_id = @intFromEnum(mesh_type);
-    
+
     // Initialize physics component
     physics_components[index] = PhysicsComponent{
         .position = .{ .x = x, .y = y, .z = z },
@@ -350,24 +353,24 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .radius = radius,
         .is_kinematic = false,
     };
-    
+
     // Initialize rendering component with transform matrix
     rendering_components[index] = RenderingComponent{
         .transform_matrix = [_]f32{
-            1.0, 0.0, 0.0, 0.0,  // Column 0: [sx, 0, 0, 0]
-            0.0, 1.0, 0.0, 0.0,  // Column 1: [0, sy, 0, 0]
-            0.0, 0.0, 1.0, 0.0,  // Column 2: [0, 0, sz, 0]
-            x, y, z, 1.0,        // Column 3: [tx, ty, tz, 1]
+            1.0, 0.0, 0.0, 0.0, // Column 0: [sx, 0, 0, 0]
+            0.0, 1.0, 0.0, 0.0, // Column 1: [0, sy, 0, 0]
+            0.0, 0.0, 1.0, 0.0, // Column 2: [0, 0, sz, 0]
+            x, y, z, 1.0, // Column 3: [tx, ty, tz, 1]
         },
         .color = switch (mesh_type) {
             .TRIANGLE => [_]f32{ 1.0, 0.0, 0.0, 1.0 }, // Red for triangles
-            .CUBE => [_]f32{ 0.2, 0.8, 1.0, 1.0 },     // Sky blue for cubes
-            .SPHERE => [_]f32{ 1.0, 0.8, 0.2, 1.0 },   // Golden yellow for spheres
-            .PYRAMID => [_]f32{ 1.0, 0.0, 1.0, 1.0 },  // Purple for pyramids
-            .GRID => [_]f32{ 0.3, 0.3, 0.3, 1.0 },     // Gray for grid
+            .CUBE => [_]f32{ 0.2, 0.8, 1.0, 1.0 }, // Sky blue for cubes
+            .SPHERE => [_]f32{ 1.0, 0.8, 0.2, 1.0 }, // Golden yellow for spheres
+            .PYRAMID => [_]f32{ 1.0, 0.0, 1.0, 1.0 }, // Purple for pyramids
+            .GRID => [_]f32{ 0.3, 0.3, 0.3, 1.0 }, // Gray for grid
         },
     };
-    
+
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
         .id = index, // Use array index as ID for legacy compatibility
@@ -375,10 +378,10 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .physics_enabled = true,
         .rendering_enabled = true,
         .transform_dirty = false, // Transform already set up
-        .mesh_id = mesh_id,
+        .mesh_index = mesh_id,
         .material_id = 0,
     };
-    
+
     entity_count += 1;
     return index;
 }
@@ -545,7 +548,7 @@ pub export fn update(delta_time: f32) void {
     // ECS physics simulation
     collision_state = 0;
     updateECSPhysics(delta_time);
-    
+
     // Update model matrix with first active entity position (for backward compatibility)
     uniforms.model = core.Mat4.identity();
     if (entity_count > 0 and entity_metadata[0].active) {
@@ -765,7 +768,7 @@ pub export fn spawn_entity_with_mesh(x: f32, y: f32, z: f32, radius: f32, mesh_t
 pub export fn get_sphere_count() u32 {
     var count: u32 = 0;
     for (0..entity_count) |i| {
-        if (entity_metadata[i].active and entity_metadata[i].mesh_id == @intFromEnum(MeshType.SPHERE)) {
+        if (entity_metadata[i].active and entity_metadata[i].mesh_index == @intFromEnum(MeshType.SPHERE)) {
             count += 1;
         }
     }
@@ -775,7 +778,7 @@ pub export fn get_sphere_count() u32 {
 pub export fn get_cube_count() u32 {
     var count: u32 = 0;
     for (0..entity_count) |i| {
-        if (entity_metadata[i].active and entity_metadata[i].mesh_id == @intFromEnum(MeshType.CUBE)) {
+        if (entity_metadata[i].active and entity_metadata[i].mesh_index == @intFromEnum(MeshType.CUBE)) {
             count += 1;
         }
     }
@@ -825,7 +828,7 @@ pub export fn set_entity_rotation(index: u32, x: f32, y: f32, z: f32) void {
 
 pub export fn get_entity_mesh_type(index: u32) u8 {
     if (index >= entity_count or !entity_metadata[index].active) return 0; // Default to SPHERE
-    return @intCast(entity_metadata[index].mesh_id);
+    return @intCast(entity_metadata[index].mesh_index);
 }
 
 // Debug exports
@@ -847,14 +850,14 @@ pub export fn clear_debug_floating_entity() void {
 // =============================================================================
 
 // V2 API: Add entity with ECS structure
-pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshId: u32, materialId: u32, mass: f32, isKinematic: bool) void {
+pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshIndex: u32, materialId: u32, mass: f32, isKinematic: bool) void {
     if (entity_count >= MAX_ENTITIES) return;
-    
+
     const index = entity_count;
-    
+
     // Debug: Log what we're receiving
     // Note: Can't use console.log from WASM, but this will be stored for later validation
-    
+
     // Initialize physics component
     physics_components[index] = PhysicsComponent{
         .position = .{ .x = x, .y = y, .z = z },
@@ -866,22 +869,22 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .radius = 0.5, // Default radius
         .is_kinematic = isKinematic,
     };
-    
+
     // Initialize rendering component
     rendering_components[index] = RenderingComponent{
         .transform_matrix = [_]f32{
             // Column 0: Scale X axis
-            scaleX, 0.0, 0.0, 0.0,
+            scaleX, 0.0,    0.0,    0.0,
             // Column 1: Scale Y axis
-            0.0, scaleY, 0.0, 0.0,
+            0.0,    scaleY, 0.0,    0.0,
             // Column 2: Scale Z axis
-            0.0, 0.0, scaleZ, 0.0,
+            0.0,    0.0,    scaleZ, 0.0,
             // Column 3: Translation (position)
-            x, y, z, 1.0,
+            x,      y,      z,      1.0,
         },
         .color = [_]f32{ colorR, colorG, colorB, colorA },
     };
-    
+
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
         .id = id,
@@ -889,24 +892,24 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .physics_enabled = !isKinematic, // Static entities don't need physics
         .rendering_enabled = true,
         .transform_dirty = false, // Already set up transform
-        .mesh_id = meshId,
+        .mesh_index = meshIndex,
         .material_id = materialId,
     };
-    
+
     entity_count += 1;
 }
 
 pub export fn remove_entity(id: u32) void {
     if (findECSEntityById(id)) |index| {
         entity_metadata[index].active = false;
-        
+
         // Compact arrays by moving last entity to this position
         if (index < entity_count - 1) {
             physics_components[index] = physics_components[entity_count - 1];
             rendering_components[index] = rendering_components[entity_count - 1];
             entity_metadata[index] = entity_metadata[entity_count - 1];
         }
-        
+
         entity_count -= 1;
     }
 }
@@ -970,7 +973,7 @@ pub export fn get_entity_stride() u32 {
 // Debug function to get mesh_id for specific entity
 pub export fn debug_get_entity_mesh_id(index: u32) u32 {
     if (index >= entity_count) return 999; // Invalid index marker
-    return entity_metadata[index].mesh_id;
+    return entity_metadata[index].mesh_index;
 }
 
 // =============================================================================

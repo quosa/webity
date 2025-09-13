@@ -14,6 +14,8 @@ describe('WasmPhysicsBridge', () => {
         const gameObject = new GameObject(name, type || 'TestObject');
         // Add MeshRenderer required for WASM integration
         const meshRenderer = new MeshRenderer(meshId || 'cube', 'default', 'triangles', { x: 1, y: 1, z: 1, w: 1 });
+        // this is normally done by Scene when adding GameObject
+        meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         gameObject.addComponent(meshRenderer);
         return gameObject;
     };
@@ -70,16 +72,11 @@ describe('WasmPhysicsBridge', () => {
 
     describe('Entity Management', () => {
         test('should add physics entity with RigidBody component', () => {
-            const gameObject = new GameObject('test-cube', 'TestCube');
+            const gameObject = createTestGameObject('test-cube', 'TestCube', 'cube');
             gameObject.transform.setPosition(1, 2, 3);
-
             const rigidBody = new RigidBody(2.0, true, 'box', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
-
-            // Add MeshRenderer required for WASM integration
-            const meshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 1, z: 1, w: 1 });
-            gameObject.addComponent(meshRenderer);
-
+            // MeshRenderer already added by createTestGameObject with meshIndex set
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
 
             expect(entityId).not.toBeNull();
@@ -91,10 +88,8 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should add entity without RigidBody component as static entity', () => {
-            const gameObject = new GameObject('test-static', 'StaticObject');
-            const meshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
-            gameObject.addComponent(meshRenderer);
-
+            const gameObject = createTestGameObject('test-static', 'StaticObject', 'cube');
+            // meshRenderer.meshIndex already set in helper
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
 
             expect(entityId).not.toBeNull();
@@ -105,10 +100,10 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should remove physics entity', () => {
-            const gameObject = createTestGameObject('test-removal', 'RemovalTest');
+            const gameObject = createTestGameObject('test-removal', 'RemovalTest', 'sphere');
             const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
-
+            // meshRenderer.meshIndex already set in helper
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
             expect(entityId).not.toBeNull();
 
@@ -125,12 +120,12 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should generate unique entity IDs for multiple entities', () => {
-            const gameObject1 = createTestGameObject('entity1', 'Entity1');
+            const gameObject1 = createTestGameObject('entity1', 'Entity1', 'box');
             gameObject1.addComponent(new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 }));
-
-            const gameObject2 = createTestGameObject('entity2', 'Entity2');
+            // meshRenderer.meshIndex already set in helper
+            const gameObject2 = createTestGameObject('entity2', 'Entity2', 'sphere');
             gameObject2.addComponent(new RigidBody(2.0, false, 'sphere', { x: 1, y: 1, z: 1 }));
-
+            // meshRenderer.meshIndex already set in helper
             const entityId1 = physicsBridge.addPhysicsEntity(gameObject1);
             const entityId2 = physicsBridge.addPhysicsEntity(gameObject2);
 
@@ -215,10 +210,10 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should handle update with entities', () => {
-            const gameObject = new GameObject('update-loop-test', 'UpdateLoopTest');
+            const gameObject = createTestGameObject('update-loop-test', 'UpdateLoopTest', 'sphere');
             const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
-
+            // meshRenderer.meshIndex already set in helper
             physicsBridge.addPhysicsEntity(gameObject);
 
             expect(() => {
@@ -229,10 +224,10 @@ describe('WasmPhysicsBridge', () => {
 
     describe('RigidBody Integration', () => {
         test('should set WASM entity ID and physics bridge reference on RigidBody', () => {
-            const gameObject = createTestGameObject('integration-test', 'IntegrationTest');
+            const gameObject = createTestGameObject('integration-test', 'IntegrationTest', 'box');
             const rigidBody = new RigidBody(1.5, true, 'box', { x: 2, y: 2, z: 2 });
             gameObject.addComponent(rigidBody);
-
+            // meshRenderer.meshIndex already set in helper
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
             expect(entityId).not.toBeNull();
 
@@ -245,11 +240,11 @@ describe('WasmPhysicsBridge', () => {
             const sphereObject = createTestGameObject('sphere-test', 'SphereTest', 'sphere');
             const sphereRigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
             sphereObject.addComponent(sphereRigidBody);
-
+            // meshRenderer.meshIndex already set in helper
             const boxObject = createTestGameObject('box-test', 'BoxTest', 'cube');
             const boxRigidBody = new RigidBody(2.0, false, 'box', { x: 1, y: 1, z: 1 });
             boxObject.addComponent(boxRigidBody);
-
+            // meshRenderer.meshIndex already set in helper
             const sphereId = physicsBridge.addPhysicsEntity(sphereObject);
             const boxId = physicsBridge.addPhysicsEntity(boxObject);
 
@@ -259,16 +254,16 @@ describe('WasmPhysicsBridge', () => {
         });
 
         test('should handle kinematic vs dynamic bodies', () => {
-            const dynamicObject = createTestGameObject('dynamic-test', 'DynamicTest');
+            const dynamicObject = createTestGameObject('dynamic-test', 'DynamicTest', 'box');
             const dynamicRigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
             dynamicRigidBody.setKinematic(false); // Dynamic
             dynamicObject.addComponent(dynamicRigidBody);
-
-            const kinematicObject = createTestGameObject('kinematic-test', 'KinematicTest');
+            // meshRenderer.meshIndex already set in helper
+            const kinematicObject = createTestGameObject('kinematic-test', 'KinematicTest', 'sphere');
             const kinematicRigidBody = new RigidBody(1.0, false, 'sphere', { x: 1, y: 1, z: 1 });
             kinematicRigidBody.setKinematic(true); // Kinematic
             kinematicObject.addComponent(kinematicRigidBody);
-
+            // meshRenderer.meshIndex already set in helper
             const dynamicId = physicsBridge.addPhysicsEntity(dynamicObject);
             const kinematicId = physicsBridge.addPhysicsEntity(kinematicObject);
 

@@ -39,6 +39,8 @@ describe('WASM Buffer Integrity Tests', () => {
         triangle.transform.setScale(1.5, 1.5, 1.5);
 
         const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+        // this is normally done by Scene when adding GameObject
+        meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(meshRenderer);
 
         scene.addGameObject(triangle);
@@ -100,6 +102,8 @@ describe('WASM Buffer Integrity Tests', () => {
         triangle.transform.setScale(1, 1, 1);
 
         const triangleMeshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+        // this is normally done by Scene when adding GameObject
+        triangleMeshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(triangleMeshRenderer);
         scene.addGameObject(triangle);
 
@@ -109,6 +113,8 @@ describe('WASM Buffer Integrity Tests', () => {
         cube.transform.setScale(1, 1, 1);
 
         const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 }); // Blue
+        // this is normally done by Scene when adding GameObject
+        cubeMeshRenderer.meshIndex = 1; // Simulate assigned mesh index
         cube.addComponent(cubeMeshRenderer);
         scene.addGameObject(cube);
 
@@ -194,6 +200,8 @@ describe('WASM Buffer Integrity Tests', () => {
                 'triangles',
                 { x: i * 0.2, y: (5 - i) * 0.2, z: 0.5, w: 1 }
             );
+            // this is normally done by Scene when adding GameObject
+            meshRenderer.meshIndex = 0; // Simulate assigned mesh index
             entity.addComponent(meshRenderer);
             scene.addGameObject(entity);
         }
