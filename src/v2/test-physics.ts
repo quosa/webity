@@ -9,17 +9,14 @@ import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } 
 
 async function createZeroCopyPhysicsScene(scene: Scene): Promise<Scene> {
 
-    console.log('🚀 Creating Zero-Copy Physics Test Scene (Phase 6 Task 3)...');
-
     // Create static floor grid (no RigidBody = static)
-    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -2, z: 0 });
+    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0 });
     scene.addGameObject(floor);
-    console.log('📐 Added static floor grid');
 
     // Create physics cube with RigidBody (should add to WASM and enable zero-copy)
     const physicsCube = new GameObject('physics-cube', 'ZeroCopyTest');
-    physicsCube.transform.setPosition(0, 2, -5);
-    physicsCube.transform.setScale(1, 1, 1);
+    physicsCube.transform.setPosition(-2, 2, 0);
+    physicsCube.transform.setScale(2, 2, 2);
 
     const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
     physicsCube.addComponent(cubeMeshRenderer);
@@ -29,16 +26,15 @@ async function createZeroCopyPhysicsScene(scene: Scene): Promise<Scene> {
         1.0,        // mass: 1kg
         true,       // useGravity: affected by gravity
         'box',      // colliderType: box collider
-        { x: 1, y: 1, z: 1 } // colliderSize: 1x1x1 unit cube
+        { x: 2, y: 2, z: 2 } // colliderSize: 2x2x2 unit cube
     );
     physicsCube.addComponent(cubeRigidBody);
 
     scene.addGameObject(physicsCube);
-    console.log('📦 Added physics cube with RigidBody (should enable zero-copy rendering)');
 
     // Add second physics entity to increase entity count
     const physicsSphere = new GameObject('physics-sphere', 'ZeroCopyTest2');
-    physicsSphere.transform.setPosition(2, 3, -5);
+    physicsSphere.transform.setPosition(2, 3, 0);
 
     const sphereMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 1, w: 1 }); // Cyan
     physicsSphere.addComponent(sphereMeshRenderer);
@@ -47,20 +43,16 @@ async function createZeroCopyPhysicsScene(scene: Scene): Promise<Scene> {
         0.5,        // mass: 0.5kg
         true,       // useGravity: true
         'sphere',   // colliderType: sphere collider
-        { x: 0.5, y: 0.5, z: 0.5 }
+        { x: 1.0, y: 1.0, z: 1.0 } // colliderSize: 1 unit sphere
     );
     physicsSphere.addComponent(sphereRigidBody);
 
     scene.addGameObject(physicsSphere);
-    console.log('🌐 Added physics sphere with RigidBody');
-
-    console.log(`✅ Zero-copy physics scene created with ${scene.getEntityCount()} GameObjects`);
     return scene;
 }
 
 
 async function main() {
-    console.log('🚀 Zero-Copy Physics Rendering Test starting (Phase 6 Task 3)...');
     const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
 
     try {
@@ -85,17 +77,11 @@ async function main() {
         await createZeroCopyPhysicsScene(scene);
 
         // Fix camera position for better viewing
-        scene.camera.setPosition([0, 2, -8]);
-        scene.camera.lookAt([0, 0, -5]);
+        scene.camera.setPosition([0, 0, -20]);
+        scene.camera.lookAt([0, -4, 0]);
 
         // await scene.init(renderer);
         scene.start();
-
-        // Export scene to window for browser testing
-        (window as any).scene = scene;
-        (window as any).zeroCopyScene = scene;
-
-        console.log('✅ Zero-copy physics scene initialized successfully');
 
         // Log scene and physics stats
         const sceneInfo = scene.getSceneInfo();
@@ -156,6 +142,11 @@ async function main() {
             } else {
                 console.log('❌ No WASM module available');
             }
+        };
+
+        (window as any).logSceneInfo = () => {
+            const info = scene.getSceneInfo();
+            console.log('📊 Current Scene Info:', info);
         };
 
         // Animation loop control
