@@ -96,14 +96,13 @@ async function testPyramidSceneRendering() {
         scene.camera.lookAt([0, 0, 0]);        // Look at origin where entities are
 
         // Initialize scene (this registers with WASM)
-        // await scene.init(renderer);
         scene.start();
 
         console.log('📊 Scene initialized. WASM Stats:', scene.physicsBridge.getStats());
 
         // SINGLE RENDER CALL
         console.log('🎯 Performing SINGLE render call with 4 different shapes...');
-        scene.renderZeroCopy(); // Direct call to WASM rendering
+        scene.render(); // Direct call to WASM rendering
 
         console.log('✅ Pyramid test scene render complete');
 
@@ -114,7 +113,7 @@ async function testPyramidSceneRendering() {
         // Render function
         (window as any).renderPyramidScene = () => {
             console.log('🔺 Re-rendering pyramid scene with WASM...');
-            scene.renderZeroCopy();
+            scene.render();
             console.log('✅ Pyramid render complete');
         };
 

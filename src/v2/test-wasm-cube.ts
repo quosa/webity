@@ -61,7 +61,7 @@ async function testWasmCubeRendering() {
 
         // SINGLE RENDER CALL - no game loop
         console.log('🎯 Performing SINGLE render call with WASM...');
-        scene.renderZeroCopy(); // Direct call to WASM rendering
+        scene.render(); // Direct call to WASM rendering
 
         console.log('✅ Single WASM cube render complete');
 
@@ -72,7 +72,7 @@ async function testWasmCubeRendering() {
         // Simple render function
         (window as any).renderCube = () => {
             console.log('🧊 Re-rendering cube with WASM...');
-            scene.renderZeroCopy();
+            scene.render();
             console.log('✅ Cube render complete');
         };
 

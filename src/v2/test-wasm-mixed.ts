@@ -5,7 +5,7 @@ import { Scene } from './scene-system';
 import { GameObject } from './gameobject';
 import { MeshRenderer } from './components';
 import { WebGPURendererV2 } from './webgpu.renderer';
-import { createTriangleMesh, createCubeMesh, createSphereMesh } from './mesh-utils';
+import { createTriangleMesh, createCubeMesh, createSphereMesh, createGridMesh } from './mesh-utils';
 
 async function createMixedScene(scene: Scene): Promise<Scene> {
 
@@ -41,6 +41,10 @@ async function createMixedScene(scene: Scene): Promise<Scene> {
     scene.addGameObject(sphere);
     console.log('🟢 Added green sphere at (4, 0, 0)');
 
+    const floor = GameObject.createGrid('StaticFloor', { x: 0, y: -2, z: 0 });
+    scene.addGameObject(floor);
+    console.log('📐 Added static floor grid');
+
     console.log(`✅ Mixed scene created with ${scene.getEntityCount()} triangle entities (all rendered as triangles)`);
     return scene;
 }
@@ -61,7 +65,8 @@ async function testWasmMixedRendering() {
         // Register ALL three mesh types
         renderer.registerMesh('triangle', createTriangleMesh());
         renderer.registerMesh('cube', createCubeMesh(1));
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16)); // 16 subdivisions for smooth sphere
+        renderer.registerMesh('sphere', createSphereMesh(0.5, 16)); // 16 subdivisions for smooth sphere
+        renderer.registerMesh('grid', createGridMesh(20, 20));
         console.log('📦 Registered triangle, cube, and sphere meshes');
 
         // Create mixed scene
@@ -82,7 +87,7 @@ async function testWasmMixedRendering() {
 
         // SINGLE RENDER CALL
         console.log('🎯 Performing SINGLE render call with mixed shapes...');
-        scene.renderZeroCopy(); // Direct call to WASM rendering
+        scene.render(); // Direct call to WASM rendering
 
         console.log('✅ Mixed scene render complete');
 
@@ -93,7 +98,7 @@ async function testWasmMixedRendering() {
         // Render function
         (window as any).renderMixed = () => {
             console.log('🎭 Re-rendering mixed scene with WASM...');
-            scene.renderZeroCopy();
+            scene.render();
             console.log('✅ Mixed render complete');
         };
 

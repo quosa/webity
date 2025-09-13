@@ -113,8 +113,8 @@ async function main() {
                 console.log('⚠️ Entity count is 0 - Zero-copy rendering will fallback to TypeScript');
             }
 
-            console.log('🎯 Testing renderZeroCopy() method...');
-            scene.renderZeroCopy(); // Force call to test zero-copy path
+            console.log('🎯 Testing render() method...');
+            scene.render(); // Force call to test zero-copy path
         };
 
         // Test WASM buffer access

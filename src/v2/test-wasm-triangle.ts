@@ -62,55 +62,13 @@ async function testWasmTriangleRendering() {
 
         // SINGLE RENDER CALL - no game loop
         console.log('🎯 Performing SINGLE render call with WASM...');
-        scene.renderZeroCopy(); // Direct call to WASM rendering
+        scene.render(); // Direct call to WASM rendering
 
         console.log('✅ Single WASM triangle render complete');
 
         // Export for debugging and rendering mode toggle
         (window as any).triangleScene = scene;
         (window as any).triangleRenderer = renderer;
-
-        // Rendering mode toggle functions
-        (window as any).renderWithTypeScript = () => {
-            console.log('🟦 Rendering with TypeScript → WebGPU (legacy path)...');
-            scene.render(); // Legacy TypeScript rendering
-            console.log('✅ TypeScript rendering complete');
-        };
-
-        (window as any).renderWithWasm = () => {
-            console.log('🟥 Rendering with TypeScript → WASM → WebGPU (zero-copy path)...');
-            scene.renderZeroCopy(); // WASM zero-copy rendering
-            console.log('✅ WASM zero-copy rendering complete');
-        };
-
-        // Automated bug reproduction test
-        (window as any).reproduceOrbitBug = () => {
-            console.log('🐛 Reproducing orbit camera bug...');
-            console.log('Step 1: Let physics run for 5 seconds...');
-
-            // Start physics simulation for 5 seconds
-            let timeElapsed = 0;
-            const physicsInterval = setInterval(() => {
-                scene.update(1/60); // 60fps physics updates
-                timeElapsed += 1/60;
-
-                if (timeElapsed >= 5) {
-                    clearInterval(physicsInterval);
-                    console.log('Step 2: Performing 3 orbit left operations...');
-
-                    // Perform 3 orbit left operations
-                    for (let i = 0; i < 3; i++) {
-                        setTimeout(() => {
-                            console.log(`Orbit left ${i + 1}/3`);
-                            scene.camera.orbitAroundTarget(15, 0); // 15 degrees left
-                            scene.renderZeroCopy(); // Force render to see artifacts
-                        }, i * 500); // 500ms between each orbit
-                    }
-
-                    console.log('🔍 Bug reproduction test complete - check for dark triangle artifacts');
-                }
-            }, 16); // ~60fps
-        };
 
         // Debug function to compare buffers
         (window as any).compareBuffers = () => {

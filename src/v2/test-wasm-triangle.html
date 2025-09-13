@@ -55,8 +55,7 @@
     <body>
         <div class="info">
             <h1>Simple WASM Triangle Test</h1>
-            <p><strong>Goal</strong>: Render single triangle using WASM buffer flow (no game loop)</p>
-            <p>Red triangle should appear using WASM → GPU zero-copy rendering</p>
+            <p><strong>Goal</strong>: Render single red triangle using WASM instance buffer flow (no game loop)</p>
         </div>
 
         <div class="error" id="error-message"></div>
@@ -64,14 +63,6 @@
         <canvas id="webgpu-canvas" width="800" height="600"></canvas>
 
         <div class="controls">
-            <h3>🎮 Rendering Mode Toggle</h3>
-            <button onclick="renderWithTypeScript()">
-                🟦 Render: TypeScript → WebGPU
-            </button>
-            <button onclick="renderWithWasm()">
-                🟥 Render: TypeScript → WASM → WebGPU
-            </button>
-            
             <h3>🔍 Debug Functions</h3>
             <button onclick="compareBuffers()">
                 📊 Compare WASM Buffers
@@ -79,11 +70,6 @@
             <button onclick="testWasmTriangleRendering()">
                 🔄 Re-run Test
             </button>
-            
-            <h3>📋 Expected Result</h3>
-            <p style="color: #ccc; font-size: 14px;">
-                A single red triangle - blue button uses legacy TS rendering, red button uses WASM zero-copy
-            </p>
         </div>
 
         <script type="module" src="./test-wasm-triangle.ts"></script>
