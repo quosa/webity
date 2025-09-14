@@ -7,7 +7,7 @@ import { MeshRenderer, RigidBody } from './components';
 import { WebGPURendererV2 } from './webgpu.renderer';
 import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from './mesh-utils';
 
-async function createZeroCopyPhysicsScene(scene: Scene): Promise<Scene> {
+async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene> {
 
     // Create static floor grid (no RigidBody = static)
     const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0 });
@@ -51,6 +51,49 @@ async function createZeroCopyPhysicsScene(scene: Scene): Promise<Scene> {
     return scene;
 }
 
+async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
+
+    // Create static floor grid (no RigidBody = static)
+    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0 });
+    scene.addGameObject(floor);
+
+    // Create physics cube with RigidBody (should add to WASM and enable zero-copy)
+    const sphere1 = new GameObject('sphere1', 'Sphere 1');
+    sphere1.transform.setPosition(3, 4, 0);
+    sphere1.transform.setScale(1, 1, 1);
+
+    const sphereMeshRenderer1 = new MeshRenderer('sphere', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
+    sphere1.addComponent(sphereMeshRenderer1);
+
+    // Add RigidBody - this should register with WASM physics and enable zero-copy rendering!
+    const sphereRigidBody1 = new RigidBody(
+        1.0,        // mass: 1kg
+        true,       // useGravity: affected by gravity
+        'sphere',      // colliderType: box collider
+        { x: 1, y: 1, z: 1 } // colliderSize: 2x2x2 unit cube
+    );
+    sphere1.addComponent(sphereRigidBody1);
+
+    scene.addGameObject(sphere1);
+
+    // Add second physics entity to increase entity count
+    const sphere2 = new GameObject('sphere2', 'Sphere 2');
+    sphere2.transform.setPosition(3, 7, 0);
+
+    const sphereMeshRenderer2 = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 1, w: 1 }); // Cyan
+    sphere2.addComponent(sphereMeshRenderer2);
+
+    const sphereRigidBody2 = new RigidBody(
+        0.5,        // mass: 0.5kg
+        true,       // useGravity: true
+        'sphere',   // colliderType: sphere collider
+        { x: 1.0, y: 1.0, z: 1.0 } // colliderSize: 1 unit sphere
+    );
+    sphere2.addComponent(sphereRigidBody2);
+
+    scene.addGameObject(sphere2);
+    return scene;
+}
 
 async function main() {
     const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
@@ -74,7 +117,8 @@ async function main() {
         const scene = new Scene();
         await scene.init(renderer);
 
-        await createZeroCopyPhysicsScene(scene);
+        // await createTwoParallelEntityPhysicsScene(scene);
+        await createTwoStackedBallsPhysicsScene(scene);
 
         // Fix camera position for better viewing
         scene.camera.setPosition([0, 0, -20]);
@@ -201,7 +245,7 @@ async function main() {
 }
 
 // Export for browser testing
-(window as any).createZeroCopyPhysicsScene = createZeroCopyPhysicsScene;
+(window as any).createZeroCopyPhysicsScene = createTwoParallelEntityPhysicsScene;
 (window as any).runZeroCopyPhysicsTest = main;
 
 main();
