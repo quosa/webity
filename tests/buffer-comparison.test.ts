@@ -1,11 +1,11 @@
 // tests/buffer-comparison.test.ts
 // Unit tests comparing TypeScript vs WASM buffer outputs
 
-import { WebGPURendererV2 } from '../src/v2/webgpu.renderer';
-import { Scene } from '../src/v2/scene-system';
-import { GameObject } from '../src/v2/gameobject';
-import { MeshRenderer } from '../src/v2/components';
-import { createTriangleMesh } from '../src/v2/mesh-utils';
+import { WebGPURendererV2 } from '../src/webgpu.renderer';
+import { Scene } from '../src/scene-system';
+import { GameObject } from '../src/gameobject';
+import { MeshRenderer } from '../src/components';
+import { createTriangleMesh } from '../src/mesh-utils';
 import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
 
 // Set up WebGPU mocking environment

@@ -1,9 +1,9 @@
 // tests/wasm-memory-layout.test.ts
 // Debug test to understand WASM entity memory layout
 
-import { WasmPhysicsBridge } from '../src/v2/wasm-physics-bridge';
-import { GameObject } from '../src/v2/gameobject';
-import { MeshRenderer } from '../src/v2/components';
+import { WasmPhysicsBridge } from '../src/wasm-physics-bridge';
+import { GameObject } from '../src/gameobject';
+import { MeshRenderer } from '../src/components';
 
 describe('WASM Memory Layout Debug', () => {
     let physicsBridge: WasmPhysicsBridge;

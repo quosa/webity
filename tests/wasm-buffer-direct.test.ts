@@ -1,9 +1,9 @@
 // tests/wasm-buffer-direct.test.ts
 // Direct WASM buffer validation without WebGPU complexity
 
-import { WasmPhysicsBridge } from '../src/v2/wasm-physics-bridge';
-import { GameObject } from '../src/v2/gameobject';
-import { MeshRenderer } from '../src/v2/components';
+import { WasmPhysicsBridge } from '../src/wasm-physics-bridge';
+import { GameObject } from '../src/gameobject';
+import { MeshRenderer } from '../src/components';
 
 describe('Direct WASM Buffer Tests', () => {
     let physicsBridge: WasmPhysicsBridge;

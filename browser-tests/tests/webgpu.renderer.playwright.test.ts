@@ -41,7 +41,7 @@ test('check GPU support', async ({ page }) => {
 for (const testName of TEST_CASES) {
     test(`renders ${testName} scene and matches snapshot`, async ({ page }) => {
         // Go to your test page (now using relative path and baseURL from config)
-        await page.goto('/v2/test-renderer.html', { waitUntil: 'networkidle' });
+        await page.goto('/test-renderer.html', { waitUntil: 'networkidle' });
 
         // Wait for page to be done-done
         await page.waitForTimeout(1000);
@@ -83,7 +83,7 @@ for (const testName of TEST_CASES) {
         expect(nonBgPixelCount).toBeGreaterThan(0);
 
         // Compare with snapshot
-        const snapshotPath = path.join(__dirname, 'snapshots', `${testName}.png`);
+        const snapshotPath = path.join(__dirname, '..', 'snapshots', `${testName}.png`);
         if (fs.existsSync(snapshotPath)) {
             const img1 = img;
             const img2 = PNG.sync.read(fs.readFileSync(snapshotPath));

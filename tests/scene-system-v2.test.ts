@@ -1,9 +1,9 @@
 // tests/scene-system-v2.test.ts
 // Unit tests for the v2 Scene System (GameObject, Component, Scene classes)
 
-import { Scene } from '../src/v2/scene-system';
-import { GameObject } from '../src/v2/gameobject';
-import { Transform, MeshRenderer, RotatorComponent } from '../src/v2/components';
+import { Scene } from '../src/scene-system';
+import { GameObject } from '../src/gameobject';
+import { Transform, MeshRenderer, RotatorComponent } from '../src/components';
 
 describe('Component System (v2)', () => {
     describe('Transform Component', () => {

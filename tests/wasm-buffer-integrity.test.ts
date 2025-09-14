@@ -1,11 +1,11 @@
 // tests/wasm-buffer-integrity.test.ts
 // Unit test for WASM buffer data integrity - validates entity data without GPU rendering
 
-import { Scene } from '../src/v2/scene-system';
-import { GameObject } from '../src/v2/gameobject';
-import { MeshRenderer } from '../src/v2/components';
-import { WebGPURendererV2 } from '../src/v2/webgpu.renderer';
-import { createTriangleMesh, createCubeMesh } from '../src/v2/mesh-utils';
+import { Scene } from '../src/scene-system';
+import { GameObject } from '../src/gameobject';
+import { MeshRenderer } from '../src/components';
+import { WebGPURendererV2 } from '../src/webgpu.renderer';
+import { createTriangleMesh, createCubeMesh } from '../src/mesh-utils';
 import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
 
 // Set up WebGPU mocking environment

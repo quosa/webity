@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Rain Demo - V2 Renderer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #00ffff;
+            text-align: center;
+        }
+
+        #canvas {
+            border: 2px solid #333;
+            background: #000;
+            display: block;
+        }
+
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .stop-button {
+            background: #f44336;
+        }
+
+        .stop-button:hover {
+            background: #d32f2f;
+        }
+
+        .burst-button {
+            background: #ff9800;
+        }
+
+        .burst-button:hover {
+            background: #f57c00;
+        }
+
+        .clear-button {
+            background: #9c27b0;
+        }
+
+        .clear-button:hover {
+            background: #7b1fa2;
+        }
+
+        .stats {
+            font-family: monospace;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 1px solid #333;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #00ff00;
+        }
+
+        .stat-label {
+            color: #aaa;
+            font-size: 12px;
+        }
+
+        .error {
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            max-width: 500px;
+        }
+
+        .loading {
+            color: #ffaa00;
+            margin-top: 20px;
+        }
+
+        .info {
+            color: #aaa;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌧️ Enhanced Rain Demo - Multiple Mesh Types & Colors</h1>
+
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <div class="controls">
+        <div class="control-group">
+            <button id="startRain">🌧️ Start Rain</button>
+            <button id="stopRain" class="stop-button" disabled>⏹️ Stop Rain</button>
+            <button id="burstRain" class="burst-button">💥 Spawn Burst (20)</button>
+            <button id="clearRain" class="clear-button">🧹 Clear All</button>
+        </div>
+
+        <div class="control-group">
+            <label for="spawnRate">Spawn Rate:</label>
+            <input type="range" id="spawnRate" min="0.5" max="10" step="0.5" value="3">
+            <span id="spawnRateValue">3</span> entities/sec
+        </div>
+
+        <div class="control-group">
+            <label for="maxEntities">Max Entities:</label>
+            <input type="range" id="maxEntities" min="50" max="1000" step="50" value="500">
+            <span id="maxEntitiesValue">500</span>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-value" id="activeEntities">0</div>
+                <div class="stat-label">Active Entities</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalSpawned">0</div>
+                <div class="stat-label">Total Spawned</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="performanceFPS">60</div>
+                <div class="stat-label">Performance FPS</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info">
+        <p><strong>Camera Controls:</strong> WASD = Fly around to observe the colorful rain!</p>
+        <p><strong>Features:</strong></p>
+        <ul style="text-align: left; display: inline-block;">
+            <li>🎨 Multiple mesh types (spheres & cubes) with distinct colors</li>
+            <li>⚡ Performance-aware spawning with auto-cleanup</li>
+            <li>🎯 Configurable spawn rate and entity limits</li>
+            <li>💥 Burst spawning for stress testing</li>
+            <li>🧹 Automatic cleanup of entities that fall too far</li>
+        </ul>
+        <p>Built with V2 Renderer + GameObject Component System</p>
+    </div>
+
+    <div id="loading" class="loading" style="display: none">Loading enhanced rain system...</div>
+    <div id="error" class="error" style="display: none"></div>
+
+    <script type="module" src="./test-enhanced-rain.ts"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+import { Scene } from './scene-system';
+import { GameObject } from './gameobject';
+import { MeshRenderer } from './components';
+import { WebGPURendererV2 } from './webgpu.renderer';
+import { Engine } from '../engine';
+import { createCubeMesh } from './mesh-utils';
+
+async function main() {
+    const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+    if (!navigator.gpu) {
+        throw new Error('WebGPU is not supported in this browser');
+    }
+
+    const renderer = new WebGPURendererV2();
+    await renderer.init(canvas);
+    renderer.registerMesh('cube', createCubeMesh(1));
+
+    const engine = new Engine(renderer);
+    await engine.init();
+
+    const scene = new Scene();
+
+    const cube = new GameObject('cube-id', 'StaticCube');
+    cube.transform.setPosition(0, 0, 0);
+    cube.transform.setScale(1, 1, 1);
+
+    const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
+    cube.addComponent(cubeMeshRenderer);
+
+    scene.addGameObject(cube);
+
+    // Fix camera position - bring it down to normal viewing angle
+    scene.camera.setPosition([0, 3, -10]); // Eye level, not elevated
+    scene.camera.lookAt([0, 0, 0]); // Look at center
+
+    await scene.init(renderer);
+    scene.start();
+
+    // Single static render (no animation loop needed)
+    scene.update(0); // deltaTime = 0 for static scene
+}
+
+main();

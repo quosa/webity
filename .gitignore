@@ -3,8 +3,9 @@ game_core_test*
 game_engine_test*
 
 # browser test results
-browser-tests/test-results/.last-run.json
+browser-tests/test-results/
 # debug output screenshots from browser tests
+browser-tests/tests/output-*.png
 browser-tests/output-*.png
 
 # MCP screenshots

@@ -1,141 +1,340 @@
-// Rain system - encapsulated rain functionality for GameObject scenes
-import { Scene } from './scene.js';
-import { Engine } from './engine.js';
-import { ENGINE_CONSTANTS } from './types.js';
+// src/v2/rain-system.ts
+// Enhanced rain system using v2 GameObject architecture with multiple mesh types and colors
 
-export class RainSystem {
+import { Scene } from './scene-system';
+import { GameObject } from './gameobject';
+import { RainEntityFactory, RainEntityType, RainEntityConfig } from './rain-entity-factory';
+import { Vector3 } from './components';
+
+export interface RainSystemConfig {
+    spawnRate: number;        // entities per second
+    maxEntities: number;      // maximum number of rain entities
+    spawnArea: {
+        x: [number, number],  // spawn area bounds
+        y: [number, number],
+        z: [number, number]
+    };
+    entityTypes?: RainEntityType[];  // specific types to spawn (empty = all types)
+    autoCleanup?: boolean;    // automatically remove entities that fall too far
+    cleanupY?: number | undefined;        // Y coordinate below which entities are removed
+}
+
+export interface RainSystemStats {
+    active: boolean;
+    entityCount: number;
+    spawnRate: number;
+    totalSpawned: number;
+    totalCleaned: number;
+    performanceFPS: number;
+}
+
+export class RainSystemV2 {
+    private scene: Scene;
+    private factory: RainEntityFactory;
+    private config: RainSystemConfig;
+
+    // System state
     private active = false;
-    private spawnRate = 0.5; // balls per second
-    private lastSpawn = 0;
-    private ballSize = 0.3;
-    private maxRainBalls: number = ENGINE_CONSTANTS.MAX_ENTITIES;
-    private targetFPS = ENGINE_CONSTANTS.TARGET_FPS;
-    private frameDropThreshold = ENGINE_CONSTANTS.PERFORMANCE_THRESHOLD;
-    private updateInterval: number | null = null;
+    private lastSpawnTime = 0;
+    private totalSpawned = 0;
+    private totalCleaned = 0;
+    private rainEntities = new Set<string>(); // Track entity IDs for cleanup
 
-    constructor(
-        private readonly scene: Scene, // eslint-disable-line no-unused-vars
-        private readonly engine: Engine // eslint-disable-line no-unused-vars
-    ) {}
+    // Performance monitoring
+    private frameHistory: number[] = [];
+    private lastFrameTime = 0;
+    private readonly maxFrameHistory = 60;
 
-    start(intensity: number = 1.0): void {
-        console.log(`🌧️ Starting rain scene with intensity ${intensity}`);
-        this.scene.clear();
+    // Update interval
+    private updateInterval: number | undefined;
 
-        this.active = true;
-        this.spawnRate = intensity; // balls per second
-        this.lastSpawn = performance.now();
+    constructor(scene: Scene, config: RainSystemConfig) {
+        this.scene = scene;
+        this.factory = new RainEntityFactory();
+        this.config = {
+            autoCleanup: true,
+            cleanupY: -20,
+            ...config
+        };
 
-        // Start update interval (60 FPS update rate)
-        this.updateInterval = setInterval(() => this.update(), 1000 / 60) as unknown as number;
-
-        console.log(`🌧️ Rain started: ${this.spawnRate} balls/sec, max ${this.maxRainBalls} balls`);
+        console.log('🌧️ RainSystemV2 initialized with config:', this.config);
     }
 
+    /**
+     * Start the rain system
+     */
+    start(): void {
+        if (this.active) {
+            console.warn('🌧️ Rain system already active');
+            return;
+        }
+
+        console.log(`🌧️ Starting enhanced rain system - ${this.config.spawnRate} entities/sec`);
+
+        this.active = true;
+        this.lastSpawnTime = performance.now();
+        this.lastFrameTime = performance.now();
+
+        // Start update loop at 60 FPS
+        this.updateInterval = window.setInterval(() => {
+            this.update();
+        }, 1000 / 60);
+
+        console.log(`🌧️ Rain system started - spawn area: ${JSON.stringify(this.config.spawnArea)}`);
+        console.log('🌧️ Rain system config:', this.config);
+    }
+
+    /**
+     * Stop the rain system
+     */
     stop(): void {
-        console.log('🌧️ Stopping rain scene');
+        if (!this.active) return;
+
+        console.log('🌧️ Stopping rain system');
         this.active = false;
 
-        // Clear update interval
-        if (this.updateInterval !== null) {
-            clearInterval(this.updateInterval);
-            this.updateInterval = null;
+        if (this.updateInterval) {
+            window.clearInterval(this.updateInterval);
+            this.updateInterval = undefined;
+        }
+
+        console.log(`🌧️ Rain system stopped - total spawned: ${this.totalSpawned}, cleaned: ${this.totalCleaned}`);
+    }
+
+    /**
+     * Main update loop
+     */
+    private update(): void {
+        if (!this.active) return;
+
+        const now = performance.now();
+        this.updatePerformanceStats(now);
+
+        // Check if we should spawn new entities
+        this.trySpawnEntity(now);
+
+        // Clean up entities if enabled
+        if (this.config.autoCleanup) {
+            this.cleanupEntities();
+        }
+
+        // Check performance and auto-stop if needed
+        this.checkPerformance();
+    }
+
+    /**
+     * Try to spawn a new rain entity based on spawn rate
+     */
+    private trySpawnEntity(currentTime: number): void {
+        const timeSinceLastSpawn = currentTime - this.lastSpawnTime;
+        const spawnInterval = 1000 / this.config.spawnRate; // ms between spawns
+
+        if (timeSinceLastSpawn < spawnInterval) return;
+
+        // Check entity limit
+        if (this.rainEntities.size >= this.config.maxEntities) {
+            console.log(`🌧️ Rain hit max entity limit: ${this.config.maxEntities}`);
+            return;
+        }
+
+        // Spawn new entity
+        const entity = this.spawnRainEntity();
+        if (entity) {
+            this.scene.addGameObject(entity);
+            this.rainEntities.add(entity.id);
+            this.totalSpawned++;
+            this.lastSpawnTime = currentTime;
+
+            console.log(`🌧️ Rain entity spawned: ${entity.name} (total: ${this.totalSpawned}, active: ${this.rainEntities.size})`);
+
+            // Log progress occasionally
+            if (this.totalSpawned % 50 === 0) {
+                console.log(`🌧️ Rain progress: ${this.totalSpawned} entities spawned (${this.rainEntities.size} active)`);
+            }
         }
     }
 
+    /**
+     * Spawn a single rain entity
+     */
+    private spawnRainEntity(): GameObject | null {
+        try {
+            // Generate random position in spawn area
+            const position: Vector3 = {
+                x: this.config.spawnArea.x[0] + Math.random() * (this.config.spawnArea.x[1] - this.config.spawnArea.x[0]),
+                y: this.config.spawnArea.y[0] + Math.random() * (this.config.spawnArea.y[1] - this.config.spawnArea.y[0]),
+                z: this.config.spawnArea.z[0] + Math.random() * (this.config.spawnArea.z[1] - this.config.spawnArea.z[0]),
+            };
+
+            // Add some lateral velocity for more dynamic rain
+            const initialVelocity: Vector3 = {
+                x: (Math.random() - 0.5) * 3.0, // -1.5 to +1.5 lateral velocity
+                y: 0,
+                z: (Math.random() - 0.5) * 3.0, // -1.5 to +1.5 lateral velocity
+            };
+
+            // Create entity with random or specific type
+            if (this.config.entityTypes && this.config.entityTypes.length > 0) {
+                // Use specific types
+                const randomType = this.config.entityTypes[Math.floor(Math.random() * this.config.entityTypes.length)] as RainEntityType;
+                console.log(`🌧️ Creating rain entity of type: ${randomType}`);
+                const entityConfig: RainEntityConfig = {
+                    type: randomType,
+                    position,
+                    initialVelocity
+                };
+                return this.factory.createRainEntity(entityConfig);
+            } else {
+                // Use random type
+                console.log('🌧️ Creating random rain entity');
+                return this.factory.createRandomRainEntity(position, initialVelocity);
+            }
+        } catch (error) {
+            console.error('🌧️ Failed to spawn rain entity:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Clean up entities that have fallen below the cleanup threshold
+     */
+    private cleanupEntities(): void {
+        if (!this.config.cleanupY) return;
+
+        const entitiesToRemove: string[] = [];
+
+        for (const entityId of this.rainEntities) {
+            const entity = this.scene.getGameObject(entityId);
+            if (!entity) {
+                // Entity already removed from scene
+                entitiesToRemove.push(entityId);
+                continue;
+            }
+
+            // Check if entity has fallen too far
+            if (entity.transform.position.y < (this.config.cleanupY || -20)) {
+                entitiesToRemove.push(entityId);
+                this.scene.removeGameObject(entityId);
+                this.totalCleaned++;
+            }
+        }
+
+        // Remove from tracking
+        entitiesToRemove.forEach(id => this.rainEntities.delete(id));
+
+        if (entitiesToRemove.length > 0) {
+            console.log(`🌧️ Cleaned up ${entitiesToRemove.length} rain entities (total cleaned: ${this.totalCleaned})`);
+        }
+    }
+
+    /**
+     * Update performance statistics
+     */
+    private updatePerformanceStats(currentTime: number): void {
+        const deltaTime = currentTime - this.lastFrameTime;
+        this.lastFrameTime = currentTime;
+
+        const fps = 1000 / deltaTime;
+        this.frameHistory.push(fps);
+
+        // Keep only recent frame history
+        if (this.frameHistory.length > this.maxFrameHistory) {
+            this.frameHistory.shift();
+        }
+    }
+
+    /**
+     * Check performance and auto-stop if FPS drops too low
+     */
+    private checkPerformance(): void {
+        if (this.frameHistory.length < 30) return; // Need enough samples
+
+        const averageFPS = this.frameHistory.reduce((sum, fps) => sum + fps, 0) / this.frameHistory.length;
+
+        // Auto-stop if performance drops below 30 FPS
+        if (averageFPS < 30) {
+            console.warn(`🌧️ Rain auto-stopped due to performance: ${averageFPS.toFixed(1)} FPS`);
+            this.stop();
+        }
+    }
+
+    /**
+     * Get current system statistics
+     */
+    getStats(): RainSystemStats {
+        const averageFPS = this.frameHistory.length > 0
+            ? this.frameHistory.reduce((sum, fps) => sum + fps, 0) / this.frameHistory.length
+            : 60;
+
+        return {
+            active: this.active,
+            entityCount: this.rainEntities.size,
+            spawnRate: this.config.spawnRate,
+            totalSpawned: this.totalSpawned,
+            totalCleaned: this.totalCleaned,
+            performanceFPS: averageFPS,
+        };
+    }
+
+    /**
+     * Update configuration while running
+     */
+    updateConfig(newConfig: Partial<RainSystemConfig>): void {
+        this.config = { ...this.config, ...newConfig };
+        console.log('🌧️ Rain system config updated:', this.config);
+    }
+
+    /**
+     * Clear all rain entities immediately
+     */
+    clearAllRainEntities(): void {
+        console.log(`🌧️ Clearing all ${this.rainEntities.size} rain entities`);
+
+        for (const entityId of this.rainEntities) {
+            this.scene.removeGameObject(entityId);
+        }
+
+        this.rainEntities.clear();
+        this.totalCleaned += this.rainEntities.size;
+    }
+
+    /**
+     * Check if the system is currently active
+     */
     isActive(): boolean {
         return this.active;
     }
 
-    // Update method to be called from scene update loop
-    update(): void {
-        if (!this.active) return;
-
-        const now = performance.now();
-        const timeSinceLastSpawn = now - this.lastSpawn;
-        const spawnInterval = 1000 / this.spawnRate; // ms between spawns
-
-        // Check if it's time to spawn a new ball
-        if (timeSinceLastSpawn >= spawnInterval) {
-            const currentCount = this.engine.getWasmEntityCount();
-
-            // Check performance before spawning more balls
-            if (currentCount >= this.maxRainBalls) {
-                console.log(`🌧️ Rain hit max ball limit: ${this.maxRainBalls}`);
-                return;
-            }
-
-            if (!this.isPerformanceAcceptable()) {
-                console.log(`🌧️ Rain auto-stopped due to performance drop: ${currentCount} balls`);
-                console.log(
-                    `🌧️ Performance threshold: ${this.targetFPS * this.frameDropThreshold} FPS`
-                );
-                this.active = false;
-                return;
-            }
-
-            // Spawn a new rain ball at the top of the world
-            const x = (Math.random() - 0.5) * 14; // -7 to +7 (slightly wider than world bounds)
-            const z = (Math.random() - 0.5) * 14; // -7 to +7
-            const y = 15 + Math.random() * 5; // High up in the sky
-
-            const entityIndex = this.engine.spawnWasmEntity(x, y, z, this.ballSize);
-
-            // Add slight random initial velocity for more realistic rain
-            if (entityIndex < ENGINE_CONSTANTS.MAX_ENTITIES) {
-                // Check if spawn succeeded
-                const vx = (Math.random() - 0.5) * 1.0;
-                const vz = (Math.random() - 0.5) * 1.0;
-                this.engine.setWasmEntityVelocity(entityIndex, vx, 0, vz);
-            }
-
-            this.lastSpawn = now;
-
-            // Log progress much less frequently to avoid DevTools bottleneck
-            if (currentCount > 0 && currentCount % 100 === 0) {
-                console.log(`🌧️ Rain progress: ${currentCount + 1} balls spawned`);
-            }
-        }
+    /**
+     * Get the current number of active rain entities
+     */
+    getActiveEntityCount(): number {
+        return this.rainEntities.size;
     }
 
-    private isPerformanceAcceptable(): boolean {
-        // For now, we'll use a simple check based on entity count
-        // In the future, this could integrate with the engine's performance monitoring
-        const currentCount = this.engine.getWasmEntityCount();
+    /**
+     * Spawn a burst of rain entities immediately
+     */
+    spawnBurst(count: number): void {
+        console.log(`🌧️ Spawning rain burst: ${count} entities`);
 
-        // Conservative limit - if we have too many entities, performance likely suffers
-        const performanceLimit = Math.min(this.maxRainBalls * 0.8, 5000);
+        const entities = this.factory.createRainBatch(count, this.config.spawnArea);
 
-        return currentCount < performanceLimit;
+        entities.forEach(entity => {
+            this.scene.addGameObject(entity);
+            this.rainEntities.add(entity.id);
+            this.totalSpawned++;
+        });
+
+        console.log(`🌧️ Rain burst spawned: ${entities.length} entities`);
     }
 
-    // Configuration methods
-    setSpawnRate(rate: number): void {
-        this.spawnRate = Math.max(0.1, Math.min(10.0, rate)); // Clamp between 0.1 and 10
-    }
-
-    setBallSize(size: number): void {
-        this.ballSize = Math.max(0.1, Math.min(1.0, size)); // Clamp between 0.1 and 1.0
-    }
-
-    setMaxBalls(max: number): void {
-        this.maxRainBalls = Math.max(1, Math.min(ENGINE_CONSTANTS.MAX_ENTITIES, max));
-    }
-
-    // Status getters
-    getSpawnRate(): number {
-        return this.spawnRate;
-    }
-
-    getBallSize(): number {
-        return this.ballSize;
-    }
-
-    getMaxBalls(): number {
-        return this.maxRainBalls;
-    }
-
-    getCurrentBallCount(): number {
-        return this.engine.getWasmEntityCount();
+    /**
+     * Clean up resources
+     */
+    dispose(): void {
+        this.stop();
+        this.clearAllRainEntities();
+        this.factory.resetCounter();
     }
 }

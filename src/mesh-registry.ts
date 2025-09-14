@@ -1,170 +1,99 @@
-// Unified mesh registry for managing geometry data across all mesh types
-import { ENGINE_CONSTANTS } from './types.js';
+// src/v2/mesh-registry.ts
 
-export interface MeshDefinition {
-    id: string;
-    vertexOffset: number;
-    vertexCount: number;
-    indexOffset: number;
-    indexCount: number;
-    wireframe: boolean;
+export interface MeshData {
+    vertices: Float32Array;
+    indices: Uint16Array;
 }
 
-export interface MaterialDefinition {
-    id: number;
-    color: [number, number, number, number]; // RGBA
-    wireframe: boolean;
-    metallic?: number;
-    roughness?: number;
+export interface MeshAllocation {
+    vertexOffset: number;  // Byte offset in vertex buffer
+    vertexCount: number;   // Number of vertices
+    indexOffset: number;   // Byte offset in index buffer
+    indexCount: number;    // Number of indices
+    vertexByteSize: number;
+    indexByteSize: number;
 }
 
 export class MeshRegistry {
-    private meshes = new Map<string, MeshDefinition>();
-    private materials = new Map<number, MaterialDefinition>();
-    private nextMaterialId = 0;
+    private allocations = new Map<string, MeshAllocation>();
+    private totalVertexBytes = 0;
+    private totalIndexBytes = 0;
 
-    // Combined geometry buffers
-    private combinedVertices: Float32Array;
-    private combinedIndices: Uint32Array;
-    private vertexOffset = 0;
-    private indexOffset = 0;
+    // WASM module has u32 mesh indices (not strings)
+    private meshCount = 0;
+    private meshIndexMap = new Map<string, number>();
 
-    constructor() {
-        // Pre-allocate large unified buffers
-        this.combinedVertices = new Float32Array(ENGINE_CONSTANTS.MAX_VERTEX_BUFFER_SIZE);
-        this.combinedIndices = new Uint32Array(ENGINE_CONSTANTS.MAX_VERTEX_BUFFER_SIZE / 3);
-
-        // Register default wireframe materials
-        this.registerMaterial({
-            id: 0,
-            color: [0.0, 1.0, 1.0, 1.0], // Cyan for spheres
-            wireframe: true,
-        });
-
-        this.registerMaterial({
-            id: 1,
-            color: [1.0, 0.5, 0.0, 1.0], // Orange for cubes
-            wireframe: true,
-        });
-    }
-
-    registerMesh(id: string, vertices: Float32Array, indices?: Uint32Array): MeshDefinition {
-        if (this.meshes.has(id)) {
-            return this.meshes.get(id)!;
+    // Pre-calculate offsets for mesh data
+    allocate(meshId: string, meshData: MeshData): MeshAllocation {
+        if (this.allocations.has(meshId)) {
+            console.warn(`Mesh ${meshId} already allocated`);
+            return this.allocations.get(meshId)!;
         }
 
-        const vertexCount = vertices.length / 3; // Assuming vec3 positions
-        const startVertexOffset = this.vertexOffset;
+        const vertexByteSize = meshData.vertices.byteLength;
+        const indexByteSize = meshData.indices.byteLength;
 
-        // Copy vertices to combined buffer
-        this.combinedVertices.set(vertices, this.vertexOffset);
-        this.vertexOffset += vertices.length;
+        // Align to 4-byte boundaries for WebGPU
+        const alignedVertexSize = Math.ceil(vertexByteSize / 4) * 4;
+        const alignedIndexSize = Math.ceil(indexByteSize / 4) * 4;
 
-        let indexCount = 0;
-        const startIndexOffset = this.indexOffset;
-
-        if (indices) {
-            // Copy indices to combined buffer, adjusting for vertex offset
-            const adjustedIndices = new Uint32Array(indices.length);
-            for (let i = 0; i < indices.length; i++) {
-                const index = indices[i];
-                if (index !== undefined) {
-                    adjustedIndices[i] = index + startVertexOffset / 3;
-                }
-            }
-
-            this.combinedIndices.set(adjustedIndices, this.indexOffset);
-            this.indexOffset += indices.length;
-            indexCount = indices.length;
-        }
-
-        const meshDef: MeshDefinition = {
-            id,
-            vertexOffset: startVertexOffset,
-            vertexCount,
-            indexOffset: startIndexOffset,
-            indexCount,
-            wireframe: true, // Default to wireframe for now
+        const allocation: MeshAllocation = {
+            vertexOffset: this.totalVertexBytes,
+            vertexCount: meshData.vertices.length / 3, // 3 floats per vertex (x, y, z)
+            indexOffset: this.totalIndexBytes,
+            indexCount: meshData.indices.length,
+            vertexByteSize: alignedVertexSize,
+            indexByteSize: alignedIndexSize,
         };
 
-        this.meshes.set(id, meshDef);
-        console.log(`Registered mesh '${id}': ${vertexCount} vertices, ${indexCount} indices`);
+        this.allocations.set(meshId, allocation);
+        this.totalVertexBytes += alignedVertexSize;
+        this.totalIndexBytes += alignedIndexSize;
 
-        return meshDef;
+        // js Map maintains insertion order, so we can use it
+        // to assign mesh indices for use in WASM module
+        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
+        this.meshIndexMap.set(meshId, this.meshCount);
+        this.meshCount++;
+
+        return allocation;
     }
 
-    registerMaterial(material: Omit<MaterialDefinition, 'id'> & { id?: number }): number {
-        if (material.id !== undefined) {
-            const materialWithId = { ...material, id: material.id } as MaterialDefinition;
-            this.materials.set(material.id, materialWithId);
-            this.nextMaterialId = Math.max(this.nextMaterialId, material.id + 1);
-            return material.id;
-        } else {
-            const id = this.nextMaterialId++;
-            const materialWithId = { ...material, id } as MaterialDefinition;
-            this.materials.set(id, materialWithId);
-            return id;
+    get(meshId: string): MeshAllocation | undefined {
+        return this.allocations.get(meshId);
+    }
+
+    // for WASM module to map string mesh id to mesh index in buffers
+    getMeshIndex(meshId: string): number | undefined {
+        return this.meshIndexMap.get(meshId);
+    }
+
+    // Get reverse mapping from mesh index to mesh ID
+    getMeshIndexToIdMap(): Map<number, string> {
+        const reverseMap = new Map<number, string>();
+        for (const [meshId, meshIndex] of this.meshIndexMap) {
+            reverseMap.set(meshIndex, meshId);
         }
+        return reverseMap;
     }
 
-    getMesh(id: string): MeshDefinition | undefined {
-        return this.meshes.get(id);
+    getAllocations(): Map<string, MeshAllocation> {
+        return new Map(this.allocations);
     }
 
-    getMaterial(id: number): MaterialDefinition | undefined {
-        return this.materials.get(id);
+    getTotalVertexBytes(): number {
+        return this.totalVertexBytes;
     }
 
-    getAllMeshes(): Map<string, MeshDefinition> {
-        return new Map(this.meshes);
-    }
-
-    getAllMaterials(): Map<number, MaterialDefinition> {
-        return new Map(this.materials);
-    }
-
-    getCombinedVertices(): Float32Array {
-        return this.combinedVertices.slice(0, this.vertexOffset);
-    }
-
-    getCombinedIndices(): Uint32Array {
-        return this.combinedIndices.slice(0, this.indexOffset);
-    }
-
-    getTotalVertexCount(): number {
-        return this.vertexOffset / 3; // Convert float count to vertex count
-    }
-
-    getTotalIndexCount(): number {
-        return this.indexOffset;
-    }
-
-    // Get material data as GPU-compatible buffer
-    getMaterialDataBuffer(): Float32Array {
-        const materialCount = this.materials.size;
-        const buffer = new Float32Array(materialCount * 8); // 8 floats per material (color + properties)
-
-        let offset = 0;
-        for (const [, material] of this.materials) {
-            buffer[offset + 0] = material.color[0]; // R
-            buffer[offset + 1] = material.color[1]; // G
-            buffer[offset + 2] = material.color[2]; // B
-            buffer[offset + 3] = material.color[3]; // A
-            buffer[offset + 4] = material.wireframe ? 1.0 : 0.0; // Wireframe flag
-            buffer[offset + 5] = material.metallic || 0.0; // Metallic
-            buffer[offset + 6] = material.roughness || 1.0; // Roughness
-            buffer[offset + 7] = 0.0; // Reserved for future use
-            offset += 8;
-        }
-
-        return buffer;
+    getTotalIndexBytes(): number {
+        return this.totalIndexBytes;
     }
 
     clear(): void {
-        this.meshes.clear();
-        this.materials.clear();
-        this.vertexOffset = 0;
-        this.indexOffset = 0;
-        this.nextMaterialId = 0;
+        this.allocations.clear();
+        this.meshIndexMap.clear();
+        this.meshCount = 0;
+        this.totalVertexBytes = 0;
+        this.totalIndexBytes = 0;
     }
 }

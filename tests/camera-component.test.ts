@@ -2,9 +2,9 @@
 // Unit tests for CameraComponent
 import { jest } from '@jest/globals';
 
-import { CameraComponent } from '../src/v2/components';
-import { GameObject } from '../src/v2/gameobject';
-import { Scene } from '../src/v2/scene-system';
+import { CameraComponent } from '../src/components';
+import { GameObject } from '../src/gameobject';
+import { Scene } from '../src/scene-system';
 
 describe('CameraComponent', () => {
     let gameObject: GameObject;

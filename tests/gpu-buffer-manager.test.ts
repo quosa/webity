@@ -2,8 +2,8 @@
 // Unit tests for GPUBufferManager (isolated component testing)
 
 import { jest } from '@jest/globals';
-import { GPUBufferManager } from '../src/v2/gpu-buffer-manager';
-import { MeshData } from '../src/v2/mesh-registry';
+import { GPUBufferManager } from '../src/gpu-buffer-manager';
+import { MeshData } from '../src/mesh-registry';
 
 // Mock WebGPU device for unit testing
 const mockDevice = {

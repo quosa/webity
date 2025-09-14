@@ -1,0 +1,18 @@
+import { WebGPURendererV2 } from './webgpu.renderer';
+import { WasmPhysicsBridge } from './wasm-physics-bridge';
+
+export class Engine {
+    private physicsBridge: WasmPhysicsBridge;
+    private renderer: WebGPURendererV2;
+
+    constructor(renderer: WebGPURendererV2) {
+        this.renderer = renderer;
+        this.physicsBridge = new WasmPhysicsBridge();
+    }
+
+    init() {
+        this.physicsBridge.init();
+    }
+
+
+}
