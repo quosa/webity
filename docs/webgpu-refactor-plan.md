@@ -48,7 +48,7 @@ export interface EntityData {
 
 export class Entity {
   constructor(public data: EntityData) {}
-  
+
   getTransformMatrix(): Float32Array {
     // TODO: Implement transform to 4x4 matrix conversion
     // For now, return identity matrix
@@ -62,12 +62,12 @@ export class Entity {
 export class EntityManager {
   private entities = new Map<string, Entity>();
   private dirtyFlags = new Set<string>(); // Track changed entities
-  
+
   add(entityData: EntityData): void {
     this.entities.set(entityData.id, new Entity(entityData));
     this.dirtyFlags.add(entityData.id);
   }
-  
+
   update(id: string, updates: Partial<EntityData>): void {
     const entity = this.entities.get(id);
     if (entity) {
@@ -75,30 +75,30 @@ export class EntityManager {
       this.dirtyFlags.add(id);
     }
   }
-  
+
   remove(id: string): void {
     this.entities.delete(id);
     this.dirtyFlags.delete(id);
   }
-  
+
   getAll(): Entity[] {
     return Array.from(this.entities.values());
   }
-  
+
   getByMeshId(meshId: string): Entity[] {
     return Array.from(this.entities.values())
       .filter(e => e.data.meshId === meshId);
   }
-  
+
   getByRenderMode(mode: 'triangles' | 'lines' | 'points'): Entity[] {
     return Array.from(this.entities.values())
       .filter(e => e.data.renderMode === mode);
   }
-  
+
   clearDirtyFlags(): void {
     this.dirtyFlags.clear();
   }
-  
+
   getDirtyEntities(): string[] {
     return Array.from(this.dirtyFlags);
   }
@@ -137,21 +137,21 @@ export class MeshRegistry {
   private allocations = new Map<string, MeshAllocation>();
   private totalVertexBytes = 0;
   private totalIndexBytes = 0;
-  
+
   // Pre-calculate offsets for mesh data
   allocate(meshId: string, meshData: MeshData): MeshAllocation {
     if (this.allocations.has(meshId)) {
       console.warn(`Mesh ${meshId} already allocated`);
       return this.allocations.get(meshId)!;
     }
-    
+
     const vertexByteSize = meshData.vertices.byteLength;
     const indexByteSize = meshData.indices.byteLength;
-    
+
     // Align to 4-byte boundaries for WebGPU
     const alignedVertexSize = Math.ceil(vertexByteSize / 4) * 4;
     const alignedIndexSize = Math.ceil(indexByteSize / 4) * 4;
-    
+
     const allocation: MeshAllocation = {
       vertexOffset: this.totalVertexBytes,
       vertexCount: meshData.vertices.length / 3, // 3 floats per vertex
@@ -160,30 +160,30 @@ export class MeshRegistry {
       vertexByteSize: alignedVertexSize,
       indexByteSize: alignedIndexSize,
     };
-    
+
     this.allocations.set(meshId, allocation);
     this.totalVertexBytes += alignedVertexSize;
     this.totalIndexBytes += alignedIndexSize;
-    
+
     return allocation;
   }
-  
+
   get(meshId: string): MeshAllocation | undefined {
     return this.allocations.get(meshId);
   }
-  
+
   getAllocations(): Map<string, MeshAllocation> {
     return new Map(this.allocations);
   }
-  
+
   getTotalVertexBytes(): number {
     return this.totalVertexBytes;
   }
-  
+
   getTotalIndexBytes(): number {
     return this.totalIndexBytes;
   }
-  
+
   clear(): void {
     this.allocations.clear();
     this.totalVertexBytes = 0;
@@ -206,44 +206,44 @@ export class MegaBufferManager {
   private megaBuffer: GPUBuffer | null = null;
   private meshRegistry = new MeshRegistry();
   private meshDataCache = new Map<string, MeshData>();
-  
+
   // Start with 10MB for vertices, 5MB for indices
   private static readonly INITIAL_VERTEX_SIZE = 10 * 1024 * 1024;
   private static readonly INITIAL_INDEX_SIZE = 5 * 1024 * 1024;
-  
+
   constructor(device: GPUDevice) {
     this.device = device;
   }
-  
+
   // Register mesh data (doesn't upload yet)
   registerMesh(meshId: string, meshData: MeshData): void {
     this.meshRegistry.allocate(meshId, meshData);
     this.meshDataCache.set(meshId, meshData);
   }
-  
+
   // Build the mega buffer with all registered meshes
   buildMegaBuffer(): void {
     const allocations = this.meshRegistry.getAllocations();
     if (allocations.size === 0) return;
-    
+
     const totalVertexBytes = this.meshRegistry.getTotalVertexBytes();
     const totalIndexBytes = this.meshRegistry.getTotalIndexBytes();
     const totalBytes = totalVertexBytes + totalIndexBytes;
-    
+
     // Create mega buffer
     this.megaBuffer = this.device.createBuffer({
       size: Math.max(totalBytes, MegaBufferManager.INITIAL_VERTEX_SIZE),
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
-    
+
     const arrayBuffer = this.megaBuffer.getMappedRange();
-    
+
     // Upload all mesh data to their allocated positions
     for (const [meshId, allocation] of allocations) {
       const meshData = this.meshDataCache.get(meshId);
       if (!meshData) continue;
-      
+
       // Copy vertices to vertex section
       const vertexDst = new Float32Array(
         arrayBuffer,
@@ -251,7 +251,7 @@ export class MegaBufferManager {
         meshData.vertices.length
       );
       vertexDst.set(meshData.vertices);
-      
+
       // Copy indices to index section (offset by total vertex bytes)
       const indexDst = new Uint16Array(
         arrayBuffer,
@@ -260,29 +260,29 @@ export class MegaBufferManager {
       );
       indexDst.set(meshData.indices);
     }
-    
+
     this.megaBuffer.unmap();
   }
-  
+
   getMegaBuffer(): GPUBuffer | null {
     return this.megaBuffer;
   }
-  
+
   getMeshAllocation(meshId: string): MeshAllocation | undefined {
     return this.meshRegistry.get(meshId);
   }
-  
+
   getVertexBufferOffset(meshId: string): number {
     const allocation = this.meshRegistry.get(meshId);
     return allocation ? allocation.vertexOffset : 0;
   }
-  
+
   getIndexBufferOffset(meshId: string): number {
     const allocation = this.meshRegistry.get(meshId);
     const totalVertexBytes = this.meshRegistry.getTotalVertexBytes();
     return allocation ? totalVertexBytes + allocation.indexOffset : 0;
   }
-  
+
   dispose(): void {
     this.megaBuffer?.destroy();
     this.megaBuffer = null;
@@ -307,31 +307,31 @@ export class WebGPURendererV2 {
   private device!: GPUDevice;
   private context!: GPUCanvasContext;
   private presentationFormat!: GPUTextureFormat;
-  
+
   private trianglePipeline!: GPURenderPipeline;
   private linePipeline!: GPURenderPipeline;
   private uniformBuffer!: GPUBuffer;
   private bindGroup!: GPUBindGroup;
-  
+
   // New architecture components
   private entityManager = new EntityManager();
   private bufferManager!: MegaBufferManager;
   private needsBufferRebuild = false;
-  
+
   async init(canvas: HTMLCanvasElement): Promise<void> {
     // ... existing device setup ...
-    
+
     this.bufferManager = new MegaBufferManager(this.device);
-    
+
     // ... rest of init ...
   }
-  
+
   // Phase 1: Register mesh (just stores it)
   registerMesh(meshId: string, meshData: MeshData): void {
     this.bufferManager.registerMesh(meshId, meshData);
     this.needsBufferRebuild = true;
   }
-  
+
   // Phase 2: Build mega buffer (call after all meshes registered)
   buildBuffers(): void {
     if (this.needsBufferRebuild) {
@@ -339,46 +339,46 @@ export class WebGPURendererV2 {
       this.needsBufferRebuild = false;
     }
   }
-  
+
   // Entity management
   addEntity(entityData: EntityData): void {
     this.entityManager.add(entityData);
   }
-  
+
   updateEntity(id: string, updates: Partial<EntityData>): void {
     this.entityManager.update(id, updates);
   }
-  
+
   removeEntity(id: string): void {
     this.entityManager.remove(id);
   }
-  
+
   render(): void {
     // Ensure buffers are built
     this.buildBuffers();
-    
+
     const megaBuffer = this.bufferManager.getMegaBuffer();
     if (!megaBuffer) return;
-    
+
     // Group entities by render mode
     const triangleEntities = this.entityManager.getByRenderMode('triangles');
     const lineEntities = this.entityManager.getByRenderMode('lines');
-    
+
     // ... create render pass ...
-    
+
     // Render triangles
     if (triangleEntities.length > 0) {
       this.renderEntities(renderPass, this.trianglePipeline, triangleEntities, megaBuffer);
     }
-    
+
     // Render lines
     if (lineEntities.length > 0) {
       this.renderEntities(renderPass, this.linePipeline, lineEntities, megaBuffer);
     }
-    
+
     // ... finish render pass ...
   }
-  
+
   private renderEntities(
     renderPass: GPURenderPassEncoder,
     pipeline: GPURenderPipeline,
@@ -387,7 +387,7 @@ export class WebGPURendererV2 {
   ): void {
     renderPass.setPipeline(pipeline);
     renderPass.setBindGroup(0, this.bindGroup);
-    
+
     // Group by mesh for instanced rendering
     const meshGroups = new Map<string, Entity[]>();
     for (const entity of entities) {
@@ -397,29 +397,29 @@ export class WebGPURendererV2 {
       }
       meshGroups.get(meshId)!.push(entity);
     }
-    
+
     // Render each mesh group
     for (const [meshId, instances] of meshGroups) {
       const allocation = this.bufferManager.getMeshAllocation(meshId);
       if (!allocation) continue;
-      
+
       // Create instance buffer for this group
       const instanceBuffer = this.createInstanceBuffer(instances);
-      
+
       // Set vertex buffer with offset
       const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
       renderPass.setVertexBuffer(0, megaBuffer, vertexOffset);
       renderPass.setVertexBuffer(1, instanceBuffer);
-      
+
       // Set index buffer with offset
       const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
       renderPass.setIndexBuffer(megaBuffer, 'uint16', indexOffset);
-      
+
       // Draw
       renderPass.drawIndexed(allocation.indexCount, instances.length);
     }
   }
-  
+
   private createInstanceBuffer(entities: Entity[]): GPUBuffer {
     // ... existing instance buffer creation logic ...
   }
@@ -472,7 +472,7 @@ export interface WasmBufferSync {
   // Map WASM memory offsets to GPU buffer offsets
   syncVertices(wasmOffset: number, gpuOffset: number, byteLength: number): void;
   syncIndices(wasmOffset: number, gpuOffset: number, byteLength: number): void;
-  
+
   // Direct memory access for updates
   updateVertexData(meshId: string, data: Float32Array): void;
   updateIndexData(meshId: string, data: Uint16Array): void;
@@ -529,7 +529,7 @@ export interface WasmBufferSync {
 
 After completing this refactor:
 - ✅ Single mega buffer for all geometry - **ACHIEVED**
-- ✅ Cleaner separation of concerns - **ACHIEVED** 
+- ✅ Cleaner separation of concerns - **ACHIEVED**
 - ✅ Ready for WASM integration - **ACHIEVED**
 - ✅ Support for multiple render modes - **ACHIEVED** (triangles, lines)
 - ✅ More efficient GPU memory usage - **ACHIEVED**
@@ -567,7 +567,7 @@ After completing this refactor:
 
 ### Current Demo Scene
 - **Red triangle** (center, proper depth testing)
-- **Green cube** (left, occludes grid correctly) 
+- **Green cube** (left, occludes grid correctly)
 - **Blue cube** (right, occludes grid correctly)
 - **Yellow grid floor** (proper depth ordering)
 
@@ -584,3 +584,166 @@ All entities render through the unified mega-buffer system with correct depth re
 | WASM integration issues | Keep buffer layout simple and documented |
 
 Good luck with the implementation! Remember to test incrementally and keep the old code as reference until the new system is fully working.
+
+# NOTES
+
+Chicken and egg issue:
+ - scene needs wasm bridge to register entities (game objects)
+ - scene init() called early to load wasm bridge and wasm module
+ - BUT it tries to register all entities immediately
+ - AND calls awake() on all game objects, which ARE NOT registered yet
+
+
+```language=typescript
+export class Scene {
+    // Properties
+    public camera: Camera;
+    public physicsBridge: WasmPhysicsBridge;
+    // TODO: RENDERER?
+
+    // Methods
+    constructor();
+
+    // game objects
+    addGameObject(gameObject: GameObject): void;
+    removeGameObject(id: string): boolean;
+    getGameObject(id: string): GameObject | null;
+    getAllGameObjects(): GameObject[];
+    generateEntityId(): string;
+
+    // lifecycle
+    async init(renderer: WebGPURendererV2): Promise<void>;
+        // RENDERER BINDING
+        // WASM LOADING
+    awake(): void;
+    start(): void;
+    update(deltaTime: number): void;
+    renderZeroCopy(): void;
+    // TODO: re-pusrpose to use the WASM instance buffer
+    // render(): void;
+
+    // utils
+    findGameObjectByName(name: string): GameObject | null;
+    findGameObjectsByTag(tag: string): GameObject[];
+
+    // stats
+    getEntityCount(): number;
+    getSceneInfo(): { entityCount: number; cameraPosition: number[]; physicsStats?: any };
+}
+
+// The actual WASM module interface
+export interface WasmPhysicsInterface {
+    init(): void;
+    update(_deltaTime: number): void;
+    add_entity(...): void;
+    remove_entity(_id: number): void;
+    get_entity_count(): number;
+    apply_force(_id: number, _fx: number, _fy: number, _fz: number): void;
+    set_entity_position(_id: number, _x: number, _y: number, _z: number): void;
+    set_entity_velocity(_id: number, _vx: number, _vy: number, _vz: number): void;
+    get_entity_transforms_offset(): number;
+    get_entity_metadata_offset(): number;
+    get_entity_metadata_size(): number;
+    get_entity_size(): number;
+    get_entity_stride(): number;
+    debug_get_entity_mesh_id(_index: number): number;
+    memory: WebAssembly.Memory;
+}
+
+export class WasmPhysicsBridge {
+    constructor();
+    async init(wasmModule?: WasmPhysicsInterface): Promise<void>;
+
+    addEntity(gameObject: GameObject): number | null;
+    addPhysicsEntity(gameObject: GameObject): number | null;
+    removePhysicsEntity(gameObjectId: string): boolean;
+
+    update(deltaTime: number): void;
+
+    applyForce(wasmEntityId: number, fx: number, fy: number, fz: number): void;
+    updateEntity(wasmEntityId: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }): void;
+    getEntityData(_wasmEntityId: number): { position: { x: number; y: number; z: number } } | null;
+    setKinematic(_wasmEntityId: number, kinematic: boolean): void;
+    getStats(): { entityCount: number; isInitialized: boolean; };
+
+    hasWasmModule(): boolean;
+    getWasmModule(): WasmPhysicsInterface | undefined;
+    getWasmMemory(): ArrayBuffer | null;
+
+    getEntityTransformsOffset(): number | undefined;
+    getEntityTransformsOffsetSafe(): number;
+}
+
+export class WebGPURendererV2 {
+    constructor();
+    async init(canvas: HTMLCanvasElement): Promise<void>;
+    setViewProjectionMatrix(matrix: Float32Array): void;
+
+    // mesh management
+    registerMesh(meshId: string, mesh: MeshData): void;
+    getMeshIndex(meshId: string): number | undefined; // str->u32 for wasm instance buffer
+
+    registerTexture(textureId: string, texture: TextureData): void;
+
+    // entity management - ARE THESE USED? KILL OFF?
+    // addEntity(entityData: EntityData): void;
+    // updateEntity(id: string, updates: Partial<EntityData>): void;
+    // removeEntity(id: string): void;
+    // clearEntities(): void;
+
+    // REFACTOR TO USE WASM INSTANCE BUFFER
+    // render(): void;
+
+    mapInstanceDataFromWasm(wasmMemory: ArrayBuffer, offset: number, count: number): void;
+
+    // Zero-copy rendering path? --> REFACTOR TO render()
+    renderFromWasmBuffers(wasmModule?: {
+      memory: WebAssembly.Memory,
+      get_entity_metadata_offset(): number,
+      get_entity_metadata_size(): number
+    }): void;
+    // uses: private renderWasmInstancesByMode( ... )
+
+    // updateEntities(entities: EntityData[]): void;
+    updateCamera(viewProjectionMatrix: Float32Array): void;
+    getAspectRatio(): number;
+    dispose(): void;
+}
+```
+
+The meshes have to added before scene.init() is called, otherwise the entities can't find their meshes. :-(
+
+Update(src/scenes/physics/fancy/scene.ts)
+  ⎿  Updated src/scenes/physics/fancy/scene.ts with 7 additions and 6 removals
+       169            const renderer = new WebGPURendererV2();
+       170            await renderer.init(canvas);
+       171
+       172 +          // Register required meshes before creating scene objects
+       173 +          console.log('🔧 Registering required meshes...');
+       174 +          renderer.registerMesh('grid', createGridMesh(20, 20));
+       175 +          renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
+       176 +          renderer.registerMesh('cube', createCubeMesh(1));
+       177 +          renderer.registerMesh('triangle', createTriangleMesh());
+       178 +
+       179            // Create and initialize scene
+       180            const scene = new Scene();
+       181            await scene.init(renderer);
+       182
+       183 -          // Register required meshes before creating scene objects
+       184 -          console.log('🔧 Registering required meshes...');
+       185 -          await scene.registerMesh('grid');
+       186 -          await scene.registerMesh('sphere');
+       187 -          await scene.registerMesh('cube');
+       188 -
+       183            await createFancyPhysicsScene(scene);
+       184
+       185            // Position camera for good view of the action
+
+
+
+TODO:
+ - restore buffer-manager.ts
+ - rename to engine.ts?
+ - we need input.ts again
+ -
+

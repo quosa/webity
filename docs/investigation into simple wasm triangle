@@ -1,0 +1,192 @@
+investigation into simple wasm triangle test
+
+==== CODE =======================================================================================
+
+src/v2/test-wasm-triangle.html
+
+
+    <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+    <script type="module" src="./test-wasm-triangle.ts"></script>
+
+
+src/v2/test-wasm-triangle.ts
+
+
+    const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+    const renderer = new WebGPURendererV2();
+    await renderer.init(canvas);
+
+    renderer.registerMesh('triangle', createTriangleMesh());
+
+            const scene = new Scene();
+
+            const triangle = new GameObject('wasm-triangle', 'WasmTriangle');
+            triangle.transform.setPosition(0, 0, -2); // Position in front of camera
+            triangle.transform.setScale(2, 2, 2); // Make it larger and visible
+            const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+            triangle.addComponent(meshRenderer);
+
+            scene.addGameObject(triangle);
+
+    scene.camera.setPosition([0, 0, -5]); // Further back
+    scene.camera.lookAt([0, 0, -2]);      // Look at triangle
+
+    await scene.init(renderer);
+    scene.start();
+
+    scene.render(); // Legacy TypeScript rendering
+    OR
+    scene.renderZeroCopy(); // WASM zero-copy rendering
+
+==== INVESTIGATION ==============================================================================
+
+
+new WebGPURendererV2();
+    new EntityManager();                            // src/v2/entities.ts
+
+
+    renderer.init(canvas);
+     - new GPUBufferManager(this.device);           // src/v2/gpu-buffer-manager.ts
+     - createDepthTexture()
+
+     - createRenderPipeline()
+        > vertex and fragment shaders
+        > vertex and instance buffer layouts
+        > uniform buffer layout
+        > pipeline layout
+        > create renderPipeline (layout, vertex, FragmentDirective, primitive, depthStencil)
+        > create render pipeline for lines (floor grid)
+
+     - createUniformBuffer()
+        > new GPU buffer for uniforms
+        > C O P Y  dummy identity matrix
+        > create bind group for the uniform (buffer, i.e. camera matrix)
+        - setViewProjectionMatrix() to set the proper matrix
+
+
+    renderer.registerMesh('triangle', createTriangleMesh());
+        - bufferManager.registerMesh(meshId, mesh);                  // 'triangle', MeshData
+            > .meshRegistry.allocate(meshId, meshData);
+            > .meshDataCache.set(meshId, meshData);
+        - bufferManager.buildSharedBuffers();
+            > create vertex and index GPU buffers
+            > create CPU Float32Array for vertices
+            > create CPU Uint16Array for indices
+            > copy all registered meshes into the shared buffers at their allocated offsets
+            > unmap the GPU buffers
+
+        - THESE ARE ALL TS CPU ARRAYS MAPPED DIRECTLY TO GPU BUFFERS, NO WASM HERE!!!
+
+    new Scene();
+        - automatic camera                             (TODO: is this a good thing (tm)?)
+            > NO TRANSFORM AT THIS POINT!!!
+        - new WasmPhysicsBridge();
+
+
+    new GameObject();
+        - new TransformStream();
+        - add transform as Component
+
+
+    new MeshRenderer();
+        - triangle.addComponent(meshRenderer);
+            > component.awake()                              // called if scene is set
+            > NOTE: only rigidbody has awake() logic
+
+    scene.addGameObject(triangle);
+        - link go and scene
+        - physicsBridge.addEntity(gameObject); // !!! to WASM !!!
+
+            > if.wasm !!! this is why wasm doesn't always get data (if not yet initialized) !!!
+
+src/core/game_engine.zig
+
+                wasm.add_entity(
+                    wasmEntityId,
+                    transform.position.x,
+                    transform.position.y,
+                    transform.position.z,
+                    transform.scale.x,
+                    transform.scale.y,
+                    transform.scale.z,
+                    color.x, // Red
+                    color.y, // Green
+                    color.z, // Blue
+                    color.w, // Alpha
+                    meshId,
+                    0, // material ID (TODO: implement material system)
+                    mass,
+                    isKinematic
+                );
+                    * create a new element in entity buffer
+
+            > if rigidbody and velocity
+                wasm.set_entity_velocity( ... );
+
+    scene.camera.setPosition([0, 0, -5]); // just setters
+    scene.camera.lookAt([0, 0, -2]);      // just setters
+
+    await scene.init(renderer);
+        - physicsBridge.init();           // WasmPhysicsBridge
+            > load wasm module with fetch
+            > wasm.init                   // Zig code!
+
+src/core/game_engine.zig
+
+                initEntities();           // zero out entity buffer, set count to 0
+                updateViewMatrix();       // init() and when camera is moved OK
+                    uniforms.view = core.createLookAt(camera_position, camera_target, camera_up);
+
+                !!! HARD-CODED DEFAULT projection (should come from scene camera) !!!
+                uniforms.projection = core.createPerspective(60.0, 1.333, 0.1, 100.0);
+
+        !!! THIS WASM LOADING AND INITIALIZATION SHOULD HAPPEN EARLIER IN THE PROCESS !!!
+
+            scene.start();
+                - foreach gameobject: go.start( )
+                    > foreach component: component.start( )
+                        * rigidbody: syncToWasm()
+
+                        !!! only rigibodies are synced to WASM on start !!!
+                        !!! THIS IS COMMENTED OUT with a todo !!!
+TS RENDER:
+    scene.render(); // Legacy TypeScript rendering
+     - TODO: later (I already have some doc about this)
+
+OR WASM RENDER:
+    scene.renderZeroCopy(); // WASM zero-copy rendering
+        physicsBridge.getStats().entityCount
+        physicsBridge.getWasmMemory();
+        physicsBridge.getEntityTransformsOffset();
+        renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, entityCount);
+
+        renderer.getAspectRatio();
+        camera.getViewProjectionMatrix(aspect);
+        renderer.updateCamera(viewProjectionMatrix);
+
+        renderer.renderFromWasmBuffers();
+
+WASM:
+pub const Uniforms = struct {
+    model: Mat4,               // ???
+    view: Mat4,                // init() > updateViewMatrix()
+                               // view matrix is updated when camera is moved
+    projection: Mat4,          // init()
+};
+
+var uniforms: core.Uniforms = core.Uniforms{
+    .model = core.Mat4.identity(),
+    .view = core.Mat4.identity(),
+    .projection = core.Mat4.identity(),
+};
+
+??? in update() ???
+        // Update model matrix with first active entity position (for backward compatibility)
+        uniforms.model = core.Mat4.identity();
+        if (entity_count > 0 and entities[0].active) {
+            uniforms.model.data[12] = entities[0].position.x;
+            uniforms.model.data[13] = entities[0].position.y;
+            uniforms.model.data[14] = entities[0].position.z;
+        }
+
+    TODO: check how the model transform ends up in the instance buffer
