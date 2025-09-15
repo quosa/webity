@@ -10,7 +10,13 @@ import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } 
 async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene> {
 
     // Create static floor grid (no RigidBody = static)
-    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0 });
+    // Position grid slightly behind physics objects to avoid Z-fighting
+    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0.1 });
+    // Make the grid gray instead of bright yellow for better visibility
+    const floorMeshRenderer = floor.getComponent(MeshRenderer);
+    if (floorMeshRenderer) {
+        floorMeshRenderer.color = { x: 0.3, y: 0.3, z: 0.3, w: 1.0 }; // Gray
+    }
     scene.addGameObject(floor);
 
     // Create physics cube with RigidBody (should add to WASM and enable zero-copy)
@@ -28,6 +34,7 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
         'box',      // colliderType: box collider
         { x: 2, y: 2, z: 2 } // colliderSize: 2x2x2 unit cube
     );
+    // cubeRigidBody.isKinematic = true; // Uncomment to test kinematic behavior
     physicsCube.addComponent(cubeRigidBody);
 
     scene.addGameObject(physicsCube);
@@ -35,6 +42,7 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
     // Add second physics entity to increase entity count
     const physicsSphere = new GameObject('physics-sphere', 'ZeroCopyTest2');
     physicsSphere.transform.setPosition(2, 3, 0);
+    physicsSphere.transform.setScale(0.5, 0.5, 0.5); // Match physics radius of 0.5
 
     const sphereMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 1, w: 1 }); // Cyan
     physicsSphere.addComponent(sphereMeshRenderer);
@@ -45,6 +53,7 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
         'sphere',   // colliderType: sphere collider
         { x: 1.0, y: 1.0, z: 1.0 } // colliderSize: 1 unit sphere
     );
+    // sphereRigidBody.isKinematic = true;
     physicsSphere.addComponent(sphereRigidBody);
 
     scene.addGameObject(physicsSphere);
@@ -54,13 +63,19 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
 async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
 
     // Create static floor grid (no RigidBody = static)
-    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0 });
+    // Position grid slightly behind physics objects to avoid Z-fighting
+    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0.1 });
+    // Make the grid gray instead of bright yellow for better visibility
+    const floorMeshRenderer = floor.getComponent(MeshRenderer);
+    if (floorMeshRenderer) {
+        floorMeshRenderer.color = { x: 0.3, y: 0.3, z: 0.3, w: 1.0 }; // Gray
+    }
     scene.addGameObject(floor);
 
     // Create physics cube with RigidBody (should add to WASM and enable zero-copy)
     const sphere1 = new GameObject('sphere1', 'Sphere 1');
     sphere1.transform.setPosition(3, 4, 0);
-    sphere1.transform.setScale(1, 1, 1);
+    sphere1.transform.setScale(1, 1, 1); // Will match colliderSize below
 
     const sphereMeshRenderer1 = new MeshRenderer('sphere', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
     sphere1.addComponent(sphereMeshRenderer1);
@@ -79,6 +94,7 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
     // Add second physics entity to increase entity count
     const sphere2 = new GameObject('sphere2', 'Sphere 2');
     sphere2.transform.setPosition(3, 7, 0);
+    sphere2.transform.setScale(2, 2, 2); // Will match colliderSize below
 
     const sphereMeshRenderer2 = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 1, w: 1 }); // Cyan
     sphere2.addComponent(sphereMeshRenderer2);
@@ -87,7 +103,7 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
         0.5,        // mass: 0.5kg
         true,       // useGravity: true
         'sphere',   // colliderType: sphere collider
-        { x: 1.0, y: 1.0, z: 1.0 } // colliderSize: 1 unit sphere
+        { x: 2.0, y: 2.0, z: 2.0 } // colliderSize: 2 unit radius sphere (matches transform scale)
     );
     sphere2.addComponent(sphereRigidBody2);
 
@@ -121,8 +137,8 @@ async function main() {
         await createTwoStackedBallsPhysicsScene(scene);
 
         // Fix camera position for better viewing
-        scene.camera.setPosition([0, 0, -20]);
-        scene.camera.lookAt([0, -4, 0]);
+        scene.camera.setPosition([0, 0, -15]); // floor is +/-8 on z axis
+        scene.camera.lookAt([0, -4, 0]); // floor is at y = -8
 
         // await scene.init(renderer);
         scene.start();
@@ -198,9 +214,14 @@ async function main() {
         let animationId: number;
         let lastTime = performance.now();
 
+        let oneshotRenderDone = false;
         const gameLoop = (currentTime: number) => {
             if (!isRunning) {
                 return; // Paused
+            }
+            if (!oneshotRenderDone) {
+                isRunning = false; // Stop after one render for testing
+                oneshotRenderDone = true;
             }
 
             const rawDeltaTime = (currentTime - lastTime) / 1000;

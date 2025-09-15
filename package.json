@@ -16,9 +16,9 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
-    "test:zig": "zig test src/core/game_core_test.zig && zig test src/core/game_engine_test.zig",
-    "test:zig:coverage": "./scripts/zig_coverage.sh",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run test:zig"
+    "test:wasm": "zig test src/core/game_core_test.zig && zig test src/core/game_engine_test.zig && zig test src/core/collision_test.zig",
+    "test:wasm:coverage": "./scripts/zig_coverage.sh",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:wasm"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

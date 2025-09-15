@@ -51,6 +51,18 @@ describe('WasmPhysicsBridge', () => {
                 get_entity_size: jest.fn(() => 80),
                 get_entity_stride: jest.fn(() => 80),
                 debug_get_entity_mesh_id: jest.fn(() => 0),
+                get_entity_position_x: jest.fn(() => 0),
+                get_entity_position_y: jest.fn(() => 0),
+                get_entity_position_z: jest.fn(() => 0),
+                get_entity_velocity_x: jest.fn(() => 0),
+                get_entity_velocity_y: jest.fn(() => 0),
+                get_entity_velocity_z: jest.fn(() => 0),
+                get_collision_checks_performed: jest.fn(() => 0),
+                get_collisions_detected: jest.fn(() => 0),
+                get_kinematic_collision_flag: jest.fn(() => false),
+                get_collision_state: jest.fn(() => 0),
+                debug_get_entity_physics_info: jest.fn(() => 0),
+                get_wasm_version: jest.fn(() => 20250915),
                 memory: {
                     buffer: new ArrayBuffer(1024),
                     grow: jest.fn((_delta: number) => 0)

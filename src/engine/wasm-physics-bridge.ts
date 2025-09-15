@@ -11,7 +11,7 @@ export interface WasmPhysicsInterface {
     update(_deltaTime: number): void;
 
     // Entity lifecycle
-    add_entity(_id: number, _x: number, _y: number, _z: number, _scaleX: number, _scaleY: number, _scaleZ: number, _colorR: number, _colorG: number, _colorB: number, _colorA: number, _meshId: number, _materialId: number, _mass: number, _isKinematic: boolean): void;
+    add_entity(_id: number, _x: number, _y: number, _z: number, _scaleX: number, _scaleY: number, _scaleZ: number, _colorR: number, _colorG: number, _colorB: number, _colorA: number, _meshId: number, _materialId: number, _mass: number, _radius: number, _isKinematic: boolean): void;
     remove_entity(_id: number): void;
     get_entity_count(): number;
 
@@ -29,6 +29,26 @@ export interface WasmPhysicsInterface {
     get_entity_size(): number;
     get_entity_stride(): number;
     debug_get_entity_mesh_id(_index: number): number;
+
+    // TODO: make these return a vec3 or similar
+
+    // Entity position getters
+    get_entity_position_x(_index: number): number;
+    get_entity_position_y(_index: number): number;
+    get_entity_position_z(_index: number): number;
+
+    // Entity velocity getters
+    get_entity_velocity_x(_index: number): number;
+    get_entity_velocity_y(_index: number): number;
+    get_entity_velocity_z(_index: number): number;
+
+    // Collision debug functions
+    get_collision_checks_performed(): number;
+    get_collisions_detected(): number;
+    get_kinematic_collision_flag(): boolean;
+    get_collision_state(): number;
+    debug_get_entity_physics_info(_id: number, _info_type: number): number;
+    get_wasm_version(): number;
 
     // WASM memory
     memory: WebAssembly.Memory;
@@ -114,7 +134,10 @@ export class WasmPhysicsBridge {
         if (meshIndex === undefined) {
             throw new Error(`❌ Mesh index not set for MeshRenderer in GameObject "${gameObject.name}" - ensure added to Scene after renderer initialized`);
         }
-        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, mass=${mass}, isKinematic=${isKinematic}`);
+        // Calculate physics radius from RigidBody colliderSize (use X component for spheres)
+        const physicsRadius = rigidBody ? rigidBody.colliderSize.x : 0.5; // Default to 0.5 for static objects
+
+        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, mass=${mass}, radius=${physicsRadius}, isKinematic=${isKinematic}`);
         this.wasm.add_entity(
             wasmEntityId,
             transform.position.x,
@@ -130,6 +153,7 @@ export class WasmPhysicsBridge {
             meshIndex,
             0, // material ID (TODO: implement material system)
             mass,
+            physicsRadius,
             isKinematic
         );
 
@@ -199,12 +223,21 @@ export class WasmPhysicsBridge {
     }
 
     // Get physics data for entity (for reading from WASM)
-    public getEntityData(_wasmEntityId: number): { position: { x: number; y: number; z: number } } | null {
-        // TODO: Implement reading from WASM memory buffers
-        // For now, return mock data
-        return {
-            position: { x: 0, y: 0, z: 0 }
-        };
+    public getEntityData(wasmEntityId: number): { position: { x: number; y: number; z: number } } | null {
+        if (!this.wasm) return null;
+
+        try {
+            const x = this.wasm.get_entity_position_x(wasmEntityId);
+            const y = this.wasm.get_entity_position_y(wasmEntityId);
+            const z = this.wasm.get_entity_position_z(wasmEntityId);
+
+            return {
+                position: { x, y, z }
+            };
+        } catch (error) {
+            console.warn(`Failed to get entity data for ${wasmEntityId}:`, error);
+            return null;
+        }
     }
 
     // Set kinematic state for entity
@@ -217,18 +250,33 @@ export class WasmPhysicsBridge {
     private syncPhysicsResults(): void {
         if (!this.wasm) return;
 
-        // TODO: Read updated transforms from WASM memory buffers
-        // For now, this is a placeholder for zero-copy integration
-
-        for (const [_wasmEntityId, gameObject] of this.gameObjectMap) {
+        // Read updated transforms from WASM memory buffers
+        for (const [wasmEntityId, gameObject] of this.gameObjectMap) {
             const rigidBody = gameObject.getComponent(RigidBody);
             if (!rigidBody || rigidBody.isKinematic) {
                 continue; // Skip kinematic bodies
             }
 
-            // TODO: Get actual position/rotation from WASM physics simulation
-            // const wasmData = this.readEntityFromWasm(wasmEntityId);
-            // gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
+            // Read actual position from WASM physics simulation
+            try {
+                const newX = this.wasm.get_entity_position_x(wasmEntityId);
+                const newY = this.wasm.get_entity_position_y(wasmEntityId);
+                const newZ = this.wasm.get_entity_position_z(wasmEntityId);
+
+                // Update GameObject transform with new physics position
+                gameObject.transform.setPosition(newX, newY, newZ);
+
+                // Also update RigidBody velocity for consistency
+                const velX = this.wasm.get_entity_velocity_x(wasmEntityId);
+                const velY = this.wasm.get_entity_velocity_y(wasmEntityId);
+                const velZ = this.wasm.get_entity_velocity_z(wasmEntityId);
+
+                rigidBody.velocity.x = velX;
+                rigidBody.velocity.y = velY;
+                rigidBody.velocity.z = velZ;
+            } catch (error) {
+                console.warn(`Failed to sync physics results for entity ${wasmEntityId}:`, error);
+            }
         }
     }
 

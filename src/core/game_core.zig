@@ -258,3 +258,180 @@ pub fn generateWireframeCube(vertices: [*]f32, ball_radius: f32) u32 {
 
     return index / 3; // Return vertex count
 }
+
+// =============================================================================
+// Collision Detection and Response Functions
+// =============================================================================
+
+// Sphere-sphere collision detection
+pub fn checkSphereCollision(pos1: Vec3, radius1: f32, pos2: Vec3, radius2: f32) ?f32 {
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    const dz = pos2.z - pos1.z;
+
+    const distance_squared = dx * dx + dy * dy + dz * dz;
+    const combined_radius = radius1 + radius2;
+    const combined_radius_squared = combined_radius * combined_radius;
+
+    if (distance_squared < combined_radius_squared) {
+        const dist = @sqrt(distance_squared);
+        const overlap = combined_radius - dist;
+        return overlap;
+    }
+
+    return null; // No collision
+}
+
+// Sphere-sphere collision response (elastic collision)
+pub fn resolveSphereCollision(
+    pos1: *Vec3, vel1: *Vec3, mass1: f32, radius1: f32,
+    pos2: *Vec3, vel2: *Vec3, mass2: f32, radius2: f32,
+    restitution: f32
+) void {
+    // Legacy function - calls new version assuming dynamic bodies
+    resolveSphereCollisionWithKinematic(pos1, vel1, mass1, radius1, false, pos2, vel2, mass2, radius2, false, restitution);
+}
+
+// Sphere-sphere collision response with kinematic body support
+pub fn resolveSphereCollisionWithKinematic(
+    pos1: *Vec3, vel1: *Vec3, mass1: f32, radius1: f32, is_kinematic1: bool,
+    pos2: *Vec3, vel2: *Vec3, mass2: f32, radius2: f32, is_kinematic2: bool,
+    restitution: f32
+) void {
+    // Calculate collision normal (from sphere1 to sphere2)
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    const dz = pos2.z - pos1.z;
+
+    const dist = @sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist == 0.0) return; // Prevent division by zero
+
+    const normal = Vec3{
+        .x = dx / dist,
+        .y = dy / dist,
+        .z = dz / dist,
+    };
+
+    // Use the kinematic flags passed as parameters
+
+    // Separate overlapping spheres
+    const combined_radius = radius1 + radius2;
+    const overlap = combined_radius - dist;
+    if (overlap > 0.0) {
+        if (is_kinematic1 and is_kinematic2) {
+            // Both kinematic - no separation needed
+            return;
+        } else if (is_kinematic1) {
+            // Only sphere1 is kinematic - move sphere2 away completely with buffer
+            const separation = overlap + 0.01; // Add buffer for kinematic separation
+            pos2.x += normal.x * separation;
+            pos2.y += normal.y * separation;
+            pos2.z += normal.z * separation;
+        } else if (is_kinematic2) {
+            // Only sphere2 is kinematic - move sphere1 away completely with buffer
+            const separation = overlap + 0.01; // Add buffer for kinematic separation
+            pos1.x -= normal.x * separation;
+            pos1.y -= normal.y * separation;
+            pos1.z -= normal.z * separation;
+        } else {
+            // Both dynamic - split the separation equally, but add a small extra buffer
+            const separation = overlap * 0.5 + 0.01; // Add 0.01 buffer to prevent immediate re-collision
+            pos1.x -= normal.x * separation;
+            pos1.y -= normal.y * separation;
+            pos1.z -= normal.z * separation;
+
+            pos2.x += normal.x * separation;
+            pos2.y += normal.y * separation;
+            pos2.z += normal.z * separation;
+        }
+    }
+
+    // Calculate relative velocity in the direction of the collision normal
+    const rel_vel_x = vel2.x - vel1.x;
+    const rel_vel_y = vel2.y - vel1.y;
+    const rel_vel_z = vel2.z - vel1.z;
+
+    const vel_along_normal = rel_vel_x * normal.x + rel_vel_y * normal.y + rel_vel_z * normal.z;
+
+    // Don't resolve if objects are separating
+    if (vel_along_normal > 0) return;
+
+    // Calculate impulse magnitude (treat kinematic bodies as infinite mass)
+    var impulse_magnitude: f32 = 0.0;
+    if (is_kinematic1 and is_kinematic2) {
+        // Both kinematic - no velocity change needed
+        return;
+    } else {
+        // Calculate effective inverse masses (0 for kinematic = infinite mass)
+        const inv_mass1 = if (is_kinematic1) 0.0 else 1.0 / mass1;
+        const inv_mass2 = if (is_kinematic2) 0.0 else 1.0 / mass2;
+        const total_inv_mass = inv_mass1 + inv_mass2;
+
+        // Avoid division by zero (shouldn't happen since at least one body is dynamic)
+        if (total_inv_mass > 0.0) {
+            impulse_magnitude = -(1.0 + restitution) * vel_along_normal / total_inv_mass;
+        } else {
+            return; // Safety check - both kinematic (already handled above)
+        }
+    }
+
+    // Apply impulse
+    const impulse_x = impulse_magnitude * normal.x;
+    const impulse_y = impulse_magnitude * normal.y;
+    const impulse_z = impulse_magnitude * normal.z;
+
+    // Apply velocity changes (kinematic bodies don't change velocity)
+    if (!is_kinematic1) {
+        const inv_mass1 = 1.0 / mass1;
+        vel1.x -= impulse_x * inv_mass1;
+        vel1.y -= impulse_y * inv_mass1;
+        vel1.z -= impulse_z * inv_mass1;
+    }
+
+    if (!is_kinematic2) {
+        const inv_mass2 = 1.0 / mass2;
+        vel2.x += impulse_x * inv_mass2;
+        vel2.y += impulse_y * inv_mass2;
+        vel2.z += impulse_z * inv_mass2;
+    }
+}
+
+// Calculate distance between two points
+pub fn distance(a: Vec3, b: Vec3) f32 {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    return @sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// Vector magnitude
+pub fn magnitude(v: Vec3) f32 {
+    return @sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+// Vector subtraction
+pub fn subtract(a: Vec3, b: Vec3) Vec3 {
+    return Vec3{
+        .x = a.x - b.x,
+        .y = a.y - b.y,
+        .z = a.z - b.z,
+    };
+}
+
+// Vector addition
+pub fn add(a: Vec3, b: Vec3) Vec3 {
+    return Vec3{
+        .x = a.x + b.x,
+        .y = a.y + b.y,
+        .z = a.z + b.z,
+    };
+}
+
+// Vector scaling
+pub fn scale(v: Vec3, s: f32) Vec3 {
+    return Vec3{
+        .x = v.x * s,
+        .y = v.y * s,
+        .z = v.z * s,
+    };
+}

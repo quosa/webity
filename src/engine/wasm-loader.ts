@@ -26,7 +26,11 @@ export class WasmLoader {
                 'init', 'update', 'add_entity', 'remove_entity', 'get_entity_count',
                 'apply_force', 'set_entity_position', 'set_entity_velocity',
                 'get_entity_transforms_offset', 'get_entity_metadata_offset', 'get_entity_metadata_size',
-                'get_entity_size', 'get_entity_stride', 'debug_get_entity_mesh_id'
+                'get_entity_size', 'get_entity_stride', 'debug_get_entity_mesh_id',
+                'get_entity_position_x', 'get_entity_position_y', 'get_entity_position_z',
+                'get_entity_velocity_x', 'get_entity_velocity_y', 'get_entity_velocity_z',
+                'get_collision_checks_performed', 'get_collisions_detected', 'get_kinematic_collision_flag',
+                'get_collision_state', 'debug_get_entity_physics_info', 'get_wasm_version'
             ];
 
             for (const func of requiredFunctions) {
@@ -68,6 +72,24 @@ export class WasmLoader {
                 get_entity_size: wasmExports.get_entity_size,
                 get_entity_stride: wasmExports.get_entity_stride,
                 debug_get_entity_mesh_id: wasmExports.debug_get_entity_mesh_id,
+
+                // Entity position getters
+                get_entity_position_x: wasmExports.get_entity_position_x,
+                get_entity_position_y: wasmExports.get_entity_position_y,
+                get_entity_position_z: wasmExports.get_entity_position_z,
+
+                // Entity velocity getters
+                get_entity_velocity_x: wasmExports.get_entity_velocity_x,
+                get_entity_velocity_y: wasmExports.get_entity_velocity_y,
+                get_entity_velocity_z: wasmExports.get_entity_velocity_z,
+
+                // Physics debug functions
+                get_collision_checks_performed: wasmExports.get_collision_checks_performed,
+                get_collisions_detected: wasmExports.get_collisions_detected,
+                get_kinematic_collision_flag: wasmExports.get_kinematic_collision_flag,
+                get_collision_state: wasmExports.get_collision_state,
+                debug_get_entity_physics_info: wasmExports.debug_get_entity_physics_info,
+                get_wasm_version: wasmExports.get_wasm_version,
 
                 // Memory access
                 memory: wasmExports.memory

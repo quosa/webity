@@ -235,22 +235,30 @@ export class RigidBody extends Component {
 
     // Sync current state to WASM physics system
     public syncToWasm(): void {
-        if (!this.gameObject || !this.physicsBridge) return;
+        if (!this.gameObject || !this.physicsBridge || this.wasmEntityId === undefined) return;
 
         const transform = this.gameObject.transform;
-        console.log(`🔄 RigidBody.syncToWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: pos=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), vel=(${this.velocity.x}, ${this.velocity.y}, ${this.velocity.z})`);
-
-        // TODO: Call WASM physics bridge
-        // this.physicsBridge.updateEntity(this.wasmEntityId, transform.position, this.velocity);
+        // Update entity in WASM physics system
+        this.physicsBridge.updateEntity(this.wasmEntityId, transform.position, this.velocity);
     }
 
     // Sync physics simulation results from WASM
     private syncFromWasm(): void {
-        if (!this.gameObject || !this.physicsBridge || this.isKinematic) return;
+        if (!this.gameObject || !this.physicsBridge || this.isKinematic || this.wasmEntityId === undefined) return;
 
-        // TODO: Get updated position/rotation from WASM physics simulation
-        // const wasmData = this.physicsBridge.getEntityData(this.wasmEntityId);
-        // this.gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
+        // Get updated position/rotation from WASM physics simulation
+        const wasmData = this.physicsBridge.getEntityData(this.wasmEntityId);
+        if (wasmData) {
+            // DEBUG: Check if WASM physics is changing positions
+            // const currentPos = this.gameObject.transform.position;
+            // const newPos = wasmData.position;
+            // if (Math.abs(currentPos.y - newPos.y) > 0.01) { // Only log if Y position changed significantly
+            //     console.log(`📍 syncFromWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: Y ${currentPos.y.toFixed(2)} → ${newPos.y.toFixed(2)}`);
+            // }
+            this.gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
+        } else {
+            console.log(`❌ syncFromWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: No WASM data received`);
+        }
     }
 
     // Sync from transform for kinematic bodies

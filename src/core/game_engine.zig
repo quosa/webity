@@ -266,6 +266,9 @@ fn updateECSPhysics(delta_time: f32) void {
     for (physics_components[0..entity_count], 0..) |*phys, i| {
         if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
 
+        // Skip physics updates for kinematic bodies (they participate in collision detection but not physics integration)
+        if (phys.is_kinematic) continue;
+
         // Apply gravity and forces
         phys.velocity.x += force.x * delta_time;
         phys.velocity.y += force.y * delta_time;
@@ -291,7 +294,10 @@ fn updateECSPhysics(delta_time: f32) void {
     // Step 2: Update rotator components (animation system)
     updateRotators(delta_time);
 
-    // Step 3: Update dirty transforms (selective - only changed entities)
+    // Step 3: Check entity-entity collisions
+    checkEntityCollisions(delta_time);
+
+    // Step 4: Update dirty transforms (selective - only changed entities)
     updateDirtyTransforms();
 }
 
@@ -472,10 +478,68 @@ fn simulatePhysicsWithConfig(position: *core.Vec3, velocity: *core.Vec3, delta_t
     return local_collision_state;
 }
 
-// TODO: ECS collision detection to be implemented later
-// For now, physics simulation handles boundary collisions only
-fn checkEntityCollisions_removed(delta_time: f32) void {
-    _ = delta_time; // Placeholder - collision detection removed
+// ECS entity-entity collision detection and response
+fn checkEntityCollisions(delta_time: f32) void {
+    _ = delta_time; // For future use in time-based collision resolution
+
+    // Debug: Track collision checking
+    var collision_checks_performed: u32 = 0;
+    var collisions_detected: u32 = 0;
+
+    // Check all pairs of active physics entities
+    for (0..entity_count) |i| {
+        if (!entity_metadata[i].active or !entity_metadata[i].physics_enabled) continue;
+
+        for (i + 1..entity_count) |j| {
+            if (!entity_metadata[j].active or !entity_metadata[j].physics_enabled) continue;
+
+            // Skip collision if both entities are kinematic
+            if (physics_components[i].is_kinematic and physics_components[j].is_kinematic) continue;
+
+            const phys1 = &physics_components[i];
+            const phys2 = &physics_components[j];
+
+            collision_checks_performed += 1;
+
+            // Check for sphere-sphere collision
+            if (core.checkSphereCollision(phys1.position, phys1.radius, phys2.position, phys2.radius)) |overlap| {
+                collisions_detected += 1;
+
+                // Debug: Log collision details (stored in collision_state bits for inspection)
+                // Bit pattern: 0x10 = collision detected, 0x20 = kinematic involved
+                if (phys1.is_kinematic or phys2.is_kinematic) {
+                    collision_state |= 0x20; // Kinematic collision flag
+                }
+
+                // Collision detected! Resolve it
+                core.resolveSphereCollisionWithKinematic(
+                    &phys1.position, &phys1.velocity, phys1.mass, phys1.radius, phys1.is_kinematic,
+                    &phys2.position, &phys2.velocity, phys2.mass, phys2.radius, phys2.is_kinematic,
+                    physics_restitution
+                );
+
+                // Mark transforms as dirty for rendering update
+                entity_metadata[i].transform_dirty = true;
+                entity_metadata[j].transform_dirty = true;
+
+                // Update collision state to indicate entity-entity collision
+                collision_state |= 0x10; // New bit for entity collisions
+
+                // Store collision count in unused bits (for debugging)
+                // Use upper bits to store collision count (max 15 collisions tracked)
+                const collision_count_mask = @as(u8, @intCast(collisions_detected & 0x0F));
+                collision_state = (collision_state & 0x3F) | (collision_count_mask << 6);
+
+                _ = overlap; // Suppress unused variable warning
+            }
+        }
+    }
+
+    // Store collision check count in a debug variable for inspection
+    // We'll use the unused debug_floating_entity_index for this
+    if (collision_checks_performed > 0) {
+        debug_floating_entity_index = collision_checks_performed;
+    }
 }
 
 pub export fn update(delta_time: f32) void {
@@ -546,7 +610,6 @@ pub export fn update(delta_time: f32) void {
     }
 
     // ECS physics simulation
-    collision_state = 0;
     updateECSPhysics(delta_time);
 
     // Update model matrix with first active entity position (for backward compatibility)
@@ -841,6 +904,16 @@ pub export fn get_entity_velocity_y(index: u32) f32 {
     return physics_components[index].velocity.y;
 }
 
+pub export fn get_entity_velocity_x(index: u32) f32 {
+    if (index >= entity_count or !entity_metadata[index].active) return 0;
+    return physics_components[index].velocity.x;
+}
+
+pub export fn get_entity_velocity_z(index: u32) f32 {
+    if (index >= entity_count or !entity_metadata[index].active) return 0;
+    return physics_components[index].velocity.z;
+}
+
 pub export fn clear_debug_floating_entity() void {
     debug_floating_entity_index = MAX_ENTITIES;
 }
@@ -850,7 +923,7 @@ pub export fn clear_debug_floating_entity() void {
 // =============================================================================
 
 // V2 API: Add entity with ECS structure
-pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshIndex: u32, materialId: u32, mass: f32, isKinematic: bool) void {
+pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshIndex: u32, materialId: u32, mass: f32, radius: f32, isKinematic: bool) void {
     if (entity_count >= MAX_ENTITIES) return;
 
     const index = entity_count;
@@ -866,7 +939,7 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .rotation = .{ .x = 0, .y = 0, .z = 0 },
         .scale = .{ .x = scaleX, .y = scaleY, .z = scaleZ },
         .mass = mass,
-        .radius = 0.5, // Default radius
+        .radius = radius, // Use provided radius
         .is_kinematic = isKinematic,
     };
 
@@ -889,7 +962,7 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
     entity_metadata[index] = EntityMetadata{
         .id = id,
         .active = true,
-        .physics_enabled = !isKinematic, // Static entities don't need physics
+        .physics_enabled = true, // All entities participate in collision detection
         .rendering_enabled = true,
         .transform_dirty = false, // Already set up transform
         .mesh_index = meshIndex,
@@ -1014,4 +1087,47 @@ pub export fn set_entity_rotation_axes(id: u32, axis_mask: u8) void {
             rotator_components[index].axis_mask = axis_mask;
         }
     }
+}
+
+// =============================================================================
+// Debug Functions for Collision Investigation
+// =============================================================================
+
+pub export fn get_collision_checks_performed() u32 {
+    return debug_floating_entity_index; // Repurposed for collision check count
+}
+
+// Version check to verify WASM loading
+pub export fn get_wasm_version() u32 {
+    return 20250915; // Date-based version: YYYYMMDD
+}
+
+pub export fn get_collisions_detected() u8 {
+    // Extract collision count from upper 4 bits of collision_state
+    return @intCast((collision_state >> 6) & 0x0F);
+}
+
+pub export fn get_kinematic_collision_flag() bool {
+    return (collision_state & 0x20) != 0;
+}
+
+// Debug: Get physics info for specific entity
+pub export fn debug_get_entity_physics_info(id: u32, info_type: u8) f32 {
+    if (findECSEntityById(id)) |index| {
+        const phys = &physics_components[index];
+        return switch (info_type) {
+            0 => phys.position.x,
+            1 => phys.position.y,
+            2 => phys.position.z,
+            3 => phys.velocity.x,
+            4 => phys.velocity.y,
+            5 => phys.velocity.z,
+            6 => phys.mass,
+            7 => phys.radius,
+            8 => if (phys.is_kinematic) 1.0 else 0.0,
+            9 => if (entity_metadata[index].physics_enabled) 1.0 else 0.0,
+            else => -999.0, // Invalid info_type marker
+        };
+    }
+    return -999.0; // Entity not found marker
 }

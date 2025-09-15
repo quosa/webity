@@ -163,10 +163,16 @@ export class Scene {
         // 3. Run WASM physics simulation (master data updated automatically in WASM)
         this.physicsBridge.update(deltaTime);
 
-        // 4. Sync camera state to WASM for view matrix calculation
+        // 4. Update GameObject components (so RigidBody can sync from WASM physics results)
+        for (const gameObject of this.entities.values()) {
+            // Update GameObject (which calls update on all components)
+            gameObject.update(deltaTime);
+        }
+
+        // 5. Sync camera state to WASM for view matrix calculation
         this.syncCameraToWasm();
 
-        // 5. Render with zero-copy buffer access (WASM buffers → GPU directly)
+        // 6. Render with zero-copy buffer access (WASM buffers → GPU directly)
         this.render();
     }
 
@@ -178,7 +184,7 @@ export class Scene {
         const wasmEntityCount = this.physicsBridge.getStats().entityCount;
         if (wasmEntityCount === 0) return; // Nothing to render
 
-        console.log(`📊 Pure WASM rendering: ${wasmEntityCount} entities registered with WASM`);
+        // console.log(`📊 Pure WASM rendering: ${wasmEntityCount} entities registered with WASM`);
 
         // Get WASM memory and entity transform data
         const wasmMemory = this.physicsBridge.getWasmMemory();

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Fancy Physics Demo - WebGPU Engine</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                color: white;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+
+            h1 {
+                margin-bottom: 10px;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            }
+
+            .description {
+                text-align: center;
+                margin-bottom: 20px;
+                max-width: 800px;
+                line-height: 1.6;
+                opacity: 0.9;
+            }
+
+            canvas {
+                border: 2px solid rgba(255,255,255,0.2);
+                border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            }
+
+            .controls {
+                margin-top: 15px;
+                text-align: center;
+                opacity: 0.8;
+                font-size: 14px;
+            }
+
+            .engine-control {
+                margin: 10px 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .play-pause-btn {
+                background: rgba(255, 255, 255, 0.1);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                color: white;
+                font-size: 18px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.3s ease;
+                backdrop-filter: blur(10px);
+            }
+
+            .play-pause-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+                transform: scale(1.1);
+            }
+
+            .engine-status {
+                font-size: 12px;
+                opacity: 0.7;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🎱 Fancy Physics Demonstration</h1>
+
+        <div class="description">
+            <p>
+                <strong>Left:</strong> Stack of sphere balls (orange/red tones)<br>
+                <strong>Right:</strong> Stack of cube boxes (blue/cyan tones)<br>
+                <strong>Center:</strong> Kinematic platform with 3x3 ball array falling from above<br>
+                <strong>Floor:</strong> Gray grid with proper depth testing
+            </p>
+        </div>
+
+        <canvas id="canvas" width="1000" height="700"></canvas>
+
+        <div class="engine-control">
+            <button id="playPauseBtn" class="play-pause-btn" title="Play/Pause Physics Engine">
+                ⏸️
+            </button>
+            <div class="engine-status">
+                <div id="engineStatus">Engine Running</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            Use <strong>WASD</strong> to move camera • Watch the physics simulation unfold!
+        </div>
+
+        <script type="module" src="./scene.ts"></script>
+    </body>
+</html>
