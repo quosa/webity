@@ -1,11 +1,11 @@
 // src/v2/test-camera-controls.ts
 // Test scene demonstrating Phase 4 camera integration and controls
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { MeshRenderer, RotatorComponent, CameraComponent } from './components';
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from './mesh-utils';
+import { Scene } from '../../engine/scene-system';
+import { GameObject } from '../../engine/gameobject';
+import { MeshRenderer, RotatorComponent, CameraComponent } from '../../engine/components';
+import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
+import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
 
 async function createCameraTestScene(scene: Scene): Promise<Scene> {
 

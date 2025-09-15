@@ -1,11 +1,11 @@
 // src/v2/test-zero-copy-physics.ts
 // Test scene for validating zero-copy rendering with real physics entities
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { MeshRenderer, RigidBody } from './components';
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from './mesh-utils';
+import { Scene } from '../../engine/scene-system';
+import { GameObject } from '../../engine/gameobject';
+import { MeshRenderer, RigidBody } from '../../engine/components';
+import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
+import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
 
 async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene> {
 

@@ -6,7 +6,7 @@ import {
     createOrthographicMatrix,
     createLookAtMatrix,
     multiplyMat4,
-} from './math-utils';
+} from '../utils/math-utils';
 
 export abstract class BaseCamera {
     protected position: [number, number, number];

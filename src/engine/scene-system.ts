@@ -3,7 +3,7 @@
 
 import { Camera } from './camera';
 import { GameObject } from './gameobject';
-import { WebGPURendererV2 } from './webgpu.renderer';
+import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { WasmPhysicsBridge } from './wasm-physics-bridge';
 import { MeshRenderer, RigidBody } from './components';
 

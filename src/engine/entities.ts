@@ -1,6 +1,6 @@
 // src/v2/entities.ts
 
-import { makeTransformMatrix } from './math-utils';
+import { makeTransformMatrix } from '../utils/math-utils';
 
 export interface Transform {
     position: [number, number, number];

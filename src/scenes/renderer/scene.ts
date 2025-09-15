@@ -3,11 +3,11 @@
  * SEE: browser-tests/README.md
  */
 
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { CameraComponent, MeshRenderer } from './components';
+import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
+import { createCubeMesh, createTriangleMesh, createGridMesh } from '../../renderer/mesh-utils';
+import { Scene } from '../../engine/scene-system';
+import { GameObject } from '../../engine/gameobject';
+import { CameraComponent, MeshRenderer } from '../../engine/components';
 
 declare global {
     // eslint-disable-next-line no-unused-vars

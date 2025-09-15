@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Simple WASM Triangle Test</title>
+        <title>WebGPU Renderer V2 Demo</title>
         <style>
             body {
                 margin: 0;
@@ -39,23 +39,11 @@
                 border-radius: 5px;
                 display: none;
             }
-
-            button {
-                margin: 5px;
-                padding: 10px 20px;
-                font-size: 14px;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                background: #007acc;
-            }
         </style>
     </head>
     <body>
         <div class="info">
-            <h1>Simple WASM Triangle Test</h1>
-            <p><strong>Goal</strong>: Render single red triangle using WASM instance buffer flow (no game loop)</p>
+            <h1>WebGPU Renderer V2 Demo Scene</h1>
         </div>
 
         <div class="error" id="error-message"></div>
@@ -63,15 +51,19 @@
         <canvas id="webgpu-canvas" width="800" height="600"></canvas>
 
         <div class="controls">
-            <h3>🔍 Debug Functions</h3>
-            <button onclick="compareBuffers()">
-                📊 Compare WASM Buffers
+            <p>Static Scene Test: Red triangle, green cube (left), blue cube (right), yellow grid floor</p>
+            <p><em>Simple validation of GameObject/Scene system without physics</em></p>
+            <button onclick="logWasmInfo()" style="margin: 10px; padding: 10px 20px; background: #007acc; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                🧪 Log WASM Info
             </button>
-            <button onclick="testWasmTriangleRendering()">
-                🔄 Re-run Test
+            <button onclick="logSceneInfo()" style="margin: 10px; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                📊 Log Scene Info
+            </button>
+            <button onclick="console.clear()" style="margin: 10px; padding: 10px 20px; background: #b22222; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                🚫 Clear Console
             </button>
         </div>
 
-        <script type="module" src="./test-wasm-triangle.ts"></script>
+        <script type="module" src="./scene.ts"></script>
     </body>
 </html>

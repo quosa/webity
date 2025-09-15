@@ -1,13 +1,13 @@
 // src/v2/test-enhanced-rain.ts
 // Demo script for the enhanced rain system with multiple mesh types and colors
 
-import { Scene } from './scene-system';
-import { WebGPURendererV2 } from './webgpu.renderer';
+import { Scene } from '../../engine/scene-system';
+import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
 import { RainSystemV2, RainSystemConfig } from './rain-system';
 import { RainEntityType } from './rain-entity-factory';
-import { createSphereMesh, createCubeMesh, createGridMesh } from './mesh-utils';
-import { GameObject } from './gameobject';
-import { MeshRenderer } from './components';
+import { createSphereMesh, createCubeMesh, createGridMesh } from '../../renderer/mesh-utils';
+import { GameObject } from '../../engine/gameobject';
+import { MeshRenderer } from '../../engine/components';
 
 class EnhancedRainDemo {
     private canvas: HTMLCanvasElement;
@@ -103,7 +103,7 @@ class EnhancedRainDemo {
             const floorMesh = createGridMesh(20, 20);
             this.renderer.registerMesh('sphere', sphereMesh);
             this.renderer.registerMesh('cube', cubeMesh);
-            this.renderer.registerMesh('floor', floorMesh);
+            this.renderer.registerMesh('grid', floorMesh);
             console.log('✅ Meshes registered');
 
             // Add floor to scene

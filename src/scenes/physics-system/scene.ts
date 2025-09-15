@@ -1,11 +1,11 @@
 // src/v2/test-physics-system.ts
 // Test scene demonstrating the Phase 3 physics integration
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { MeshRenderer, RigidBody } from './components';
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from './mesh-utils';
+import { Scene } from '../../engine/scene-system';
+import { GameObject } from '../../engine/gameobject';
+import { MeshRenderer, RigidBody } from '../../engine/components';
+import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
+import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
 
 async function createPhysicsTestScene(scene: Scene): Promise<Scene> {
     console.log('🧪 Creating Physics Test Scene (Phase 3)...');

@@ -1,7 +1,7 @@
 // tests/camera-movement.test.ts
 // Unit tests for BaseCamera movement methods
 
-import { Camera } from '../src/camera';
+import { Camera } from '../src/engine/camera';
 
 describe('BaseCamera Movement', () => {
     let camera: Camera;

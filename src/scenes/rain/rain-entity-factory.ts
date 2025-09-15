@@ -1,8 +1,8 @@
 // src/v2/rain-entity-factory.ts
 // Factory for creating diverse rain entities with different mesh types, sizes, and colors
 
-import { GameObject } from './gameobject';
-import { Vector3, MeshRenderer, RigidBody } from './components';
+import { GameObject } from '../../engine/gameobject';
+import { Vector3, MeshRenderer, RigidBody } from '../../engine/components';
 
 export enum RainEntityType {
     /* eslint-disable no-unused-vars */

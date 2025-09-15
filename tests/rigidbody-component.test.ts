@@ -2,8 +2,8 @@
 // Unit tests for RigidBody component
 import { jest } from '@jest/globals';
 
-import { RigidBody } from '../src/components';
-import { GameObject } from '../src/gameobject';
+import { RigidBody } from '../src/engine/components';
+import { GameObject } from '../src/engine/gameobject';
 
 describe('RigidBody Component', () => {
     let gameObject: GameObject;

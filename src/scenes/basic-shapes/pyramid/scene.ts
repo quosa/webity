@@ -1,11 +1,11 @@
 // src/v2/test-pyramid-scene.ts
 // Test scene with triangle, cube, sphere, and pyramid - validating 4 different mesh types
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { MeshRenderer } from './components';
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createTriangleMesh, createCubeMesh, createSphereMesh, createPyramidMesh, createGridMesh } from './mesh-utils';
+import { Scene } from '../../../engine/scene-system';
+import { GameObject } from '../../../engine/gameobject';
+import { MeshRenderer } from '../../../engine/components';
+import { WebGPURendererV2 } from '../../../renderer/webgpu.renderer';
+import { createTriangleMesh, createCubeMesh, createSphereMesh, createPyramidMesh, createGridMesh } from '../../../renderer/mesh-utils';
 
 async function createPyramidTestScene(scene: Scene): Promise<Scene> {
 

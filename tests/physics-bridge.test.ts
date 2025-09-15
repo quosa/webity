@@ -2,9 +2,9 @@
 // Unit tests for WasmPhysicsBridge and RigidBody integration
 import { jest } from '@jest/globals';
 
-import { WasmPhysicsBridge } from '../src/wasm-physics-bridge';
-import { GameObject } from '../src/gameobject';
-import { RigidBody, MeshRenderer } from '../src/components';
+import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
+import { GameObject } from '../src/engine/gameobject';
+import { RigidBody, MeshRenderer } from '../src/engine/components';
 
 describe('WasmPhysicsBridge', () => {
     let physicsBridge: WasmPhysicsBridge;

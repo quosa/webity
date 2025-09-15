@@ -1,10 +1,10 @@
 // src/v2/rain-system.ts
 // Enhanced rain system using v2 GameObject architecture with multiple mesh types and colors
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
+import { Scene } from '../../engine/scene-system';
+import { GameObject } from '../../engine/gameobject';
 import { RainEntityFactory, RainEntityType, RainEntityConfig } from './rain-entity-factory';
-import { Vector3 } from './components';
+import { Vector3 } from '../../engine/components';
 
 export interface RainSystemConfig {
     spawnRate: number;        // entities per second

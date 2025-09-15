@@ -14,7 +14,7 @@ export type TextureData = {
 
 // Re-export types for convenience
 export type { MeshData } from './mesh-registry';
-export type { EntityData } from './entities';
+export type { EntityData } from '../engine/entities';
 
 
 class Texture {

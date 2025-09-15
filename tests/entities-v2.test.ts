@@ -1,7 +1,7 @@
 // tests/entities-v2.test.ts
 // Unit tests for v2 Entity and EntityManager components
 
-import { Entity, EntityManager } from '../src/entities';
+import { Entity, EntityManager } from '../src/engine/entities';
 
 describe('Entity (v2)', () => {
     test('should create entity with transform matrix', () => {

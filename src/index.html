@@ -3,67 +3,135 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>WebGPU Renderer V2 Demo</title>
+        <title>WebGPU Engine - Scene Browser</title>
         <style>
             body {
                 margin: 0;
-                padding: 20px;
+                padding: 40px;
                 background: #222;
                 color: white;
                 font-family: Arial, sans-serif;
+                line-height: 1.6;
             }
 
-            canvas {
-                display: block;
-                margin: 20px auto;
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+
+            h1 {
+                text-align: center;
+                color: #4CAF50;
+                margin-bottom: 40px;
+            }
+
+            .scene-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 20px;
+                margin-top: 30px;
+            }
+
+            .scene-card {
                 background: #333;
                 border: 2px solid #555;
+                border-radius: 8px;
+                padding: 20px;
+                text-decoration: none;
+                color: white;
+                transition: border-color 0.3s, transform 0.2s;
             }
 
-            .info {
-                text-align: center;
-                margin-bottom: 20px;
+            .scene-card:hover {
+                border-color: #4CAF50;
+                transform: translateY(-2px);
             }
 
-            .controls {
-                text-align: center;
-                margin-top: 20px;
+            .scene-title {
+                font-size: 1.2em;
+                font-weight: bold;
+                margin-bottom: 10px;
+                color: #4CAF50;
             }
 
-            .error {
-                color: #ff6b6b;
-                text-align: center;
-                margin: 20px;
-                padding: 10px;
-                border: 1px solid #ff6b6b;
-                border-radius: 5px;
-                display: none;
+            .scene-description {
+                color: #ccc;
+                font-size: 0.9em;
             }
         </style>
     </head>
     <body>
-        <div class="info">
-            <h1>WebGPU Renderer V2 Demo Scene</h1>
+        <div class="container">
+            <h1>WebGPU Engine - Scene Browser</h1>
+
+            <p style="text-align: center; color: #ccc;">
+                Choose a scene to explore the WebGPU engine capabilities
+            </p>
+
+            <div class="scene-grid">
+                <a href="./scenes/" class="scene-card">
+                    <div class="scene-title">Static Scene</div>
+                    <div class="scene-description">
+                        Basic scene with geometric shapes - validates GameObject/Scene system without physics
+                    </div>
+                </a>
+
+                <a href="./scenes/rain/" class="scene-card">
+                    <div class="scene-title">Enhanced Rain</div>
+                    <div class="scene-description">
+                        Advanced particle system with multiple mesh types, colors, and physics interactions
+                    </div>
+                </a>
+
+                <a href="./scenes/physics/" class="scene-card">
+                    <div class="scene-title">Physics Demo</div>
+                    <div class="scene-description">
+                        Physics simulation with falling objects and collision detection
+                    </div>
+                </a>
+
+                <a href="./scenes/camera-controls/" class="scene-card">
+                    <div class="scene-title">Camera Controls</div>
+                    <div class="scene-description">
+                        Interactive camera system with orbit, zoom, and pan controls
+                    </div>
+                </a>
+
+                <a href="./scenes/basic-shapes/cube/" class="scene-card">
+                    <div class="scene-title">WASM Cube</div>
+                    <div class="scene-description">
+                        Simple cube rendering test using WASM integration
+                    </div>
+                </a>
+
+                <a href="./scenes/basic-shapes/triangle/" class="scene-card">
+                    <div class="scene-title">WASM Triangle</div>
+                    <div class="scene-description">
+                        Basic triangle rendering using WebAssembly backend
+                    </div>
+                </a>
+
+                <a href="./scenes/basic-shapes/pyramid/" class="scene-card">
+                    <div class="scene-title">WASM Pyramid</div>
+                    <div class="scene-description">
+                        Multi-face pyramid mesh rendering with 4-mesh validation
+                    </div>
+                </a>
+
+                <a href="./scenes/physics-system/" class="scene-card">
+                    <div class="scene-title">Physics System</div>
+                    <div class="scene-description">
+                        Advanced physics system demo with interactive controls and real-time simulation
+                    </div>
+                </a>
+
+                <a href="./scenes/renderer/" class="scene-card">
+                    <div class="scene-title">Renderer Test</div>
+                    <div class="scene-description">
+                        WebGPU renderer validation and performance testing
+                    </div>
+                </a>
+            </div>
         </div>
-
-        <div class="error" id="error-message"></div>
-
-        <canvas id="webgpu-canvas" width="800" height="600"></canvas>
-
-        <div class="controls">
-            <p>Static Scene Test: Red triangle, green cube (left), blue cube (right), yellow grid floor</p>
-            <p><em>Simple validation of GameObject/Scene system without physics</em></p>
-            <button onclick="logWasmInfo()" style="margin: 10px; padding: 10px 20px; background: #007acc; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                🧪 Log WASM Info
-            </button>
-            <button onclick="logSceneInfo()" style="margin: 10px; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                📊 Log Scene Info
-            </button>
-            <button onclick="console.clear()" style="margin: 10px; padding: 10px 20px; background: #b22222; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                🚫 Clear Console
-            </button>
-        </div>
-
-        <script type="module" src="./simple-static-scene.ts"></script>
     </body>
 </html>

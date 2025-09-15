@@ -2,11 +2,11 @@
 // Simple static scene test using GameObject/Scene system (no physics)
 // This validates the v2 architecture with basic rendering
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { MeshRenderer } from './components';
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh } from './mesh-utils';
+import { Scene } from '../engine/scene-system';
+import { GameObject } from '../engine/gameobject';
+import { MeshRenderer } from '../engine/components';
+import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
+import { createCubeMesh, createTriangleMesh, createGridMesh } from '../renderer/mesh-utils';
 
 async function createSimpleStaticScene(scene: Scene): Promise<Scene> {
 

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Simple WASM Triangle Test</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                background: #222;
+                color: white;
+                font-family: Arial, sans-serif;
+            }
+
+            canvas {
+                display: block;
+                margin: 20px auto;
+                background: #333;
+                border: 2px solid #555;
+            }
+
+            .info {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+
+            .controls {
+                text-align: center;
+                margin-top: 20px;
+            }
+
+            .error {
+                color: #ff6b6b;
+                text-align: center;
+                margin: 20px;
+                padding: 10px;
+                border: 1px solid #ff6b6b;
+                border-radius: 5px;
+                display: none;
+            }
+
+            button {
+                margin: 5px;
+                padding: 10px 20px;
+                font-size: 14px;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                background: #007acc;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="info">
+            <h1>Simple WASM Triangle Test</h1>
+            <p><strong>Goal</strong>: Render single red triangle using WASM instance buffer flow (no game loop)</p>
+        </div>
+
+        <div class="error" id="error-message"></div>
+
+        <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+
+        <div class="controls">
+            <h3>🔍 Debug Functions</h3>
+            <button onclick="compareBuffers()">
+                📊 Compare WASM Buffers
+            </button>
+            <button onclick="testWasmTriangleRendering()">
+                🔄 Re-run Test
+            </button>
+        </div>
+
+        <script type="module" src="./scene.ts"></script>
+    </body>
+</html>

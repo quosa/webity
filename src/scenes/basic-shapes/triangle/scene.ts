@@ -1,11 +1,11 @@
 // src/v2/test-wasm-triangle.ts
 // Simple triangle scene with WASM flow - single render call, no game loop
 
-import { Scene } from './scene-system';
-import { GameObject } from './gameobject';
-import { MeshRenderer } from './components';
-import { WebGPURendererV2 } from './webgpu.renderer';
-import { createTriangleMesh } from './mesh-utils';
+import { Scene } from '../../../engine/scene-system';
+import { GameObject } from '../../../engine/gameobject';
+import { MeshRenderer } from '../../../engine/components';
+import { WebGPURendererV2 } from '../../../renderer/webgpu.renderer';
+import { createTriangleMesh } from '../../../renderer/mesh-utils';
 
 async function createSimpleTriangleScene(scene: Scene): Promise<Scene> {
 
