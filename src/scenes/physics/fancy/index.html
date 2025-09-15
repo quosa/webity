@@ -103,8 +103,86 @@
         </div>
 
         <div class="controls">
-            Use <strong>WASD</strong> to move camera • Watch the physics simulation unfold!
+            <div class="input-controls">
+                <div class="control-section">
+                    <h3>Camera Controls</h3>
+                    <button id="cameraModeBtn" class="control-btn active">Free Camera</button>
+                    <button id="orbitModeBtn" class="control-btn">Orbit Camera</button>
+                </div>
+                <div class="control-section">
+                    <h3>Scene Actions</h3>
+                    <button id="resetCameraBtn" class="control-btn">Reset Camera</button>
+                    <button id="addBallBtn" class="control-btn">Add Ball</button>
+                </div>
+            </div>
+            <div class="key-instructions">
+                <p><strong>WASD:</strong> <span id="controlHints">Move camera around</span> • <strong>Space/- :</strong> <span id="verticalHints">Move up/down</span></p>
+            </div>
         </div>
+
+        <style>
+            .controls {
+                margin-top: 15px;
+                text-align: center;
+                opacity: 0.9;
+                font-size: 14px;
+                max-width: 600px;
+            }
+
+            .input-controls {
+                display: flex;
+                justify-content: center;
+                gap: 20px;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+            }
+
+            .control-section {
+                background: rgba(255, 255, 255, 0.1);
+                padding: 10px 15px;
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+
+            .control-section h3 {
+                margin: 0 0 8px 0;
+                font-size: 12px;
+                opacity: 0.8;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            .control-btn {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 6px 12px;
+                margin: 2px 4px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+                transition: all 0.3s ease;
+            }
+
+            .control-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+            }
+
+            .control-btn.active {
+                background: rgba(76, 175, 80, 0.3);
+                border-color: rgba(76, 175, 80, 0.8);
+                color: #4CAF50;
+            }
+
+            .key-instructions {
+                background: rgba(0, 0, 0, 0.2);
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+        </style>
 
         <script type="module" src="./scene.ts"></script>
     </body>

@@ -6,6 +6,8 @@ import { GameObject } from './gameobject';
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { WasmPhysicsBridge } from './wasm-physics-bridge';
 import { MeshRenderer, RigidBody } from './components';
+import { InputManager } from './input';
+import { InputController, CameraController, GameObjectController, OrbitCameraController } from './input-controller';
 
 export class Scene {
     private entities = new Map<string, GameObject>();
@@ -14,6 +16,11 @@ export class Scene {
     public camera: Camera;
     private renderer?: WebGPURendererV2;
     public physicsBridge: WasmPhysicsBridge;
+
+    // Input Management
+    private inputManager?: InputManager;
+    private activeInputController: InputController | null = null;
+    private inputTarget: 'camera' | 'orbit' | GameObject | null = null;
 
     constructor() {
         // Default camera setup
@@ -27,6 +34,15 @@ export class Scene {
 
         // Initialize physics bridge
         this.physicsBridge = new WasmPhysicsBridge();
+
+        // Initialize input manager
+        this.inputManager = new InputManager();
+        this.inputManager.init((key: number, pressed: boolean) => {
+            this.activeInputController?.handleInput(key, pressed);
+        });
+
+        // Default to camera control
+        this.setInputTarget('camera');
     }
     _addMeshIndex(gameObject: GameObject) {
         const meshRenderer = gameObject.getComponent(MeshRenderer);
@@ -151,14 +167,14 @@ export class Scene {
 
     // Phase 5: Zero-copy update loop - WASM becomes master data source
     update(deltaTime: number): void {
-        // 1. Update all GameObject components (minimal TypeScript coordination)
+        // 1. Update input controller BEFORE other systems
+        this.activeInputController?.update(deltaTime);
+
+        // 2. Update all GameObject components (minimal TypeScript coordination)
         for (const gameObject of this.entities.values()) {
             // Update GameObject (which already calls update on all components)
             gameObject.update(deltaTime);
         }
-
-        // 2. Apply any input forces to WASM (future: InputManager integration)
-        // this.inputManager?.applyToWasm(this.physicsBridge);
 
         // 3. Run WASM physics simulation (master data updated automatically in WASM)
         this.physicsBridge.update(deltaTime);
@@ -287,6 +303,63 @@ export class Scene {
         // Future WASM camera sync:
         // this.physicsBridge.setCameraPosition(this.camera.getPosition());
         // this.physicsBridge.setCameraTarget(this.camera.getTarget());
+    }
+
+    // Input Management Methods
+    setInputTarget(target: 'camera' | 'orbit' | GameObject | null): void {
+        this.inputTarget = target;
+
+        if (target === 'camera') {
+            this.activeInputController = new CameraController(this.camera);
+        } else if (target === 'orbit') {
+            this.activeInputController = new OrbitCameraController(this.camera);
+        } else if (target instanceof GameObject) {
+            this.activeInputController = new GameObjectController(target);
+        } else {
+            this.activeInputController = null;
+        }
+
+        // Dispatch input target change event for UI updates
+        this.dispatchInputTargetChange();
+    }
+
+    getInputTarget(): 'camera' | 'orbit' | GameObject | null {
+        return this.inputTarget;
+    }
+
+    getInputController(): InputController | null {
+        return this.activeInputController;
+    }
+
+    // Get input controller with type checking
+    getCameraController(): CameraController | undefined {
+        return this.activeInputController instanceof CameraController ? this.activeInputController : undefined;
+    }
+
+    getGameObjectController(): GameObjectController | undefined {
+        return this.activeInputController instanceof GameObjectController ? this.activeInputController : undefined;
+    }
+
+    getOrbitCameraController(): OrbitCameraController | undefined {
+        return this.activeInputController instanceof OrbitCameraController ? this.activeInputController : undefined;
+    }
+
+    private dispatchInputTargetChange(): void {
+        const event = new CustomEvent('inputTargetChanged', {
+            detail: {
+                target: this.inputTarget,
+                controller: this.activeInputController
+            }
+        });
+        window.dispatchEvent(event);
+    }
+
+    // Dispose method to clean up resources
+    dispose(): void {
+        this.inputManager?.dispose();
+        this.activeInputController = null;
+        this.inputTarget = null;
+        console.log('🧹 Scene disposed - input manager cleaned up');
     }
 
     // Utility Methods

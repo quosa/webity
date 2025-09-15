@@ -206,11 +206,34 @@ export class WasmPhysicsBridge {
         this.syncPhysicsResults();
     }
 
-    // Apply force to physics entity
-    public applyForce(wasmEntityId: number, fx: number, fy: number, fz: number): void {
+    // Apply force to physics entity (overloaded method)
+    public applyForce(wasmEntityId: number, fxOrForce: number | { x: number; y: number; z: number }, fy?: number, fz?: number): void {
         if (this.wasm) {
-            this.wasm.apply_force(wasmEntityId, fx, fy, fz);
-            console.log(`💥 Applied force (${fx}, ${fy}, ${fz}) to entity ${wasmEntityId}`);
+            if (typeof fxOrForce === 'object') {
+                // Force object provided
+                this.wasm.apply_force(wasmEntityId, fxOrForce.x, fxOrForce.y, fxOrForce.z);
+                console.log(`💥 Applied force (${fxOrForce.x}, ${fxOrForce.y}, ${fxOrForce.z}) to entity ${wasmEntityId}`);
+            } else {
+                // Individual parameters provided
+                this.wasm.apply_force(wasmEntityId, fxOrForce, fy!, fz!);
+                console.log(`💥 Applied force (${fxOrForce}, ${fy}, ${fz}) to entity ${wasmEntityId}`);
+            }
+        }
+    }
+
+    // Set entity velocity (for direct velocity control)
+    public setEntityVelocity(wasmEntityId: number, velocity: { x: number; y: number; z: number }): void {
+        if (this.wasm) {
+            this.wasm.set_entity_velocity(wasmEntityId, velocity.x, velocity.y, velocity.z);
+            console.log(`🏃 Set velocity (${velocity.x}, ${velocity.y}, ${velocity.z}) for entity ${wasmEntityId}`);
+        }
+    }
+
+    // Set entity position (for kinematic control)
+    public setEntityPosition(wasmEntityId: number, position: { x: number; y: number; z: number }): void {
+        if (this.wasm) {
+            this.wasm.set_entity_position(wasmEntityId, position.x, position.y, position.z);
+            console.log(`📍 Set position (${position.x}, ${position.y}, ${position.z}) for entity ${wasmEntityId}`);
         }
     }
 

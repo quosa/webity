@@ -315,6 +315,11 @@ export class RigidBody extends Component {
         console.log(`🆔 RigidBody.setWasmEntityId(${id}) for "${this.gameObject?.name}"`);
     }
 
+    // Get WASM entity ID
+    public getWasmEntityId(): number | undefined {
+        return this.wasmEntityId;
+    }
+
     // Set physics bridge reference (called by scene)
     public setPhysicsBridge(bridge: any): void {
         this.physicsBridge = bridge;

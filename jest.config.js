@@ -8,7 +8,7 @@ export default {
         'src/**/*.{ts,tsx}',
         '!src/**/*.d.ts',
         '!src/**/*.test.{ts,tsx}',
-        '!src/**/__tests__/**',
+        '!tests/**',
     ],
     coverageDirectory: 'coverage',
     coverageReporters: ['text', 'lcov', 'html'],

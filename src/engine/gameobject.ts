@@ -168,7 +168,11 @@ export class GameObject {
     setScene(scene: any): void {
         this.scene = scene;
     }
-    
+
+    getScene(): any {
+        return this.scene;
+    }
+
     // Utility Methods
     setActive(active: boolean): void {
         this.active = active;

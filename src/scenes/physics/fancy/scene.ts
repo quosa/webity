@@ -130,6 +130,99 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
     return scene;
 }
 
+function setupInputControls(scene: Scene): void {
+    const cameraModeBtn = document.getElementById('cameraModeBtn');
+    const orbitModeBtn = document.getElementById('orbitModeBtn');
+    const resetCameraBtn = document.getElementById('resetCameraBtn');
+    const addBallBtn = document.getElementById('addBallBtn');
+    const controlHints = document.getElementById('controlHints');
+    const verticalHints = document.getElementById('verticalHints');
+
+    let ballCounter = 0;
+
+    // Update UI based on input target
+    function updateUI(target: 'camera' | 'orbit') {
+        // Update button states
+        cameraModeBtn?.classList.toggle('active', target === 'camera');
+        orbitModeBtn?.classList.toggle('active', target === 'orbit');
+
+        // Update control hints
+        if (target === 'camera') {
+            if (controlHints) controlHints.textContent = 'Move camera around';
+            if (verticalHints) verticalHints.textContent = 'Move up/down';
+        } else if (target === 'orbit') {
+            if (controlHints) controlHints.textContent = 'Orbit around center';
+            if (verticalHints) verticalHints.textContent = 'Zoom in/out';
+        }
+    }
+
+    // Camera mode button
+    cameraModeBtn?.addEventListener('click', () => {
+        scene.setInputTarget('camera');
+        updateUI('camera');
+        console.log('🎮 Switched to free camera mode');
+    });
+
+    // Orbit mode button
+    orbitModeBtn?.addEventListener('click', () => {
+        scene.setInputTarget('orbit');
+        updateUI('orbit');
+        console.log('🎮 Switched to orbit camera mode');
+    });
+
+    // Reset camera button
+    resetCameraBtn?.addEventListener('click', () => {
+        scene.camera.setPosition([0, 5, -25]);
+        scene.camera.lookAt([0, 0, 0]);
+        console.log('📷 Camera reset to default position');
+    });
+
+    // Add ball button
+    addBallBtn?.addEventListener('click', () => {
+        ballCounter++;
+        const newBall = new GameObject(`dynamic-ball-${ballCounter}`, `DynamicBall${ballCounter}`);
+
+        // Add some randomness to position
+        const x = (Math.random() - 0.5) * 20; // -10 to 10
+        const y = 5 + Math.random() * 5;       // 5 to 10
+        const z = (Math.random() - 0.5) * 10; // -5 to 5
+
+        newBall.transform.setPosition(x, y, z);
+        newBall.transform.setScale(1, 1, 1);
+
+        // Random color
+        const ballMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', {
+            x: Math.random(),
+            y: Math.random(),
+            z: Math.random(),
+            w: 1.0
+        });
+        newBall.addComponent(ballMeshRenderer);
+
+        const ballRigidBody = new RigidBody(
+            1.0 + Math.random() * 2, // Mass 1-3kg
+            true,       // useGravity
+            'sphere',
+            { x: 1.0, y: 1.0, z: 1.0 }
+        );
+        newBall.addComponent(ballRigidBody);
+
+        scene.addGameObject(newBall);
+        console.log(`🎾 Added dynamic ball at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
+    });
+
+    // Initialize UI
+    updateUI('camera');
+
+    // Listen for input target changes from the scene
+    window.addEventListener('inputTargetChanged', (event: any) => {
+        const target = event.detail.target;
+        if (target === 'camera' || target === 'orbit') {
+            updateUI(target);
+        }
+    });
+}
+
 async function initFancyPhysicsScene(): Promise<void> {
     try {
         // Initialize WebGPU renderer
@@ -166,6 +259,13 @@ async function initFancyPhysicsScene(): Promise<void> {
 
         // Start the simulation
         scene.start();
+
+        // Initialize input system for camera control
+        scene.setInputTarget('camera');
+        console.log('🎮 Input system initialized - WASD camera controls active');
+
+        // Set up input control UI
+        setupInputControls(scene);
 
         // Log scene statistics
         const sceneInfo = scene.getSceneInfo();
