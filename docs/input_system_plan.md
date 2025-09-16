@@ -955,3 +955,287 @@ The implemented system provides:
 - **Production Ready** - Comprehensive error handling and graceful degradation
 
 The input system successfully transforms the engine from a tech demo into an interactive, engaging 3D experience that's genuinely fun to play with!
+
+---
+
+## 🚀 FUTURE ROADMAP - Input System Evolution
+
+The current implementation provides a solid foundation, but there are exciting opportunities to evolve it into a production-ready game engine quality input system.
+
+### **Phase 1: Enhanced Core Features** 📋 FUTURE
+
+#### **1. Configurable Key Bindings**
+```typescript
+// InputBindings system for user-customizable controls
+interface KeyBinding {
+    action: string;
+    primary: string;    // 'w', 'space', etc.
+    secondary?: string; // Alternative key
+    gamepad?: number;   // Gamepad button index
+}
+
+class InputBindings {
+    private bindings = new Map<string, KeyBinding>();
+
+    setBinding(action: string, primary: string, secondary?: string): void
+    getBinding(action: string): KeyBinding | undefined
+    saveToLocalStorage(): void
+    loadFromLocalStorage(): void
+}
+```
+
+**Key Benefits:**
+- User-customizable key mappings
+- Persistent settings across sessions
+- Alternative key support (e.g., WASD + Arrow keys)
+- Accessibility support for different input preferences
+
+#### **2. Input Context/Mode System**
+```typescript
+// Different input contexts for different game states
+type InputContext = 'game' | 'menu' | 'inventory' | 'dialogue' | 'console';
+
+class ContextualInputManager {
+    private contexts = new Map<InputContext, InputController>();
+    private activeContext: InputContext = 'game';
+
+    pushContext(context: InputContext): void    // Stack-based contexts
+    popContext(): void                          // Return to previous
+    setContext(context: InputContext): void    // Direct switch
+}
+```
+
+**Key Benefits:**
+- Clean separation between gameplay and UI input
+- Stack-based context management for modal dialogs
+- Context-specific key bindings (e.g., menu navigation vs game controls)
+
+#### **3. Gamepad/Controller Support**
+```typescript
+class GamepadInputController implements InputController {
+    private gamepadIndex: number;
+    private deadzone: number = 0.1;
+
+    // Handle analog sticks, triggers, d-pad
+    handleAnalogInput(leftStick: Vec2, rightStick: Vec2, triggers: Vec2): void
+    handleButtonInput(buttonIndex: number, pressed: boolean): void
+
+    // Controller-specific features
+    setVibration(lowFreq: number, highFreq: number, duration: number): void
+    calibrateDeadzone(): void
+}
+```
+
+**Key Benefits:**
+- Native gamepad support for console-style gameplay
+- Analog stick input for smooth camera/movement control
+- Vibration feedback integration
+- Multiple controller support for local multiplayer
+
+### **Phase 2: Advanced Input Features** 📋 FUTURE
+
+#### **4. Mouse/Touch Integration**
+```typescript
+class MouseInputController implements InputController {
+    private sensitivity: number = 1.0;
+    private invertY: boolean = false;
+
+    handleMouseMove(deltaX: number, deltaY: number): void
+    handleMouseButton(button: number, pressed: boolean): void
+    handleScroll(delta: number): void
+}
+
+class TouchInputController implements InputController {
+    private gestures = new GestureRecognizer();
+
+    handleTouch(touches: TouchEvent[]): void
+    recognizeGesture(type: 'tap' | 'pinch' | 'swipe' | 'pan'): GestureData
+}
+```
+
+**Key Benefits:**
+- Mouse look for FPS-style camera control
+- Touch gesture recognition (pinch to zoom, swipe navigation)
+- Cross-platform input handling (desktop + mobile)
+- Cursor interaction with 3D objects (raycasting/picking)
+
+#### **5. Input Buffering & Combo System**
+```typescript
+class InputBuffer {
+    private buffer: Array<{action: string, timestamp: number}> = [];
+    private bufferTime: number = 200; // ms
+
+    checkSequence(sequence: string[]): boolean  // "down,down,punch"
+    checkChord(actions: string[]): boolean      // Simultaneous inputs
+    checkTiming(action: string, maxAge: number): boolean
+}
+
+class ComboSystem {
+    private combos = new Map<string, ComboDefinition>();
+
+    registerCombo(name: string, sequence: string[], timing: number): void
+    checkCombos(inputBuffer: InputBuffer): string[]
+}
+```
+
+**Key Benefits:**
+- Fighting game style input combos
+- Frame-perfect timing validation
+- Input buffering for responsive controls
+- Complex input pattern recognition
+
+#### **6. Input Recording & Playback**
+```typescript
+class InputRecorder {
+    private recording: InputFrame[] = [];
+    private isRecording: boolean = false;
+
+    startRecording(): void
+    stopRecording(): InputSequence
+    playback(sequence: InputSequence, speed: number = 1.0): void
+    saveToFile(sequence: InputSequence, filename: string): void
+
+    // Advanced features
+    generateInputReport(): RecordingAnalysis
+    createInputTest(sequence: InputSequence): TestCase
+}
+```
+
+**Key Benefits:**
+- Automated testing and regression detection
+- Demo recording and playback
+- Tutorial creation and input demonstration
+- Performance analysis and input timing optimization
+
+### **Phase 3: Engine Integration** 📋 FUTURE
+
+#### **7. Component-Based Input Handling**
+```typescript
+class InputReceiver extends Component {
+    private actions = new Map<string, InputAction>();
+    private priority: number = 0;
+
+    bindAction(action: string, callback: InputActionCallback): void
+    bindAxis(axis: string, callback: InputAxisCallback): void
+
+    // Input filtering and processing
+    setInputFilter(filter: InputFilter): void
+    setPriority(priority: number): void
+}
+
+class InputActionComponent extends Component {
+    // Specific actions: Jump, Shoot, Interact, etc.
+    configureAction(trigger: InputTrigger, response: ActionResponse): void
+}
+```
+
+**Key Benefits:**
+- GameObjects can directly handle their own input
+- Priority-based input resolution for overlapping objects
+- Modular input behavior composition
+- Clean separation between input logic and game logic
+
+#### **8. Input-Driven Animation System**
+```typescript
+class InputAnimationController extends Component {
+    private animationBindings = new Map<string, AnimationBinding>();
+
+    bindInputToAnimation(action: string, clip: string, blendMode?: BlendMode): void
+    bindAxisToBlendTree(axis: string, blendTree: AnimationBlendTree): void
+
+    // Advanced animation integration
+    setInputSmoothing(action: string, smoothing: number): void
+    createInputBlendSpace(axes: string[], animations: string[]): void
+}
+```
+
+**Key Benefits:**
+- Direct input-to-animation mapping
+- Blend trees for analog input (walk/run based on stick pressure)
+- Smooth animation transitions based on input state
+- Character controller animation automation
+
+### **Phase 4: Developer Experience** 📋 FUTURE
+
+#### **9. Input Configuration UI**
+```typescript
+class InputConfigurationUI {
+    // Runtime key binding interface
+    createKeyBindingUI(): HTMLElement
+    showControllerCalibration(): void
+    displayInputVisualization(): void
+
+    // Developer tools
+    createInputDebugger(): InputDebugPanel
+    generateInputDocumentation(): string
+}
+
+class InputDebugger {
+    private visualizer?: InputVisualizer;
+
+    showLiveInputDisplay(): void
+    logInputHistory(duration: number): InputHistoryReport
+    analyzeInputPerformance(): PerformanceMetrics
+    createInputHeatmap(): InputHeatmapData
+}
+```
+
+**Key Benefits:**
+- In-game key binding configuration
+- Input testing and validation tools
+- Developer debugging and analysis tools
+- Visual input feedback for development
+
+#### **10. Accessibility Features**
+```typescript
+class AccessibilityInputManager {
+    // Accessibility enhancements
+    setHoldDuration(action: string, duration: number): void
+    enableInputAssistance(type: 'auto-aim' | 'movement-correction'): void
+    setAlternativeInputMethod(method: 'switch' | 'voice' | 'eye-tracking'): void
+
+    // Visual/audio feedback
+    enableInputVisualization(): void
+    setAudioCues(enabled: boolean): void
+    configureColorBlindSupport(): void
+}
+```
+
+**Key Benefits:**
+- Support for users with different abilities
+- Configurable input timing and sensitivity
+- Alternative input methods integration
+- Visual and audio input feedback options
+
+### **Suggested Implementation Priority**
+
+Based on typical game development needs and user impact:
+
+#### **🎯 High Priority (Input System v2)**
+1. **Configurable Key Bindings** - Most requested feature, immediate user value
+2. **Gamepad Support** - Essential for modern games, huge UX improvement
+3. **Mouse Integration** - Critical for 3D game camera controls
+4. **Input Context System** - Needed as UI complexity grows
+
+#### **📈 Medium Priority (Input System v3)**
+5. **Component-Based Input** - Natural GameObject system integration
+6. **Input Recording** - Valuable for testing and development
+7. **Touch Support** - Important for mobile deployment
+8. **Input Buffering** - Advanced gameplay mechanics support
+
+#### **🔧 Lower Priority (Polish & Optimization)**
+9. **Input Animation System** - Character system integration
+10. **Accessibility Features** - Important for inclusivity
+11. **Developer Tools** - Quality of life improvements
+12. **Performance Optimization** - Fine-tuning and advanced features
+
+### **Architecture Considerations**
+
+The current polymorphic controller pattern provides an excellent foundation for these additions:
+
+- **Extensible Design**: New controller types can be added without breaking existing code
+- **Event System**: Already supports UI integration and can be extended for new features
+- **Performance Baseline**: 6,598+ entity performance maintained, plenty of headroom for enhancements
+- **Clean Separation**: Input logic separated from game logic, making complex features manageable
+
+The roadmap maintains the proven architectural patterns while adding the features needed to compete with commercial game engines like Unity and Unreal.
