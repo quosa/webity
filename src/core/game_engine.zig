@@ -1,6 +1,21 @@
 // game_engine.zig - Thin WASM wrapper around game_core
-const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("game_core.zig");
+const std = @import("std");
+
+// Declare extern fn for wasm logging (implemented in TypeScript)
+extern fn jslog(ptr: [*]const u8, len: usize) void;
+
+// Fallback logger for non-WASM targets (unit tests)
+fn native_log(ptr: [*]const u8, len: usize) void {
+    const slice = ptr[0..len];
+    std.debug.print("{s}", .{slice});
+}
+
+// Conditional logger assignment (ts vs zig test)
+pub const log = if (builtin.target.cpu.arch == .wasm32) jslog else native_log;
+
+// =============================================================================
 
 // State (pre-allocated) - using core types
 var vertex_buffer: [10000]f32 = undefined;
@@ -53,8 +68,10 @@ const PhysicsComponent = struct {
     rotation: core.Vec3, // Rotation in radians (x, y, z)
     scale: core.Vec3, // Scale values (x, y, z)
     mass: f32, // Physics mass
-    radius: f32, // Collision radius/size
+    radius: f32, // Collision radius/size (legacy - use extents.x for spheres)
     is_kinematic: bool, // Kinematic vs dynamic
+    collision_shape: core.CollisionShape, // Shape type for collision detection
+    extents: core.Vec3, // Half-extents for boxes, radius in .x for spheres, normal for planes
 };
 
 // Rendering-only component (GPU buffer layout - exactly 20 floats)
@@ -96,6 +113,14 @@ var input_state: u8 = 0; // Bitmask for WASD
 var collision_state: u8 = 0; // Bitmask for collisions
 var debug_floating_entity_index: u32 = MAX_ENTITIES; // Index of floating entity for debugging
 
+// Collision logging variables
+var last_collision_entity1: u32 = MAX_ENTITIES;
+var last_collision_entity2: u32 = MAX_ENTITIES;
+var last_collision_pos1: [3]f32 = [_]f32{ 0, 0, 0 };
+var last_collision_pos2: [3]f32 = [_]f32{ 0, 0, 0 };
+var collision_event_counter: u32 = 0;
+var collision_log_count: u32 = 0; // Limit collision logging
+
 fn initEntities() void {
     entity_count = 0;
 
@@ -108,8 +133,10 @@ fn initEntities() void {
             .rotation = .{ .x = 0, .y = 0, .z = 0 },
             .scale = .{ .x = 1, .y = 1, .z = 1 },
             .mass = 1.0,
-            .radius = 0.5,
+            .radius = 0.5, // Legacy field
             .is_kinematic = false,
+            .collision_shape = core.CollisionShape.SPHERE, // Default to sphere
+            .extents = .{ .x = 0.5, .y = 0.5, .z = 0.5 }, // Default sphere radius in .x
         };
     }
 
@@ -274,66 +301,103 @@ fn updateECSPhysics(delta_time: f32) void {
         phys.velocity.y += force.y * delta_time;
         phys.velocity.z += force.z * delta_time;
 
-        // Apply damping
+        // Apply damping (X and Z only - preserve Y velocity for gravity/collisions)
         phys.velocity.x *= physics_damping;
         phys.velocity.z *= physics_damping;
 
-        // Update position
+        // Mark transform as dirty for rendering update (positions will be updated after collision resolution)
+        entity_metadata[i].transform_dirty = true;
+    }
+
+    // Step 2: Check entity-entity collisions BEFORE position integration
+    checkEntityCollisions(delta_time);
+
+    // Step 3: Update positions using collision-corrected velocities
+    for (physics_components[0..entity_count], 0..) |*phys, i| {
+        if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
+        if (phys.is_kinematic) continue;
+
+        // Update position with corrected velocity
         phys.position.x += phys.velocity.x * delta_time;
         phys.position.y += phys.velocity.y * delta_time;
         phys.position.z += phys.velocity.z * delta_time;
 
-        // Apply world boundary constraints
-        const entity_collision_flags = applyECSWorldBoundaryConstraints(&phys.position, &phys.velocity, phys.radius);
+        // Apply world boundary constraints using shape-specific collision detection
+        const entity_collision_flags = applyECSWorldBoundaryConstraintsWithShape(&phys.position, &phys.velocity, phys.collision_shape, phys.extents);
         collision_state |= entity_collision_flags;
-
-        // Mark transform as dirty for rendering update
-        entity_metadata[i].transform_dirty = true;
     }
 
-    // Step 2: Update rotator components (animation system)
+    // Step 4: Update rotator components (animation system)
     updateRotators(delta_time);
-
-    // Step 3: Check entity-entity collisions
-    checkEntityCollisions(delta_time);
 
     // Step 4: Update dirty transforms (selective - only changed entities)
     updateDirtyTransforms();
 }
 
-// ECS version of boundary constraints
-fn applyECSWorldBoundaryConstraints(position: *core.Vec3, velocity: *core.Vec3, radius: f32) u8 {
+// ECS version of boundary constraints with shape-specific extents
+fn applyECSWorldBoundaryConstraintsWithShape(position: *core.Vec3, velocity: *core.Vec3, collision_shape: core.CollisionShape, extents: core.Vec3) u8 {
     var collision_flags: u8 = 0;
 
-    // X boundaries
-    if (position.x - radius < -world_bounds.x) {
-        position.x = -world_bounds.x + radius;
+    // 🔍 SHAPE TRACING: Log collision calculations with shape-specific extents
+    const debug_enabled = false; // Disable for production
+    if (debug_enabled and position.y < -6.0) { // Only log entities near floor
+        std.debug.print("🔍 WORLD BOUNDS: pos=({d:.3},{d:.3},{d:.3}), shape={d}, extents=({d:.3},{d:.3},{d:.3}), world_bounds.y={d:.3}\n", .{ position.x, position.y, position.z, @intFromEnum(collision_shape), extents.x, extents.y, extents.z, world_bounds.y });
+    }
+
+    // Get direction-specific collision extents
+    const x_extent = switch (collision_shape) {
+        .SPHERE => extents.x, // Sphere radius
+        .BOX => extents.x, // Box half-width
+        .PLANE => 0.0, // Planes don't collide with boundaries
+    };
+    const y_extent = switch (collision_shape) {
+        .SPHERE => extents.x, // Sphere radius (same in all directions)
+        .BOX => extents.y, // Box half-height
+        .PLANE => 0.0, // Planes don't collide with boundaries
+    };
+    const z_extent = switch (collision_shape) {
+        .SPHERE => extents.x, // Sphere radius
+        .BOX => extents.z, // Box half-depth
+        .PLANE => 0.0, // Planes don't collide with boundaries
+    };
+
+    // X boundaries (use X extent)
+    if (position.x - x_extent < -world_bounds.x) {
+        if (debug_enabled) std.debug.print("🔍 X-COLLISION: pos.x={d:.3}, x_extent={d:.3}, boundary={d:.3}\n", .{ position.x, x_extent, -world_bounds.x });
+        position.x = -world_bounds.x + x_extent;
         velocity.x = -velocity.x * physics_restitution;
         collision_flags |= 1;
-    } else if (position.x + radius > world_bounds.x) {
-        position.x = world_bounds.x - radius;
+    } else if (position.x + x_extent > world_bounds.x) {
+        if (debug_enabled) std.debug.print("🔍 X-COLLISION: pos.x={d:.3}, x_extent={d:.3}, boundary={d:.3}\n", .{ position.x, x_extent, world_bounds.x });
+        position.x = world_bounds.x - x_extent;
         velocity.x = -velocity.x * physics_restitution;
         collision_flags |= 2;
     }
 
-    // Y boundaries
-    if (position.y - radius < -world_bounds.y) {
-        position.y = -world_bounds.y + radius;
+    // Y boundaries (use Y extent) - CRITICAL FIX FOR BOX FLOOR COLLISION
+    if (position.y - y_extent < -world_bounds.y) {
+        if (debug_enabled) {
+            std.debug.print("🔍 FLOOR COLLISION: pos.y={d:.3}, y_extent={d:.3}, world_bounds.y={d:.3}\n", .{ position.y, y_extent, world_bounds.y });
+            std.debug.print("🔍 FLOOR FORMULA: pos.y - y_extent = {d:.3} - {d:.3} = {d:.3} < {d:.3}\n", .{ position.y, y_extent, position.y - y_extent, -world_bounds.y });
+            std.debug.print("🔍 FLOOR CORRECTION: new pos.y = {d:.3} + {d:.3} = {d:.3}\n", .{ -world_bounds.y, y_extent, -world_bounds.y + y_extent });
+        }
+        position.y = -world_bounds.y + y_extent;
         velocity.y = -velocity.y * physics_restitution;
         collision_flags |= 4;
-    } else if (position.y + radius > world_bounds.y) {
-        position.y = world_bounds.y - radius;
+    } else if (position.y + y_extent > world_bounds.y) {
+        if (debug_enabled) std.debug.print("🔍 CEILING COLLISION: pos.y={d:.3}, y_extent={d:.3}, world_bounds.y={d:.3}\n", .{ position.y, y_extent, world_bounds.y });
+        position.y = world_bounds.y - y_extent;
         velocity.y = -velocity.y * physics_restitution;
         collision_flags |= 8;
     }
 
-    // Z boundaries
-    if (position.z - radius < -world_bounds.z) {
-        position.z = -world_bounds.z + radius;
+    // Z boundaries (use Z extent)
+    if (position.z - z_extent < -world_bounds.z) {
+        position.z = -world_bounds.z + z_extent;
         velocity.z = -velocity.z * physics_restitution;
         collision_flags |= 16;
-    } else if (position.z + radius > world_bounds.z) {
-        position.z = world_bounds.z - radius;
+    } else if (position.z + z_extent > world_bounds.z) {
+        position.z = world_bounds.z - z_extent;
         velocity.z = -velocity.z * physics_restitution;
         collision_flags |= 32;
     }
@@ -348,6 +412,20 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
     const index = entity_count;
     const mesh_id = @intFromEnum(mesh_type);
 
+    // Auto-detect collision shape from mesh type
+    const collision_shape = switch (mesh_type) {
+        .CUBE => core.CollisionShape.BOX,
+        .SPHERE => core.CollisionShape.SPHERE,
+        else => core.CollisionShape.SPHERE, // Default for other shapes
+    };
+
+    // Calculate extents based on collision shape
+    const extents = switch (collision_shape) {
+        .SPHERE => core.Vec3{ .x = radius, .y = radius, .z = radius }, // radius in all components for compatibility
+        .BOX => core.Vec3{ .x = radius, .y = radius, .z = radius }, // Use radius as half-extent for boxes
+        .PLANE => core.Vec3{ .x = 0, .y = 1, .z = 0 }, // Default upward normal
+    };
+
     // Initialize physics component
     physics_components[index] = PhysicsComponent{
         .position = .{ .x = x, .y = y, .z = z },
@@ -356,8 +434,10 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .rotation = .{ .x = 0, .y = 0, .z = 0 },
         .scale = .{ .x = 1, .y = 1, .z = 1 },
         .mass = 1.0,
-        .radius = radius,
+        .radius = radius, // Legacy field
         .is_kinematic = false,
+        .collision_shape = collision_shape,
+        .extents = extents,
     };
 
     // Initialize rendering component with transform matrix
@@ -379,11 +459,11 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
 
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
-        .id = index, // Use array index as ID for legacy compatibility
+        .id = index,
         .active = true,
-        .physics_enabled = true,
+        .physics_enabled = true, // TODO: here we assume physics enabled by default! (needs wasm api revamp!)
         .rendering_enabled = true,
-        .transform_dirty = false, // Transform already set up
+        .transform_dirty = false,
         .mesh_index = mesh_id,
         .material_id = 0,
     };
@@ -394,6 +474,9 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
 
 // WASM exports - thin wrappers around core functionality
 pub export fn init() void {
+    const msg = "Hello from Zig!\n";
+    log(msg.ptr, msg.len);
+
     // Initialize entity system
     initEntities();
 
@@ -478,7 +561,7 @@ fn simulatePhysicsWithConfig(position: *core.Vec3, velocity: *core.Vec3, delta_t
     return local_collision_state;
 }
 
-// ECS entity-entity collision detection and response
+// ECS entity-entity collision detection and response with iterative resolution
 fn checkEntityCollisions(delta_time: f32) void {
     _ = delta_time; // For future use in time-based collision resolution
 
@@ -486,52 +569,160 @@ fn checkEntityCollisions(delta_time: f32) void {
     var collision_checks_performed: u32 = 0;
     var collisions_detected: u32 = 0;
 
-    // Check all pairs of active physics entities
-    for (0..entity_count) |i| {
-        if (!entity_metadata[i].active or !entity_metadata[i].physics_enabled) continue;
+    // ITERATIVE COLLISION RESOLUTION: Run multiple passes to resolve deep penetrations
+    const max_iterations = 5; // Maximum collision resolution iterations per frame
+    var iteration: u32 = 0;
 
-        for (i + 1..entity_count) |j| {
-            if (!entity_metadata[j].active or !entity_metadata[j].physics_enabled) continue;
+    while (iteration < max_iterations) : (iteration += 1) {
+        var any_collision_resolved = false;
 
-            // Skip collision if both entities are kinematic
-            if (physics_components[i].is_kinematic and physics_components[j].is_kinematic) continue;
+        // Check all pairs of active physics entities
+        for (0..entity_count) |i| {
+            if (!entity_metadata[i].active or !entity_metadata[i].physics_enabled) continue;
 
-            const phys1 = &physics_components[i];
-            const phys2 = &physics_components[j];
+            for (i + 1..entity_count) |j| {
+                if (!entity_metadata[j].active or !entity_metadata[j].physics_enabled) continue;
 
-            collision_checks_performed += 1;
+                // Skip collision if both entities are kinematic
+                if (physics_components[i].is_kinematic and physics_components[j].is_kinematic) continue;
 
-            // Check for sphere-sphere collision
-            if (core.checkSphereCollision(phys1.position, phys1.radius, phys2.position, phys2.radius)) |overlap| {
-                collisions_detected += 1;
+                const phys1 = &physics_components[i];
+                const phys2 = &physics_components[j];
 
-                // Debug: Log collision details (stored in collision_state bits for inspection)
-                // Bit pattern: 0x10 = collision detected, 0x20 = kinematic involved
-                if (phys1.is_kinematic or phys2.is_kinematic) {
-                    collision_state |= 0x20; // Kinematic collision flag
+                collision_checks_performed += 1;
+
+                // Special case: SPHERE vs SPHERE collision - use original working legacy path
+                if (phys1.collision_shape == core.CollisionShape.SPHERE and phys2.collision_shape == core.CollisionShape.SPHERE) {
+                    // Use legacy sphere collision detection and resolution (the original working system)
+                    if (core.checkSphereCollision(phys1.position, phys1.extents.x, phys2.position, phys2.extents.x)) |_| {
+                        collisions_detected += 1;
+                        any_collision_resolved = true;
+
+                        // 🔍 LOG COLLISION EVENT: Sphere vs Sphere
+                        last_collision_entity1 = @intCast(i);
+                        last_collision_entity2 = @intCast(j);
+                        last_collision_pos1[0] = phys1.position.x;
+                        last_collision_pos1[1] = phys1.position.y;
+                        last_collision_pos1[2] = phys1.position.z;
+                        last_collision_pos2[0] = phys2.position.x;
+                        last_collision_pos2[1] = phys2.position.y;
+                        last_collision_pos2[2] = phys2.position.z;
+                        collision_event_counter += 1;
+
+                        // 🚨 WASM COLLISION LOG: Real-time sphere collision detection
+                        var log_buffer: [256]u8 = undefined;
+                        const log_msg = std.fmt.bufPrint(&log_buffer, "🚨 SPHERE COLLISION: Entity {} vs {} at ({d:.3},{d:.3},{d:.3}) vs ({d:.3},{d:.3},{d:.3})\n", .{ i, j, phys1.position.x, phys1.position.y, phys1.position.z, phys2.position.x, phys2.position.y, phys2.position.z }) catch "SPHERE COLLISION: formatting error\n";
+                        log(log_msg.ptr, log_msg.len);
+
+                        // Debug: Log collision details
+                        if (phys1.is_kinematic or phys2.is_kinematic) {
+                            collision_state |= 0x20; // Kinematic collision flag
+                        }
+
+                        // 🔧 COLLISION RESOLUTION RE-ENABLED WITH DETAILED LOGGING
+                        const pos1_before = core.Vec3{ .x = phys1.position.x, .y = phys1.position.y, .z = phys1.position.z };
+                        const pos2_before = core.Vec3{ .x = phys2.position.x, .y = phys2.position.y, .z = phys2.position.z };
+                        const vel1_before = core.Vec3{ .x = phys1.velocity.x, .y = phys1.velocity.y, .z = phys1.velocity.z };
+                        const vel2_before = core.Vec3{ .x = phys2.velocity.x, .y = phys2.velocity.y, .z = phys2.velocity.z };
+
+                        core.resolveSphereCollisionWithKinematic(&phys1.position, &phys1.velocity, phys1.mass, phys1.extents.x, phys1.is_kinematic, &phys2.position, &phys2.velocity, phys2.mass, phys2.extents.x, phys2.is_kinematic, physics_restitution);
+
+                        // 📊 LOG COLLISION RESOLUTION DETAILS
+                        var res_log_buffer: [512]u8 = undefined;
+                        const res_log_msg = std.fmt.bufPrint(&res_log_buffer, "📊 SPHERE RESOLUTION: Entity {} pos ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}] vel ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}]\n", .{ i, pos1_before.x, pos1_before.y, pos1_before.z, phys1.position.x, phys1.position.y, phys1.position.z, vel1_before.x, vel1_before.y, vel1_before.z, phys1.velocity.x, phys1.velocity.y, phys1.velocity.z }) catch "SPHERE RESOLUTION: formatting error\n";
+                        log(res_log_msg.ptr, res_log_msg.len);
+
+                        var res_log_buffer2: [512]u8 = undefined;
+                        const res_log_msg2 = std.fmt.bufPrint(&res_log_buffer2, "📊 SPHERE RESOLUTION: Entity {} pos ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}] vel ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}]\n", .{ j, pos2_before.x, pos2_before.y, pos2_before.z, phys2.position.x, phys2.position.y, phys2.position.z, vel2_before.x, vel2_before.y, vel2_before.z, phys2.velocity.x, phys2.velocity.y, phys2.velocity.z }) catch "SPHERE RESOLUTION: formatting error\n";
+                        log(res_log_msg2.ptr, res_log_msg2.len);
+
+                        // Mark transforms as dirty for rendering update
+                        entity_metadata[i].transform_dirty = true;
+                        entity_metadata[j].transform_dirty = true;
+
+                        // Update collision state to indicate entity-entity collision
+                        collision_state |= 0x10; // Entity collision flag
+
+                        // Store collision count in unused bits (for debugging)
+                        const collision_count_mask = @as(u8, @intCast(collisions_detected & 0x0F));
+                        collision_state = (collision_state & 0x3F) | (collision_count_mask << 6);
+                    }
+                } else {
+                    // Use universal collision dispatcher for BOX, PLANE, and mixed collision types
+                    if (core.checkCollision(phys1.position, phys1.collision_shape, phys1.extents, phys2.position, phys2.collision_shape, phys2.extents)) |_| {
+                        collisions_detected += 1;
+                        any_collision_resolved = true;
+
+                        // 🔍 LOG COLLISION EVENT: Box/Mixed collision
+                        last_collision_entity1 = @intCast(i);
+                        last_collision_entity2 = @intCast(j);
+                        last_collision_pos1[0] = phys1.position.x;
+                        last_collision_pos1[1] = phys1.position.y;
+                        last_collision_pos1[2] = phys1.position.z;
+                        last_collision_pos2[0] = phys2.position.x;
+                        last_collision_pos2[1] = phys2.position.y;
+                        last_collision_pos2[2] = phys2.position.z;
+                        collision_event_counter += 1;
+
+                        // 🚨 WASM COLLISION LOG: Limited logging for debugging
+                        if (collision_log_count < 25) {
+                            var log_buffer: [256]u8 = undefined;
+                            const shape1_name = if (phys1.collision_shape == core.CollisionShape.BOX) "BOX" else if (phys1.collision_shape == core.CollisionShape.SPHERE) "SPHERE" else "PLANE";
+                            const shape2_name = if (phys2.collision_shape == core.CollisionShape.BOX) "BOX" else if (phys2.collision_shape == core.CollisionShape.SPHERE) "SPHERE" else "PLANE";
+                            const log_msg = std.fmt.bufPrint(&log_buffer, "🚨 {s} vs {s} COLLISION: Entity {} vs {} at ({d:.3},{d:.3},{d:.3}) vs ({d:.3},{d:.3},{d:.3})\n", .{ shape1_name, shape2_name, i, j, phys1.position.x, phys1.position.y, phys1.position.z, phys2.position.x, phys2.position.y, phys2.position.z }) catch "BOX/MIXED COLLISION: formatting error\n";
+                            log(log_msg.ptr, log_msg.len);
+                            collision_log_count += 1;
+                        }
+
+                        // Debug: Log collision details (stored in collision_state bits for inspection)
+                        // Bit pattern: 0x10 = collision detected, 0x20 = kinematic involved
+                        if (phys1.is_kinematic or phys2.is_kinematic) {
+                            collision_state |= 0x20; // Kinematic collision flag
+                        }
+
+                        // 🔧 COLLISION RESOLUTION RE-ENABLED WITH DETAILED LOGGING - Box and mixed collisions
+                        const pos1_before = core.Vec3{ .x = phys1.position.x, .y = phys1.position.y, .z = phys1.position.z };
+                        const pos2_before = core.Vec3{ .x = phys2.position.x, .y = phys2.position.y, .z = phys2.position.z };
+                        const vel1_before = core.Vec3{ .x = phys1.velocity.x, .y = phys1.velocity.y, .z = phys1.velocity.z };
+                        const vel2_before = core.Vec3{ .x = phys2.velocity.x, .y = phys2.velocity.y, .z = phys2.velocity.z };
+
+                        const collision_info = core.checkCollision(phys1.position, phys1.collision_shape, phys1.extents, phys2.position, phys2.collision_shape, phys2.extents).?;
+                        core.resolveCollision(&phys1.position, &phys1.velocity, phys1.collision_shape, phys1.extents, phys1.mass, phys1.is_kinematic, &phys2.position, &phys2.velocity, phys2.collision_shape, phys2.extents, phys2.mass, phys2.is_kinematic, physics_restitution, collision_info);
+
+                        // 📊 LOG BOX COLLISION RESOLUTION DETAILS (limited)
+                        if (collision_log_count <= 25) {
+                            var box_res_log_buffer: [512]u8 = undefined;
+                            const box_res_log_msg = std.fmt.bufPrint(&box_res_log_buffer, "📊 BOX RESOLUTION: Entity {} pos ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}] vel ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}]\n", .{ i, pos1_before.x, pos1_before.y, pos1_before.z, phys1.position.x, phys1.position.y, phys1.position.z, vel1_before.x, vel1_before.y, vel1_before.z, phys1.velocity.x, phys1.velocity.y, phys1.velocity.z }) catch "BOX RESOLUTION: formatting error\n";
+                            log(box_res_log_msg.ptr, box_res_log_msg.len);
+
+                            var box_res_log_buffer2: [512]u8 = undefined;
+                            const box_res_log_msg2 = std.fmt.bufPrint(&box_res_log_buffer2, "📊 BOX RESOLUTION: Entity {} pos ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}] vel ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}]\n", .{ j, pos2_before.x, pos2_before.y, pos2_before.z, phys2.position.x, phys2.position.y, phys2.position.z, vel2_before.x, vel2_before.y, vel2_before.z, phys2.velocity.x, phys2.velocity.y, phys2.velocity.z }) catch "BOX RESOLUTION: formatting error\n";
+                            log(box_res_log_msg2.ptr, box_res_log_msg2.len);
+
+                            // 🔍 LOG COLLISION NORMAL AND PENETRATION DEPTH
+                            var collision_info_buffer: [256]u8 = undefined;
+                            const collision_info_msg = std.fmt.bufPrint(&collision_info_buffer, "🔍 COLLISION INFO: normal ({d:.3},{d:.3},{d:.3}) depth {d:.3}\n", .{ collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z, collision_info.penetration_depth }) catch "COLLISION INFO: formatting error\n";
+                            log(collision_info_msg.ptr, collision_info_msg.len);
+                        }
+
+                        // Mark transforms as dirty for rendering update
+                        entity_metadata[i].transform_dirty = true;
+                        entity_metadata[j].transform_dirty = true;
+
+                        // Update collision state to indicate entity-entity collision
+                        collision_state |= 0x10; // New bit for entity collisions
+
+                        // Store collision count in unused bits (for debugging)
+                        const collision_count_mask = @as(u8, @intCast(collisions_detected & 0x0F));
+                        collision_state = (collision_state & 0x3F) | (collision_count_mask << 6);
+                    }
                 }
-
-                // Collision detected! Resolve it
-                core.resolveSphereCollisionWithKinematic(
-                    &phys1.position, &phys1.velocity, phys1.mass, phys1.radius, phys1.is_kinematic,
-                    &phys2.position, &phys2.velocity, phys2.mass, phys2.radius, phys2.is_kinematic,
-                    physics_restitution
-                );
-
-                // Mark transforms as dirty for rendering update
-                entity_metadata[i].transform_dirty = true;
-                entity_metadata[j].transform_dirty = true;
-
-                // Update collision state to indicate entity-entity collision
-                collision_state |= 0x10; // New bit for entity collisions
-
-                // Store collision count in unused bits (for debugging)
-                // Use upper bits to store collision count (max 15 collisions tracked)
-                const collision_count_mask = @as(u8, @intCast(collisions_detected & 0x0F));
-                collision_state = (collision_state & 0x3F) | (collision_count_mask << 6);
-
-                _ = overlap; // Suppress unused variable warning
             }
+        }
+
+        // If no collisions were resolved in this iteration, we're done
+        if (!any_collision_resolved) {
+            break;
         }
     }
 
@@ -928,8 +1119,26 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
 
     const index = entity_count;
 
-    // Debug: Log what we're receiving
-    // Note: Can't use console.log from WASM, but this will be stored for later validation
+    // 🔍 RADIUS TRACING: Log all add_entity parameters (disabled for production)
+    // std.debug.print("🔍 ADD_ENTITY: id={d}, pos=({d:.3},{d:.3},{d:.3}), scale=({d:.3},{d:.3},{d:.3}), radius={d:.3}, mesh={d}\n",
+    //     .{id, x, y, z, scaleX, scaleY, scaleZ, radius, meshIndex});
+
+    // Auto-detect collision shape from mesh index
+    const collision_shape = switch (meshIndex) {
+        1 => core.CollisionShape.BOX, // CUBE mesh
+        2 => core.CollisionShape.SPHERE, // SPHERE mesh
+        else => core.CollisionShape.SPHERE, // Default to sphere for other meshes
+    };
+
+    // Calculate extents based on collision shape and provided radius
+    const extents = switch (collision_shape) {
+        .SPHERE => core.Vec3{ .x = radius, .y = radius, .z = radius },
+        .BOX => core.Vec3{ .x = radius, .y = radius, .z = radius }, // Use radius as half-extent
+        .PLANE => core.Vec3{ .x = 0, .y = 1, .z = 0 }, // Default upward normal
+    };
+
+    // std.debug.print("🔍 ADD_ENTITY: collision_shape={d}, calculated extents=({d:.3},{d:.3},{d:.3})\n",
+    //     .{@intFromEnum(collision_shape), extents.x, extents.y, extents.z});
 
     // Initialize physics component
     physics_components[index] = PhysicsComponent{
@@ -939,8 +1148,10 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .rotation = .{ .x = 0, .y = 0, .z = 0 },
         .scale = .{ .x = scaleX, .y = scaleY, .z = scaleZ },
         .mass = mass,
-        .radius = radius, // Use provided radius
+        .radius = radius, // Legacy field
         .is_kinematic = isKinematic,
+        .collision_shape = collision_shape,
+        .extents = extents,
     };
 
     // Initialize rendering component
@@ -960,11 +1171,11 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
 
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
-        .id = id,
+        .id = id, // index,
         .active = true,
-        .physics_enabled = true, // All entities participate in collision detection
+        .physics_enabled = mass != 0, // <-- Only enable physics if mass > 0 (temporary workaround before WASM API revamp)
         .rendering_enabled = true,
-        .transform_dirty = false, // Already set up transform
+        .transform_dirty = false,
         .mesh_index = meshIndex,
         .material_id = materialId,
     };
@@ -1111,6 +1322,145 @@ pub export fn get_kinematic_collision_flag() bool {
     return (collision_state & 0x20) != 0;
 }
 
+// =============================================================================
+// Collision Shape Configuration API Functions
+// =============================================================================
+
+/// Enhanced entity spawning with collision shape support
+pub export fn spawn_entity_with_collider(
+    x: f32,
+    y: f32,
+    z: f32,
+    collision_shape: u8, // 0=sphere, 1=box, 2=plane
+    extent_x: f32, // radius for sphere, half-width for box, normal.x for plane
+    extent_y: f32, // unused for sphere, half-height for box, normal.y for plane
+    extent_z: f32, // unused for sphere, half-depth for box, normal.z for plane
+    mesh_type_id: u8,
+) u32 {
+    if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
+
+    const index = entity_count;
+    const mesh_id = mesh_type_id;
+
+    // Convert collision shape ID to enum
+    const shape: core.CollisionShape = switch (collision_shape) {
+        0 => core.CollisionShape.SPHERE,
+        1 => core.CollisionShape.BOX,
+        2 => core.CollisionShape.PLANE,
+        else => core.CollisionShape.SPHERE, // Default to sphere for invalid types
+    };
+
+    // Set up extents based on collision shape
+    const extents = core.Vec3{ .x = extent_x, .y = extent_y, .z = extent_z };
+
+    // Initialize physics component with collision shape
+    physics_components[index] = PhysicsComponent{
+        .position = .{ .x = x, .y = y, .z = z },
+        .velocity = .{ .x = 0, .y = 0, .z = 0 },
+        .force = .{ .x = 0, .y = 0, .z = 0 },
+        .rotation = .{ .x = 0, .y = 0, .z = 0 },
+        .scale = .{ .x = 1, .y = 1, .z = 1 },
+        .mass = 1.0,
+        .radius = extent_x, // Legacy field - use extent_x as radius
+        .is_kinematic = false,
+        .collision_shape = shape,
+        .extents = extents,
+    };
+
+    // Initialize rendering component with transform matrix
+    rendering_components[index] = RenderingComponent{
+        .transform_matrix = [_]f32{
+            1.0, 0.0, 0.0, 0.0, // Column 0: [sx, 0, 0, 0]
+            0.0, 1.0, 0.0, 0.0, // Column 1: [0, sy, 0, 0]
+            0.0, 0.0, 1.0, 0.0, // Column 2: [0, 0, sz, 0]
+            x, y, z, 1.0, // Column 3: [tx, ty, tz, 1]
+        },
+        .color = switch (shape) {
+            .SPHERE => [_]f32{ 1.0, 0.8, 0.2, 1.0 }, // Golden yellow for spheres
+            .BOX => [_]f32{ 0.2, 0.8, 1.0, 1.0 }, // Sky blue for boxes
+            .PLANE => [_]f32{ 0.3, 0.7, 0.3, 1.0 }, // Green for planes
+        },
+    };
+
+    // Initialize entity metadata
+    entity_metadata[index] = EntityMetadata{
+        .id = index, // Use array index as ID for compatibility
+        .active = true,
+        .physics_enabled = true,
+        .rendering_enabled = true,
+        .transform_dirty = false, // Transform already set up
+        .mesh_index = mesh_id,
+        .material_id = 0,
+    };
+
+    entity_count += 1;
+    return index;
+}
+
+/// Update collision shape for existing entity
+pub export fn set_entity_collision_shape(id: u32, shape: u8, extent_x: f32, extent_y: f32, extent_z: f32) void {
+    if (findECSEntityById(id)) |index| {
+        // std.debug.print("🔍 SET_COLLISION_SHAPE: id={d}, shape={d}, extents=({d:.3},{d:.3},{d:.3})\n",
+        //     .{id, shape, extent_x, extent_y, extent_z});
+
+        const collision_shape: core.CollisionShape = switch (shape) {
+            0 => core.CollisionShape.SPHERE,
+            1 => core.CollisionShape.BOX,
+            2 => core.CollisionShape.PLANE,
+            else => core.CollisionShape.SPHERE,
+        };
+
+        // const old_radius = physics_components[index].radius;
+        physics_components[index].collision_shape = collision_shape;
+        physics_components[index].extents = core.Vec3{ .x = extent_x, .y = extent_y, .z = extent_z };
+        physics_components[index].radius = extent_x; // Update legacy field
+
+        // std.debug.print("🔍 SET_COLLISION_SHAPE: radius {d:.3} -> {d:.3} (extent_x)\n", .{old_radius, extent_x});
+    }
+}
+
+/// Get collision shape information
+pub export fn get_entity_collision_shape(id: u32) u8 {
+    if (findECSEntityById(id)) |index| {
+        return @intFromEnum(physics_components[index].collision_shape);
+    }
+    return 0; // Default to sphere if entity not found
+}
+
+pub export fn get_entity_collision_extent_x(id: u32) f32 {
+    if (findECSEntityById(id)) |index| {
+        return physics_components[index].extents.x;
+    }
+    return 0.0;
+}
+
+pub export fn get_entity_collision_extent_y(id: u32) f32 {
+    if (findECSEntityById(id)) |index| {
+        return physics_components[index].extents.y;
+    }
+    return 0.0;
+}
+
+pub export fn get_entity_collision_extent_z(id: u32) f32 {
+    if (findECSEntityById(id)) |index| {
+        return physics_components[index].extents.z;
+    }
+    return 0.0;
+}
+
+// Debug: Get collision radius being used for world bounds (Y direction for floor collision)
+pub export fn debug_get_collision_radius(id: u32) f32 {
+    if (findECSEntityById(id)) |index| {
+        const phys = &physics_components[index];
+        return switch (phys.collision_shape) {
+            .SPHERE => phys.extents.x, // Sphere radius
+            .BOX => phys.extents.y, // Box Y extent (half-height) for floor collision
+            .PLANE => 0.0,
+        };
+    }
+    return -1.0; // Entity not found
+}
+
 // Debug: Get physics info for specific entity
 pub export fn debug_get_entity_physics_info(id: u32, info_type: u8) f32 {
     if (findECSEntityById(id)) |index| {
@@ -1130,4 +1480,40 @@ pub export fn debug_get_entity_physics_info(id: u32, info_type: u8) f32 {
         };
     }
     return -999.0; // Entity not found marker
+}
+
+// =============================================================================
+// Collision Event Logging Functions
+// =============================================================================
+
+/// Get collision event counter
+pub export fn get_collision_event_counter() u32 {
+    return collision_event_counter;
+}
+
+/// Get last collision entity IDs
+pub export fn get_last_collision_entities() u64 {
+    // Pack both entity IDs into a single u64 (32 bits each)
+    return (@as(u64, last_collision_entity1) << 32) | @as(u64, last_collision_entity2);
+}
+
+/// Get last collision position data (entity 1)
+pub export fn get_last_collision_pos1(axis: u32) f32 {
+    if (axis < 3) {
+        return last_collision_pos1[axis];
+    }
+    return 0.0;
+}
+
+/// Get last collision position data (entity 2)
+pub export fn get_last_collision_pos2(axis: u32) f32 {
+    if (axis < 3) {
+        return last_collision_pos2[axis];
+    }
+    return 0.0;
+}
+
+/// Clear collision event counter (for periodic logging)
+pub export fn clear_collision_event_counter() void {
+    collision_event_counter = 0;
 }

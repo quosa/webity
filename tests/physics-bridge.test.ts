@@ -4,7 +4,7 @@ import { jest } from '@jest/globals';
 
 import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 import { GameObject } from '../src/engine/gameobject';
-import { RigidBody, MeshRenderer } from '../src/engine/components';
+import { RigidBody, MeshRenderer, CollisionShape } from '../src/engine/components';
 
 describe('WasmPhysicsBridge', () => {
     let physicsBridge: WasmPhysicsBridge;
@@ -57,12 +57,26 @@ describe('WasmPhysicsBridge', () => {
                 get_entity_velocity_x: jest.fn(() => 0),
                 get_entity_velocity_y: jest.fn(() => 0),
                 get_entity_velocity_z: jest.fn(() => 0),
+                // Collision shape functions (optional)
+                spawn_entity_with_collider: jest.fn(() => 0),
+                set_entity_collision_shape: jest.fn(),
+                get_entity_collision_shape: jest.fn(() => 0),
+                get_entity_collision_extent_x: jest.fn(() => 0.5),
+                get_entity_collision_extent_y: jest.fn(() => 0.5),
+                get_entity_collision_extent_z: jest.fn(() => 0.5),
+                // Collision debug functions
                 get_collision_checks_performed: jest.fn(() => 0),
                 get_collisions_detected: jest.fn(() => 0),
                 get_kinematic_collision_flag: jest.fn(() => false),
                 get_collision_state: jest.fn(() => 0),
                 debug_get_entity_physics_info: jest.fn(() => 0),
                 get_wasm_version: jest.fn(() => 20250915),
+                // Collision event logging functions
+                get_collision_event_counter: jest.fn(() => 0),
+                get_last_collision_entities: jest.fn(() => 0),
+                get_last_collision_pos1: jest.fn(() => 0),
+                get_last_collision_pos2: jest.fn(() => 0),
+                clear_collision_event_counter: jest.fn(),
                 memory: {
                     buffer: new ArrayBuffer(1024),
                     grow: jest.fn((_delta: number) => 0)
@@ -84,7 +98,7 @@ describe('WasmPhysicsBridge', () => {
         test('should add physics entity with RigidBody component', () => {
             const gameObject = createTestGameObject('test-cube', 'TestCube', 'cube');
             gameObject.transform.setPosition(1, 2, 3);
-            const rigidBody = new RigidBody(2.0, true, 'box', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(2.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
             // MeshRenderer already added by createTestGameObject with meshIndex set
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -111,7 +125,7 @@ describe('WasmPhysicsBridge', () => {
 
         test('should remove physics entity', () => {
             const gameObject = createTestGameObject('test-removal', 'RemovalTest', 'sphere');
-            const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, true, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
             // meshRenderer.meshIndex already set in helper
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -131,10 +145,10 @@ describe('WasmPhysicsBridge', () => {
 
         test('should generate unique entity IDs for multiple entities', () => {
             const gameObject1 = createTestGameObject('entity1', 'Entity1', 'box');
-            gameObject1.addComponent(new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 }));
+            gameObject1.addComponent(new RigidBody(1.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 }));
             // meshRenderer.meshIndex already set in helper
             const gameObject2 = createTestGameObject('entity2', 'Entity2', 'sphere');
-            gameObject2.addComponent(new RigidBody(2.0, false, 'sphere', { x: 1, y: 1, z: 1 }));
+            gameObject2.addComponent(new RigidBody(2.0, false, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 }));
             // meshRenderer.meshIndex already set in helper
             const entityId1 = physicsBridge.addPhysicsEntity(gameObject1);
             const entityId2 = physicsBridge.addPhysicsEntity(gameObject2);
@@ -151,7 +165,7 @@ describe('WasmPhysicsBridge', () => {
     describe('Physics Operations', () => {
         test('should apply force to physics entity', () => {
             const gameObject = createTestGameObject('force-test', 'ForceTest');
-            const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, true, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -165,7 +179,7 @@ describe('WasmPhysicsBridge', () => {
 
         test('should update entity transform', () => {
             const gameObject = createTestGameObject('update-test', 'UpdateTest');
-            const rigidBody = new RigidBody(1.0, false, 'box', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -183,7 +197,7 @@ describe('WasmPhysicsBridge', () => {
 
         test('should get entity data', () => {
             const gameObject = createTestGameObject('data-test', 'DataTest');
-            const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, true, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -199,7 +213,7 @@ describe('WasmPhysicsBridge', () => {
 
         test('should set kinematic state', () => {
             const gameObject = createTestGameObject('kinematic-test', 'KinematicTest');
-            const rigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -221,7 +235,7 @@ describe('WasmPhysicsBridge', () => {
 
         test('should handle update with entities', () => {
             const gameObject = createTestGameObject('update-loop-test', 'UpdateLoopTest', 'sphere');
-            const rigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, true, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
             // meshRenderer.meshIndex already set in helper
             physicsBridge.addPhysicsEntity(gameObject);
@@ -235,7 +249,7 @@ describe('WasmPhysicsBridge', () => {
     describe('RigidBody Integration', () => {
         test('should set WASM entity ID and physics bridge reference on RigidBody', () => {
             const gameObject = createTestGameObject('integration-test', 'IntegrationTest', 'box');
-            const rigidBody = new RigidBody(1.5, true, 'box', { x: 2, y: 2, z: 2 });
+            const rigidBody = new RigidBody(1.5, true, CollisionShape.BOX, { x: 2, y: 2, z: 2 });
             gameObject.addComponent(rigidBody);
             // meshRenderer.meshIndex already set in helper
             const entityId = physicsBridge.addPhysicsEntity(gameObject);
@@ -248,11 +262,11 @@ describe('WasmPhysicsBridge', () => {
 
         test('should handle different collider types', () => {
             const sphereObject = createTestGameObject('sphere-test', 'SphereTest', 'sphere');
-            const sphereRigidBody = new RigidBody(1.0, true, 'sphere', { x: 1, y: 1, z: 1 });
+            const sphereRigidBody = new RigidBody(1.0, true, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
             sphereObject.addComponent(sphereRigidBody);
             // meshRenderer.meshIndex already set in helper
             const boxObject = createTestGameObject('box-test', 'BoxTest', 'cube');
-            const boxRigidBody = new RigidBody(2.0, false, 'box', { x: 1, y: 1, z: 1 });
+            const boxRigidBody = new RigidBody(2.0, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
             boxObject.addComponent(boxRigidBody);
             // meshRenderer.meshIndex already set in helper
             const sphereId = physicsBridge.addPhysicsEntity(sphereObject);
@@ -265,12 +279,12 @@ describe('WasmPhysicsBridge', () => {
 
         test('should handle kinematic vs dynamic bodies', () => {
             const dynamicObject = createTestGameObject('dynamic-test', 'DynamicTest', 'box');
-            const dynamicRigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
+            const dynamicRigidBody = new RigidBody(1.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
             dynamicRigidBody.setKinematic(false); // Dynamic
             dynamicObject.addComponent(dynamicRigidBody);
             // meshRenderer.meshIndex already set in helper
             const kinematicObject = createTestGameObject('kinematic-test', 'KinematicTest', 'sphere');
-            const kinematicRigidBody = new RigidBody(1.0, false, 'sphere', { x: 1, y: 1, z: 1 });
+            const kinematicRigidBody = new RigidBody(1.0, false, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
             kinematicRigidBody.setKinematic(true); // Kinematic
             kinematicObject.addComponent(kinematicRigidBody);
             // meshRenderer.meshIndex already set in helper
@@ -291,7 +305,7 @@ describe('WasmPhysicsBridge', () => {
             // Don't call init()
 
             const gameObject = createTestGameObject('uninit-test', 'UninitTest');
-            const rigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
+            const rigidBody = new RigidBody(1.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
             gameObject.addComponent(rigidBody);
 
             const entityId = uninitializedBridge.addPhysicsEntity(gameObject);

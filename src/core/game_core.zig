@@ -1,5 +1,20 @@
 // game_core.zig - Pure game logic, no WASM exports
+const builtin = @import("builtin");
 const std = @import("std");
+
+// Declare extern fn for wasm logging (implemented in TypeScript)
+extern fn jslog(ptr: [*]const u8, len: usize) void;
+
+// Fallback logger for non-WASM targets (unit tests)
+fn native_log(ptr: [*]const u8, len: usize) void {
+    const slice = ptr[0..len];
+    std.debug.print("{s}", .{slice});
+}
+
+// Conditional logger assignment (ts vs zig test)
+pub const log = if (builtin.target.cpu.arch == .wasm32) jslog else native_log;
+
+// =============================================================================
 
 // Constants
 pub const GRAVITY: f32 = -9.8;
@@ -12,6 +27,21 @@ pub const Vec3 = struct {
     x: f32,
     y: f32,
     z: f32,
+};
+
+// Collision shape enumeration
+pub const CollisionShape = enum(u8) {
+    SPHERE = 0,
+    BOX = 1,
+    PLANE = 2, // Future implementation
+};
+
+// Collision information structure
+pub const CollisionInfo = struct {
+    has_collision: bool,
+    penetration_depth: f32,
+    contact_normal: Vec3,
+    contact_point: Vec3,
 };
 
 pub const Mat4 = struct {
@@ -57,6 +87,71 @@ pub fn dot(a: Vec3, b: Vec3) f32 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+// Additional Vec3 utilities for AABB calculations
+pub fn vec3_min(a: Vec3, b: Vec3) Vec3 {
+    return Vec3{
+        .x = @min(a.x, b.x),
+        .y = @min(a.y, b.y),
+        .z = @min(a.z, b.z),
+    };
+}
+
+pub fn vec3_max(a: Vec3, b: Vec3) Vec3 {
+    return Vec3{
+        .x = @max(a.x, b.x),
+        .y = @max(a.y, b.y),
+        .z = @max(a.z, b.z),
+    };
+}
+
+pub fn vec3_abs(v: Vec3) Vec3 {
+    return Vec3{
+        .x = @abs(v.x),
+        .y = @abs(v.y),
+        .z = @abs(v.z),
+    };
+}
+
+pub fn vec3_clamp(v: Vec3, min_val: Vec3, max_val: Vec3) Vec3 {
+    return Vec3{
+        .x = @max(min_val.x, @min(max_val.x, v.x)),
+        .y = @max(min_val.y, @min(max_val.y, v.y)),
+        .z = @max(min_val.z, @min(max_val.z, v.z)),
+    };
+}
+
+pub fn vec3_subtract(a: Vec3, b: Vec3) Vec3 {
+    return Vec3{
+        .x = a.x - b.x,
+        .y = a.y - b.y,
+        .z = a.z - b.z,
+    };
+}
+
+pub fn vec3_add(a: Vec3, b: Vec3) Vec3 {
+    return Vec3{
+        .x = a.x + b.x,
+        .y = a.y + b.y,
+        .z = a.z + b.z,
+    };
+}
+
+pub fn vec3_scale(v: Vec3, s: f32) Vec3 {
+    return Vec3{
+        .x = v.x * s,
+        .y = v.y * s,
+        .z = v.z * s,
+    };
+}
+
+pub fn vec3_negate(v: Vec3) Vec3 {
+    return Vec3{
+        .x = -v.x,
+        .y = -v.y,
+        .z = -v.z,
+    };
+}
+
 // Create rotation matrix from Euler angles (in radians)
 pub fn createRotationMatrix(rotation: Vec3) Mat4 {
     const cos_x = @cos(rotation.x);
@@ -65,27 +160,32 @@ pub fn createRotationMatrix(rotation: Vec3) Mat4 {
     const sin_y = @sin(rotation.y);
     const cos_z = @cos(rotation.z);
     const sin_z = @sin(rotation.z);
-    
+
     // Combined XYZ rotation matrix (column-major)
-    return Mat4{ .data = .{
-        // Column 0
-        cos_y * cos_z,
-        cos_y * sin_z,
-        -sin_y,
-        0,
-        // Column 1
-        sin_x * sin_y * cos_z - cos_x * sin_z,
-        sin_x * sin_y * sin_z + cos_x * cos_z,
-        sin_x * cos_y,
-        0,
-        // Column 2
-        cos_x * sin_y * cos_z + sin_x * sin_z,
-        cos_x * sin_y * sin_z - sin_x * cos_z,
-        cos_x * cos_y,
-        0,
-        // Column 3
-        0, 0, 0, 1,
-    } };
+    return Mat4{
+        .data = .{
+            // Column 0
+            cos_y * cos_z,
+            cos_y * sin_z,
+            -sin_y,
+            0,
+            // Column 1
+            sin_x * sin_y * cos_z - cos_x * sin_z,
+            sin_x * sin_y * sin_z + cos_x * cos_z,
+            sin_x * cos_y,
+            0,
+            // Column 2
+            cos_x * sin_y * cos_z + sin_x * sin_z,
+            cos_x * sin_y * sin_z - sin_x * cos_z,
+            cos_x * cos_y,
+            0,
+            // Column 3
+            0,
+            0,
+            0,
+            1,
+        },
+    };
 }
 
 // Matrix functions
@@ -100,9 +200,9 @@ pub fn createLookAt(eye: Vec3, center: Vec3, up: Vec3) Mat4 {
 
     // Fix X-axis flip only (Y and Z are correct)
     return Mat4{ .data = .{
-        -s.x,         u.x,          -f.x,        0,
-        -s.y,         u.y,          -f.y,        0,
-        -s.z,         u.z,          -f.z,        0,
+        -s.x,        u.x,          -f.x,        0,
+        -s.y,        u.y,          -f.y,        0,
+        -s.z,        u.z,          -f.z,        0,
         dot(s, eye), -dot(u, eye), dot(f, eye), 1,
     } };
 }
@@ -113,10 +213,10 @@ pub fn createPerspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
 
     // WebGPU uses Z range [0, 1] instead of OpenGL's [-1, 1]
     return Mat4{ .data = .{
-        f / aspect, 0, 0,                        0,
-        0,          f, 0,                        0,
-        0,          0, far * range_inv,          -1,
-        0,          0, far * near * range_inv,   0,
+        f / aspect, 0, 0,                      0,
+        0,          f, 0,                      0,
+        0,          0, far * range_inv,        -1,
+        0,          0, far * near * range_inv, 0,
     } };
 }
 
@@ -260,7 +360,7 @@ pub fn generateWireframeCube(vertices: [*]f32, ball_radius: f32) u32 {
 }
 
 // =============================================================================
-// Collision Detection and Response Functions
+// Legacy Sphere Collision Functions (maintained for compatibility)
 // =============================================================================
 
 // Sphere-sphere collision detection
@@ -283,21 +383,13 @@ pub fn checkSphereCollision(pos1: Vec3, radius1: f32, pos2: Vec3, radius2: f32) 
 }
 
 // Sphere-sphere collision response (elastic collision)
-pub fn resolveSphereCollision(
-    pos1: *Vec3, vel1: *Vec3, mass1: f32, radius1: f32,
-    pos2: *Vec3, vel2: *Vec3, mass2: f32, radius2: f32,
-    restitution: f32
-) void {
+pub fn resolveSphereCollision(pos1: *Vec3, vel1: *Vec3, mass1: f32, radius1: f32, pos2: *Vec3, vel2: *Vec3, mass2: f32, radius2: f32, restitution: f32) void {
     // Legacy function - calls new version assuming dynamic bodies
     resolveSphereCollisionWithKinematic(pos1, vel1, mass1, radius1, false, pos2, vel2, mass2, radius2, false, restitution);
 }
 
 // Sphere-sphere collision response with kinematic body support
-pub fn resolveSphereCollisionWithKinematic(
-    pos1: *Vec3, vel1: *Vec3, mass1: f32, radius1: f32, is_kinematic1: bool,
-    pos2: *Vec3, vel2: *Vec3, mass2: f32, radius2: f32, is_kinematic2: bool,
-    restitution: f32
-) void {
+pub fn resolveSphereCollisionWithKinematic(pos1: *Vec3, vel1: *Vec3, mass1: f32, radius1: f32, is_kinematic1: bool, pos2: *Vec3, vel2: *Vec3, mass2: f32, radius2: f32, is_kinematic2: bool, restitution: f32) void {
     // Calculate collision normal (from sphere1 to sphere2)
     const dx = pos2.x - pos1.x;
     const dy = pos2.y - pos1.y;
@@ -322,20 +414,18 @@ pub fn resolveSphereCollisionWithKinematic(
             // Both kinematic - no separation needed
             return;
         } else if (is_kinematic1) {
-            // Only sphere1 is kinematic - move sphere2 away completely with buffer
-            const separation = overlap + 0.01; // Add buffer for kinematic separation
-            pos2.x += normal.x * separation;
-            pos2.y += normal.y * separation;
-            pos2.z += normal.z * separation;
+            // Only sphere1 is kinematic - move sphere2 away completely
+            pos2.x += normal.x * overlap;
+            pos2.y += normal.y * overlap;
+            pos2.z += normal.z * overlap;
         } else if (is_kinematic2) {
-            // Only sphere2 is kinematic - move sphere1 away completely with buffer
-            const separation = overlap + 0.01; // Add buffer for kinematic separation
-            pos1.x -= normal.x * separation;
-            pos1.y -= normal.y * separation;
-            pos1.z -= normal.z * separation;
+            // Only sphere2 is kinematic - move sphere1 away completely
+            pos1.x -= normal.x * overlap;
+            pos1.y -= normal.y * overlap;
+            pos1.z -= normal.z * overlap;
         } else {
-            // Both dynamic - split the separation equally, but add a small extra buffer
-            const separation = overlap * 0.5 + 0.01; // Add 0.01 buffer to prevent immediate re-collision
+            // Both dynamic - split the separation equally (original working logic)
+            const separation = overlap * 0.5;
             pos1.x -= normal.x * separation;
             pos1.y -= normal.y * separation;
             pos1.z -= normal.z * separation;
@@ -434,4 +524,365 @@ pub fn scale(v: Vec3, s: f32) Vec3 {
         .y = v.y * s,
         .z = v.z * s,
     };
+}
+
+// =============================================================================
+// AABB (Box) Collision Detection Functions
+// =============================================================================
+
+/// Check collision between two axis-aligned bounding boxes
+/// Returns collision info with penetration depth and normal if collision detected
+pub fn checkBoxCollision(pos1: Vec3, extents1: Vec3, pos2: Vec3, extents2: Vec3) ?CollisionInfo {
+    // Calculate separation distances on each axis
+    const delta = vec3_subtract(pos2, pos1);
+    const combined_extents = vec3_add(extents1, extents2);
+    const separation = vec3_subtract(vec3_abs(delta), combined_extents);
+
+    // No collision if separated on any axis
+    if (separation.x > 0 or separation.y > 0 or separation.z > 0) {
+        return null;
+    }
+
+    // Calculate penetration depths for each axis
+    const penetration_x = -separation.x;
+    const penetration_y = -separation.y;
+    const penetration_z = -separation.z;
+
+    // 🔍 DEBUG: Log penetration analysis for stacking issues using log
+    const debug_enabled = false; // Set to true for detailed collision normal debugging
+
+    if (debug_enabled) {
+        // Log penetration analysis using log
+        var debug_buffer: [512]u8 = undefined;
+        const debug_msg = std.fmt.bufPrint(&debug_buffer, "🔍 BOX COLLISION ANALYSIS:\n  pos1=({d:.3},{d:.3},{d:.3}), extents1=({d:.3},{d:.3},{d:.3})\n  pos2=({d:.3},{d:.3},{d:.3}), extents2=({d:.3},{d:.3},{d:.3})\n  delta=({d:.3},{d:.3},{d:.3})\n  penetrations: X={d:.3}, Y={d:.3}, Z={d:.3}\n", .{ pos1.x, pos1.y, pos1.z, extents1.x, extents1.y, extents1.z, pos2.x, pos2.y, pos2.z, extents2.x, extents2.y, extents2.z, delta.x, delta.y, delta.z, penetration_x, penetration_y, penetration_z }) catch "BOX COLLISION ANALYSIS: formatting error\n";
+        log(debug_msg.ptr, debug_msg.len);
+    }
+
+    // 🎯 SMART COLLISION NORMAL SELECTION: Prioritize Y-axis for stacking behavior
+    // Problem: When boxes have similar penetration depths, we want to prioritize
+    // vertical separation over horizontal separation for natural stacking
+
+    var min_penetration = penetration_x;
+    var collision_normal = Vec3{ .x = if (delta.x < 0) 1.0 else -1.0, .y = 0, .z = 0 };
+    var collision_axis: u8 = 0; // 0=X, 1=Y, 2=Z
+    var selected_reason: []const u8 = "minimum_x";
+
+    // Check Y-axis penetration with stacking bias
+    if (penetration_y < min_penetration) {
+        min_penetration = penetration_y;
+        collision_normal = Vec3{ .x = 0, .y = if (delta.y < 0) -1.0 else 1.0, .z = 0 };
+        collision_axis = 1;
+        selected_reason = "minimum_y";
+    } else if (penetration_y <= min_penetration + 0.1) {
+        // STACKING PRIORITY: If Y penetration is close to minimum (within 0.1),
+        // prefer Y-axis for natural stacking behavior
+        min_penetration = penetration_y;
+        collision_normal = Vec3{ .x = 0, .y = if (delta.y < 0) -1.0 else 1.0, .z = 0 };
+        collision_axis = 1;
+        selected_reason = "stacking_priority_y";
+    }
+
+    // Check Z-axis penetration
+    if (penetration_z < min_penetration) {
+        min_penetration = penetration_z;
+        collision_normal = Vec3{ .x = 0, .y = 0, .z = if (delta.z < 0) 1.0 else -1.0 };
+        collision_axis = 2;
+        selected_reason = "minimum_z";
+    }
+
+    if (debug_enabled) {
+        const axis_name = switch (collision_axis) {
+            0 => "X",
+            1 => "Y",
+            2 => "Z",
+            else => "?",
+        };
+        var result_buffer: [256]u8 = undefined;
+        const result_msg = std.fmt.bufPrint(&result_buffer, "  Selected {s}-axis: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3}), reason={s}\n", .{ axis_name, min_penetration, collision_normal.x, collision_normal.y, collision_normal.z, selected_reason }) catch "COLLISION NORMAL RESULT: formatting error\n";
+        log(result_msg.ptr, result_msg.len);
+    }
+
+    // Calculate contact point (on the surface of box1 closest to box2)
+    const contact_point = vec3_add(pos1, vec3_scale(collision_normal, extents1.x * @abs(collision_normal.x) + extents1.y * @abs(collision_normal.y) + extents1.z * @abs(collision_normal.z)));
+
+    return CollisionInfo{
+        .has_collision = true,
+        .penetration_depth = min_penetration,
+        .contact_normal = collision_normal,
+        .contact_point = contact_point,
+    };
+}
+
+/// Check collision between sphere and axis-aligned bounding box
+/// Handles face, edge, and corner collision cases
+pub fn checkSphereBoxCollision(sphere_pos: Vec3, radius: f32, box_pos: Vec3, box_extents: Vec3) ?CollisionInfo {
+    // Find closest point on box to sphere center
+    const box_min = vec3_subtract(box_pos, box_extents);
+    const box_max = vec3_add(box_pos, box_extents);
+    const closest_point = vec3_clamp(sphere_pos, box_min, box_max);
+
+    // Calculate distance from sphere center to closest point
+    const distance_vec = vec3_subtract(sphere_pos, closest_point);
+    const distance_squared = dot(distance_vec, distance_vec);
+    const radius_squared = radius * radius;
+
+    // Check if sphere intersects box
+    if (distance_squared <= radius_squared) {
+        if (distance_squared == 0) {
+            // Special case: sphere center is inside the box
+            // Find the shortest direction to push sphere out
+            const center_to_min = vec3_subtract(sphere_pos, box_min);
+            const center_to_max = vec3_subtract(box_max, sphere_pos);
+
+            // Find minimum distance to each face
+            var min_dist = center_to_min.x;
+            var normal = Vec3{ .x = -1, .y = 0, .z = 0 };
+
+            if (center_to_max.x < min_dist) {
+                min_dist = center_to_max.x;
+                normal = Vec3{ .x = 1, .y = 0, .z = 0 };
+            }
+            if (center_to_min.y < min_dist) {
+                min_dist = center_to_min.y;
+                normal = Vec3{ .x = 0, .y = -1, .z = 0 };
+            }
+            if (center_to_max.y < min_dist) {
+                min_dist = center_to_max.y;
+                normal = Vec3{ .x = 0, .y = 1, .z = 0 };
+            }
+            if (center_to_min.z < min_dist) {
+                min_dist = center_to_min.z;
+                normal = Vec3{ .x = 0, .y = 0, .z = -1 };
+            }
+            if (center_to_max.z < min_dist) {
+                min_dist = center_to_max.z;
+                normal = Vec3{ .x = 0, .y = 0, .z = 1 };
+            }
+
+            return CollisionInfo{
+                .has_collision = true,
+                .penetration_depth = radius + min_dist,
+                .contact_normal = normal,
+                .contact_point = vec3_add(sphere_pos, vec3_scale(normal, -radius)),
+            };
+        } else {
+            // Normal case: sphere intersects box surface
+            const dist = @sqrt(distance_squared);
+            const penetration = radius - dist;
+            const normal = vec3_scale(distance_vec, 1.0 / dist);
+
+            return CollisionInfo{
+                .has_collision = true,
+                .penetration_depth = penetration,
+                .contact_normal = normal,
+                .contact_point = closest_point,
+            };
+        }
+    }
+
+    return null; // No collision
+}
+
+/// Convert legacy sphere collision result to CollisionInfo format
+fn convertSphereCollisionToInfo(pos1: Vec3, radius1: f32, pos2: Vec3, _: f32, overlap: f32) CollisionInfo {
+    const delta = vec3_subtract(pos2, pos1);
+    const dist = magnitude(delta);
+    const normal = if (dist > 0) vec3_scale(delta, 1.0 / dist) else Vec3{ .x = 1, .y = 0, .z = 0 };
+    const contact_point = vec3_add(pos1, vec3_scale(normal, radius1));
+
+    return CollisionInfo{
+        .has_collision = true,
+        .penetration_depth = overlap,
+        .contact_normal = normal,
+        .contact_point = contact_point,
+    };
+}
+
+/// Universal collision check that dispatches based on collision shapes
+pub fn checkCollision(pos1: Vec3, shape1: CollisionShape, extents1: Vec3, pos2: Vec3, shape2: CollisionShape, extents2: Vec3) ?CollisionInfo {
+    switch (shape1) {
+        .SPHERE => switch (shape2) {
+            .SPHERE => {
+                if (checkSphereCollision(pos1, extents1.x, pos2, extents2.x)) |overlap| {
+                    return convertSphereCollisionToInfo(pos1, extents1.x, pos2, extents2.x, overlap);
+                }
+                return null;
+            },
+            .BOX => return checkSphereBoxCollision(pos1, extents1.x, pos2, extents2),
+            .PLANE => return null, // Future implementation
+        },
+        .BOX => switch (shape2) {
+            .SPHERE => {
+                // Swap order and negate normal for box-sphere collision
+                if (checkSphereBoxCollision(pos2, extents2.x, pos1, extents1)) |collision_info| {
+                    return CollisionInfo{
+                        .has_collision = collision_info.has_collision,
+                        .penetration_depth = collision_info.penetration_depth,
+                        .contact_normal = vec3_negate(collision_info.contact_normal),
+                        .contact_point = collision_info.contact_point,
+                    };
+                }
+                return null;
+            },
+            .BOX => return checkBoxCollision(pos1, extents1, pos2, extents2),
+            .PLANE => return null, // Future implementation
+        },
+        .PLANE => return null, // Future implementation
+    }
+}
+
+/// Resolve collision between two boxes with kinematic support
+pub fn resolveBoxCollision(pos1: *Vec3, vel1: *Vec3, _: Vec3, mass1: f32, is_kinematic1: bool, pos2: *Vec3, vel2: *Vec3, _: Vec3, mass2: f32, is_kinematic2: bool, restitution: f32, collision_info: CollisionInfo) void {
+    const normal = collision_info.contact_normal;
+    const penetration = collision_info.penetration_depth;
+
+    // 🎯 ENHANCED FLOOR CONSTRAINT: Initialize kinematic override flags
+    // These will be used throughout the function for consistent kinematic behavior
+    var entity1_kinematic_override = is_kinematic1;
+    var entity2_kinematic_override = is_kinematic2;
+
+    // Separate overlapping boxes with floor constraint awareness
+    if (penetration > 0.0) {
+        if (is_kinematic1 and is_kinematic2) {
+            // Both kinematic - no separation needed
+            return;
+        } else if (is_kinematic1) {
+            // Only box1 is kinematic - move box2 away completely with larger buffer
+            const separation = penetration + 0.05; // Increased buffer
+            pos2.* = vec3_add(pos2.*, vec3_scale(normal, separation));
+        } else if (is_kinematic2) {
+            // Only box2 is kinematic - move box1 away completely with larger buffer
+            const separation = penetration + 0.05; // Increased buffer
+            pos1.* = vec3_subtract(pos1.*, vec3_scale(normal, separation));
+        } else {
+            // Both dynamic - CONSTRAINT-AWARE SEPARATION
+            // 🏗️ FLOOR CONSTRAINT CHECK: Don't push entities below world bounds
+            const world_floor = -8.0; // World bounds floor Y coordinate
+            const floor_threshold = 0.1; // Small tolerance for "on floor" detection
+            const box_half_height = 1.0; // Box half-height for bottom surface calculation
+
+            // Check if entity1's bottom surface is on or very close to the floor
+            const entity1_bottom = pos1.y - box_half_height;
+            const entity1_on_floor = (entity1_bottom - world_floor) <= floor_threshold;
+
+            // Check if entity2's bottom surface is on or very close to the floor
+            const entity2_bottom = pos2.y - box_half_height;
+            const entity2_on_floor = (entity2_bottom - world_floor) <= floor_threshold;
+
+            // 🎯 ENHANCED FLOOR CONSTRAINT: Treat floor-constrained entities as kinematic
+            // This prevents them from being affected by both position AND velocity corrections
+
+            if (entity1_on_floor and !is_kinematic1) {
+                entity1_kinematic_override = true;
+                // Calculate proper stacking position for entity2
+                // Entity2 should be positioned so its bottom surface touches entity1's top surface
+                const entity1_top_y = pos1.y + box_half_height; // Top of entity1
+                const proper_entity2_y = entity1_top_y + box_half_height; // Bottom of entity2 should touch top of entity1
+                pos2.y = proper_entity2_y;
+                // Zero out entity1's velocity to prevent drift
+                vel1.x = 0.0;
+                vel1.y = 0.0;
+                vel1.z = 0.0;
+                // Also zero entity2's Y velocity to prevent bouncing
+                vel2.y = 0.0;
+                var log_buffer: [256]u8 = undefined;
+                const log_msg = std.fmt.bufPrint(&log_buffer, "🏗️ FLOOR CONSTRAINT: Entity1 kinematic, Entity2 stacked at Y={d:.3}. Penetration={d:.3}\n", .{ proper_entity2_y, penetration }) catch "FLOOR CONSTRAINT: Entity1 kinematic stacked\n";
+                log(log_msg.ptr, log_msg.len);
+            } else if (entity2_on_floor and !is_kinematic2) {
+                entity2_kinematic_override = true;
+                // Calculate proper stacking position for entity1
+                const entity2_top_y = pos2.y + box_half_height; // Top of entity2
+                const proper_entity1_y = entity2_top_y + box_half_height; // Bottom of entity1 should touch top of entity2
+                pos1.y = proper_entity1_y;
+                // Zero out entity2's velocity to prevent drift
+                vel2.x = 0.0;
+                vel2.y = 0.0;
+                vel2.z = 0.0;
+                // Also zero entity1's Y velocity to prevent bouncing
+                vel1.y = 0.0;
+                var log_buffer: [256]u8 = undefined;
+                const log_msg = std.fmt.bufPrint(&log_buffer, "🏗️ FLOOR CONSTRAINT: Entity2 kinematic, Entity1 stacked at Y={d:.3}. Penetration={d:.3}\n", .{ proper_entity1_y, penetration }) catch "FLOOR CONSTRAINT: Entity2 kinematic stacked\n";
+                log(log_msg.ptr, log_msg.len);
+            } else {
+                // Normal case - both entities can move freely
+                const normal_separation_distance = penetration * 0.5 + 0.02;
+                pos1.* = vec3_subtract(pos1.*, vec3_scale(normal, normal_separation_distance));
+                pos2.* = vec3_add(pos2.*, vec3_scale(normal, normal_separation_distance));
+                var log_buffer: [256]u8 = undefined;
+                const log_msg = std.fmt.bufPrint(&log_buffer, "🔍 NORMAL SEPARATION: Both entities moved freely. Penetration={d:.3}\n", .{penetration}) catch "NORMAL SEPARATION: Both moved\n";
+                log(log_msg.ptr, log_msg.len);
+            }
+
+            // Use override kinematic flags for velocity resolution (instead of original parameters)
+        }
+    }
+
+    // Calculate relative velocity in the direction of the collision normal
+    const rel_vel = vec3_subtract(vel1.*, vel2.*); // vel1 - vel2 for approach velocity
+    const vel_along_normal = dot(rel_vel, normal);
+
+    // Don't resolve if objects are separating (moving away from each other)
+    if (vel_along_normal > 0) return;
+
+    // Calculate impulse magnitude (treat kinematic bodies as infinite mass)
+    var impulse_magnitude: f32 = 0.0;
+    if (entity1_kinematic_override and entity2_kinematic_override) {
+        // Both kinematic - no velocity change needed
+        return;
+    } else {
+        // Calculate effective inverse masses (0 for kinematic = infinite mass)
+        const inv_mass1 = if (entity1_kinematic_override) 0.0 else 1.0 / mass1;
+        const inv_mass2 = if (entity2_kinematic_override) 0.0 else 1.0 / mass2;
+        const total_inv_mass = inv_mass1 + inv_mass2;
+
+        // Avoid division by zero
+        if (total_inv_mass > 0.0) {
+            impulse_magnitude = -(1.0 + restitution) * vel_along_normal / total_inv_mass;
+        } else {
+            return; // Safety check - both kinematic
+        }
+    }
+
+    // Apply impulse
+    const impulse = vec3_scale(normal, impulse_magnitude);
+
+    // Apply velocity changes (kinematic bodies don't change velocity)
+    if (!entity1_kinematic_override) {
+        const inv_mass1 = 1.0 / mass1;
+        vel1.* = vec3_add(vel1.*, vec3_scale(impulse, inv_mass1)); // Fixed: add instead of subtract
+    }
+
+    if (!entity2_kinematic_override) {
+        const inv_mass2 = 1.0 / mass2;
+        vel2.* = vec3_subtract(vel2.*, vec3_scale(impulse, inv_mass2)); // Fixed: subtract instead of add
+    }
+}
+
+/// Universal collision resolution that dispatches based on collision shapes
+pub fn resolveCollision(pos1: *Vec3, vel1: *Vec3, shape1: CollisionShape, extents1: Vec3, mass1: f32, is_kinematic1: bool, pos2: *Vec3, vel2: *Vec3, shape2: CollisionShape, extents2: Vec3, mass2: f32, is_kinematic2: bool, restitution: f32, collision_info: CollisionInfo) void {
+    switch (shape1) {
+        .SPHERE => switch (shape2) {
+            .SPHERE => {
+                // Use existing sphere collision resolution
+                resolveSphereCollisionWithKinematic(pos1, vel1, mass1, extents1.x, is_kinematic1, pos2, vel2, mass2, extents2.x, is_kinematic2, restitution);
+            },
+            .BOX => {
+                // Sphere-box collision: use box collision resolution with collision info
+                resolveBoxCollision(pos1, vel1, Vec3{ .x = extents1.x, .y = extents1.x, .z = extents1.x }, mass1, is_kinematic1, pos2, vel2, extents2, mass2, is_kinematic2, restitution, collision_info);
+            },
+            .PLANE => {}, // Future implementation
+        },
+        .BOX => switch (shape2) {
+            .SPHERE => {
+                // Box-sphere collision: use box collision resolution with collision info
+                resolveBoxCollision(pos1, vel1, extents1, mass1, is_kinematic1, pos2, vel2, Vec3{ .x = extents2.x, .y = extents2.x, .z = extents2.x }, mass2, is_kinematic2, restitution, collision_info);
+            },
+            .BOX => {
+                // Box-box collision: use box collision resolution
+                resolveBoxCollision(pos1, vel1, extents1, mass1, is_kinematic1, pos2, vel2, extents2, mass2, is_kinematic2, restitution, collision_info);
+            },
+            .PLANE => {}, // Future implementation
+        },
+        .PLANE => {}, // Future implementation
+    }
 }

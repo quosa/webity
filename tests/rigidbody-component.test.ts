@@ -2,7 +2,7 @@
 // Unit tests for RigidBody component
 import { jest } from '@jest/globals';
 
-import { RigidBody } from '../src/engine/components';
+import { RigidBody, CollisionShape } from '../src/engine/components';
 import { GameObject } from '../src/engine/gameobject';
 
 describe('RigidBody Component', () => {
@@ -11,7 +11,7 @@ describe('RigidBody Component', () => {
 
     beforeEach(() => {
         gameObject = new GameObject('test-object', 'TestObject');
-        rigidBody = new RigidBody(1.0, true, 'box', { x: 1, y: 1, z: 1 });
+        rigidBody = new RigidBody(1.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
         gameObject.addComponent(rigidBody);
     });
 
@@ -21,19 +21,19 @@ describe('RigidBody Component', () => {
 
             expect(rb.mass).toBe(1.0);
             expect(rb.useGravity).toBe(true);
-            expect(rb.colliderType).toBe('sphere'); // Default is sphere, not box
-            expect(rb.colliderSize).toEqual({ x: 1, y: 1, z: 1 });
+            expect(rb.collisionShape).toBe(CollisionShape.SPHERE); // Default is sphere
+            expect(rb.extents).toEqual({ x: 0.5, y: 0.5, z: 0.5 });
             expect(rb.isKinematic).toBe(false);
             expect(rb.velocity).toEqual({ x: 0, y: 0, z: 0 });
         });
 
         test('should create RigidBody with custom values', () => {
-            const rb = new RigidBody(2.5, false, 'sphere', { x: 2, y: 2, z: 2 });
+            const rb = new RigidBody(2.5, false, CollisionShape.SPHERE, { x: 2, y: 2, z: 2 });
 
             expect(rb.mass).toBe(2.5);
             expect(rb.useGravity).toBe(false);
-            expect(rb.colliderType).toBe('sphere');
-            expect(rb.colliderSize).toEqual({ x: 2, y: 2, z: 2 });
+            expect(rb.collisionShape).toBe(CollisionShape.SPHERE);
+            expect(rb.extents).toEqual({ x: 2, y: 2, z: 2 });
         });
 
         test('should be an instance of RigidBody', () => {
@@ -65,12 +65,12 @@ describe('RigidBody Component', () => {
             expect(rigidBody.isKinematic).toBe(false);
         });
 
-        test('should get and set collider properties', () => {
-            rigidBody.colliderType = 'sphere';
-            expect(rigidBody.colliderType).toBe('sphere');
+        test('should get and set collision shape properties', () => {
+            rigidBody.collisionShape = CollisionShape.SPHERE;
+            expect(rigidBody.collisionShape).toBe(CollisionShape.SPHERE);
 
-            rigidBody.colliderSize = { x: 3, y: 3, z: 3 };
-            expect(rigidBody.colliderSize).toEqual({ x: 3, y: 3, z: 3 });
+            rigidBody.extents = { x: 3, y: 3, z: 3 };
+            expect(rigidBody.extents).toEqual({ x: 3, y: 3, z: 3 });
         });
     });
 
@@ -225,7 +225,7 @@ describe('RigidBody Component', () => {
     describe('Component Lifecycle', () => {
         test('should initialize properly when added to GameObject', () => {
             const newGameObject = new GameObject('lifecycle-test', 'LifecycleTest');
-            const newRigidBody = new RigidBody(2.0, false, 'sphere', { x: 0.5, y: 0.5, z: 0.5 });
+            const newRigidBody = new RigidBody(2.0, false, CollisionShape.SPHERE, { x: 0.5, y: 0.5, z: 0.5 });
 
             newGameObject.addComponent(newRigidBody);
 

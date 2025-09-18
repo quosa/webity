@@ -3,6 +3,12 @@
 
 import { WasmPhysicsInterface } from './wasm-physics-bridge';
 
+if (typeof TextDecoder === 'undefined') {
+    // Node.js environment - use util.TextDecoder for jslog
+    const { TextDecoder } = require('util');
+    (global as any).TextDecoder = TextDecoder;
+}
+
 export class WasmLoader {
     static async loadPhysicsModule(): Promise<WasmPhysicsInterface | null> {
         try {
@@ -18,7 +24,25 @@ export class WasmLoader {
             console.log(`📦 WASM module loaded: ${wasmBytes.byteLength} bytes`);
 
             // Instantiate the WASM module
-            const wasmModule = await WebAssembly.instantiate(wasmBytes);
+            let wasmMemory: WebAssembly.Memory | null = null;
+            const wasmModule = await WebAssembly.instantiate(wasmBytes, {
+                env: {
+                    jslog: (ptr:number, len:number) => {
+                        // Check global debug logging flag before processing
+                        if (!(window as any).isDebugLoggingEnabled) {
+                            return; // Skip logging if debug is disabled
+                        }
+
+                        // Use the memory reference captured after instantiation
+                        if (wasmMemory && wasmMemory.buffer) {
+                            const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
+                            const msg = new TextDecoder('utf8').decode(bytes);
+                            console.log(msg);
+                        }
+                    }
+                }
+            });
+            wasmMemory = wasmModule.instance.exports['memory'] as WebAssembly.Memory;
             const wasmExports = wasmModule.instance.exports as any;
 
             // Validate that all required v2 API functions exist
@@ -30,7 +54,16 @@ export class WasmLoader {
                 'get_entity_position_x', 'get_entity_position_y', 'get_entity_position_z',
                 'get_entity_velocity_x', 'get_entity_velocity_y', 'get_entity_velocity_z',
                 'get_collision_checks_performed', 'get_collisions_detected', 'get_kinematic_collision_flag',
-                'get_collision_state', 'debug_get_entity_physics_info', 'get_wasm_version'
+                'get_collision_state', 'debug_get_entity_physics_info', 'get_wasm_version',
+                'get_collision_event_counter', 'get_last_collision_entities',
+                'get_last_collision_pos1', 'get_last_collision_pos2', 'clear_collision_event_counter'
+            ];
+
+            // Optional collision shape functions (may not be present in older WASM modules)
+            const optionalFunctions = [
+                'spawn_entity_with_collider', 'set_entity_collision_shape',
+                'get_entity_collision_shape', 'get_entity_collision_extent_x',
+                'get_entity_collision_extent_y', 'get_entity_collision_extent_z'
             ];
 
             for (const func of requiredFunctions) {
@@ -38,6 +71,15 @@ export class WasmLoader {
                     throw new Error(`Missing required WASM function: ${func}`);
                 }
             }
+
+            // Check for optional functions and log their availability
+            const availableOptionalFunctions: string[] = [];
+            for (const func of optionalFunctions) {
+                if (typeof wasmExports[func] === 'function') {
+                    availableOptionalFunctions.push(func);
+                }
+            }
+            console.log(`🔧 Optional collision shape functions available: ${availableOptionalFunctions.length}/${optionalFunctions.length} (${availableOptionalFunctions.join(', ')})`);
 
             // Validate memory export
             if (!wasmExports.memory || !(wasmExports.memory instanceof WebAssembly.Memory)) {
@@ -83,13 +125,29 @@ export class WasmLoader {
                 get_entity_velocity_y: wasmExports.get_entity_velocity_y,
                 get_entity_velocity_z: wasmExports.get_entity_velocity_z,
 
+                // Collision shape configuration (optional - may not be present in older WASM)
+                spawn_entity_with_collider: wasmExports.spawn_entity_with_collider,
+                set_entity_collision_shape: wasmExports.set_entity_collision_shape,
+                get_entity_collision_shape: wasmExports.get_entity_collision_shape,
+                get_entity_collision_extent_x: wasmExports.get_entity_collision_extent_x,
+                get_entity_collision_extent_y: wasmExports.get_entity_collision_extent_y,
+                get_entity_collision_extent_z: wasmExports.get_entity_collision_extent_z,
+
                 // Physics debug functions
                 get_collision_checks_performed: wasmExports.get_collision_checks_performed,
                 get_collisions_detected: wasmExports.get_collisions_detected,
                 get_kinematic_collision_flag: wasmExports.get_kinematic_collision_flag,
                 get_collision_state: wasmExports.get_collision_state,
                 debug_get_entity_physics_info: wasmExports.debug_get_entity_physics_info,
+                debug_get_collision_radius: wasmExports.debug_get_collision_radius,
                 get_wasm_version: wasmExports.get_wasm_version,
+
+                // Collision event logging functions
+                get_collision_event_counter: wasmExports.get_collision_event_counter,
+                get_last_collision_entities: wasmExports.get_last_collision_entities,
+                get_last_collision_pos1: wasmExports.get_last_collision_pos1,
+                get_last_collision_pos2: wasmExports.get_last_collision_pos2,
+                clear_collision_event_counter: wasmExports.clear_collision_event_counter,
 
                 // Memory access
                 memory: wasmExports.memory

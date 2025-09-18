@@ -167,6 +167,16 @@ export class RotatorComponent extends Component {
     }
 }
 
+// Collision shape enumeration (matches WASM CollisionShape enum)
+export enum CollisionShape {
+    // eslint-disable-next-line no-unused-vars
+    SPHERE = 0,
+    // eslint-disable-next-line no-unused-vars
+    BOX = 1,
+    // eslint-disable-next-line no-unused-vars
+    PLANE = 2,
+}
+
 // RigidBody component - handles physics simulation
 export class RigidBody extends Component {
     public mass: number;
@@ -174,9 +184,9 @@ export class RigidBody extends Component {
     public isKinematic: boolean;
     public useGravity: boolean;
 
-    // Physics shape
-    public colliderType: 'sphere' | 'box';
-    public colliderSize: Vector3;
+    // Physics shape (enhanced collision system)
+    public collisionShape: CollisionShape;
+    public extents: Vector3; // Half-extents for boxes, radius in .x for spheres, normal for planes
 
     // WASM integration
     private wasmEntityId?: number;
@@ -185,16 +195,16 @@ export class RigidBody extends Component {
     constructor(
         mass: number = 1.0,
         useGravity: boolean = true,
-        colliderType: 'sphere' | 'box' = 'sphere',
-        colliderSize: Vector3 = { x: 1, y: 1, z: 1 }
+        collisionShape: CollisionShape = CollisionShape.SPHERE,
+        extents: Vector3 = { x: 0.5, y: 0.5, z: 0.5 } // Default sphere radius 0.5
     ) {
         super();
         this.mass = mass;
         this.velocity = { x: 0, y: 0, z: 0 };
         this.isKinematic = false; // Default: affected by physics forces
         this.useGravity = useGravity;
-        this.colliderType = colliderType;
-        this.colliderSize = colliderSize;
+        this.collisionShape = collisionShape;
+        this.extents = extents;
     }
 
     override awake(): void {
@@ -249,12 +259,6 @@ export class RigidBody extends Component {
         // Get updated position/rotation from WASM physics simulation
         const wasmData = this.physicsBridge.getEntityData(this.wasmEntityId);
         if (wasmData) {
-            // DEBUG: Check if WASM physics is changing positions
-            // const currentPos = this.gameObject.transform.position;
-            // const newPos = wasmData.position;
-            // if (Math.abs(currentPos.y - newPos.y) > 0.01) { // Only log if Y position changed significantly
-            //     console.log(`📍 syncFromWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: Y ${currentPos.y.toFixed(2)} → ${newPos.y.toFixed(2)}`);
-            // }
             this.gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
         } else {
             console.log(`❌ syncFromWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: No WASM data received`);
@@ -323,6 +327,41 @@ export class RigidBody extends Component {
     // Set physics bridge reference (called by scene)
     public setPhysicsBridge(bridge: any): void {
         this.physicsBridge = bridge;
+    }
+
+    // Collision shape configuration methods
+    public setSphereCollider(radius: number): void {
+        this.collisionShape = CollisionShape.SPHERE;
+        this.extents = { x: radius, y: radius, z: radius };
+        this.updateWasmCollisionShape();
+    }
+
+    public setBoxCollider(halfWidth: number, halfHeight: number, halfDepth: number): void {
+        this.collisionShape = CollisionShape.BOX;
+        this.extents = { x: halfWidth, y: halfHeight, z: halfDepth };
+        this.updateWasmCollisionShape();
+    }
+
+    public setPlaneCollider(normalX: number = 0, normalY: number = 1, normalZ: number = 0): void {
+        this.collisionShape = CollisionShape.PLANE;
+        this.extents = { x: normalX, y: normalY, z: normalZ };
+        this.updateWasmCollisionShape();
+    }
+
+    // Update collision shape in WASM physics system
+    private updateWasmCollisionShape(): void {
+        if (this.physicsBridge && this.wasmEntityId !== undefined) {
+            this.physicsBridge.setEntityCollisionShape(this.wasmEntityId, this.collisionShape, this.extents.x, this.extents.y, this.extents.z);
+            console.log(`🔧 RigidBody.updateWasmCollisionShape() for entity ${this.wasmEntityId}: shape=${this.collisionShape}, extents=(${this.extents.x}, ${this.extents.y}, ${this.extents.z})`);
+        }
+    }
+
+    // Get collision shape information
+    public getCollisionInfo(): { shape: CollisionShape; extents: Vector3 } {
+        return {
+            shape: this.collisionShape,
+            extents: { ...this.extents }
+        };
     }
 }
 

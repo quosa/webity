@@ -188,8 +188,8 @@ test "integration: falling ball vs kinematic platform (scene-like)" {
     std.debug.print("📦 Adding entities to WASM engine...\n", .{});
 
     // add_entity(id, x, y, z, scaleX, scaleY, scaleZ, colorR, colorG, colorB, colorA, meshIndex, materialId, mass, radius, isKinematic)
-    game_engine.add_entity(0, 0, -2, 0, 4, 1, 4, 0.5, 0.5, 0.5, 1.0, 2, 0, 5.0, 2.0, true);  // Platform (kinematic)
-    game_engine.add_entity(1, 0, 3, 0, 0.8, 0.8, 0.8, 1.0, 0.2, 0.2, 1.0, 1, 0, 1.0, 0.8, false); // Ball (dynamic)
+    game_engine.add_entity(0, 0, -2, 0, 4, 1, 4, 0.5, 0.5, 0.5, 1.0, 1, 0, 5.0, 2.0, true);  // Platform (kinematic, BOX mesh)
+    game_engine.add_entity(1, 0, 3, 0, 0.8, 0.8, 0.8, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 0.8, false); // Ball (dynamic, SPHERE mesh)
 
     std.debug.print("✅ Added platform (id=0, kinematic=true) and ball (id=1, kinematic=false)\n", .{});
 
@@ -286,13 +286,64 @@ test "integration: falling ball vs kinematic platform (scene-like)" {
     }
 }
 
+test "isolated sphere-box collision resolution test" {
+    std.debug.print("\n🔬 Isolated Test: Sphere-Box collision resolution\n", .{});
+
+    // Set up collision exactly like in integration test
+    var ball_pos = Vec3{ .x = 0, .y = 0.73, .z = 0 };
+    var ball_vel = Vec3{ .x = 0, .y = -1.51, .z = 0 };
+    const ball_extents = Vec3{ .x = 0.8, .y = 0.8, .z = 0.8 };
+    const ball_mass: f32 = 1.0;
+    const ball_kinematic = false;
+
+    var platform_pos = Vec3{ .x = 0, .y = -2, .z = 0 };
+    var platform_vel = Vec3{ .x = 0, .y = 0, .z = 0 };
+    const platform_extents = Vec3{ .x = 2.0, .y = 2.0, .z = 2.0 };
+    const platform_mass: f32 = 5.0;
+    const platform_kinematic = true;
+
+    std.debug.print("Before collision:\n", .{});
+    std.debug.print("  Ball: pos=({d:.2},{d:.2},{d:.2}), vel=({d:.2},{d:.2},{d:.2})\n", .{ball_pos.x, ball_pos.y, ball_pos.z, ball_vel.x, ball_vel.y, ball_vel.z});
+    std.debug.print("  Platform: pos=({d:.2},{d:.2},{d:.2}), vel=({d:.2},{d:.2},{d:.2})\n", .{platform_pos.x, platform_pos.y, platform_pos.z, platform_vel.x, platform_vel.y, platform_vel.z});
+
+    // Check collision
+    if (core.checkCollision(
+        ball_pos, core.CollisionShape.SPHERE, ball_extents,
+        platform_pos, core.CollisionShape.BOX, platform_extents
+    )) |collision_info| {
+        std.debug.print("✅ Collision detected: penetration={d:.3}, normal=({d:.2},{d:.2},{d:.2})\n", .{collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z});
+
+        // Apply collision resolution
+        core.resolveCollision(
+            &ball_pos, &ball_vel, core.CollisionShape.SPHERE, ball_extents, ball_mass, ball_kinematic,
+            &platform_pos, &platform_vel, core.CollisionShape.BOX, platform_extents, platform_mass, platform_kinematic,
+            0.8, collision_info
+        );
+
+        std.debug.print("After collision resolution:\n", .{});
+        std.debug.print("  Ball: pos=({d:.2},{d:.2},{d:.2}), vel=({d:.2},{d:.2},{d:.2})\n", .{ball_pos.x, ball_pos.y, ball_pos.z, ball_vel.x, ball_vel.y, ball_vel.z});
+        std.debug.print("  Platform: pos=({d:.2},{d:.2},{d:.2}), vel=({d:.2},{d:.2},{d:.2})\n", .{platform_pos.x, platform_pos.y, platform_pos.z, platform_vel.x, platform_vel.y, platform_vel.z});
+
+        // Ball should bounce upward
+        try testing.expect(ball_vel.y > 0);
+        // Platform should not move
+        try testing.expectEqual(@as(f32, -2.0), platform_pos.y);
+        try testing.expectEqual(@as(f32, 0.0), platform_vel.y);
+
+        std.debug.print("✅ Isolated collision resolution test PASSED\n", .{});
+    } else {
+        std.debug.print("❌ No collision detected in isolated test\n", .{});
+        try testing.expect(false);
+    }
+}
+
 test "debug: collision detection step-by-step analysis" {
     std.debug.print("\n🔧 Debug Test: Collision detection step-by-step analysis\n", .{});
 
     // Initialize engine and add same entities
     game_engine.init();
-    game_engine.add_entity(0, 0, -2, 0, 4, 1, 4, 0.5, 0.5, 0.5, 1.0, 2, 0, 5.0, 2.0, true);  // Platform
-    game_engine.add_entity(1, 0, 3, 0, 0.8, 0.8, 0.8, 1.0, 0.2, 0.2, 1.0, 1, 0, 1.0, 0.8, false); // Ball
+    game_engine.add_entity(0, 0, -2, 0, 4, 1, 4, 0.5, 0.5, 0.5, 1.0, 1, 0, 5.0, 2.0, true);  // Platform (BOX mesh)
+    game_engine.add_entity(1, 0, 3, 0, 0.8, 0.8, 0.8, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 0.8, false); // Ball (SPHERE mesh)
 
     // Verify entity count and active flags
     const entity_count = game_engine.get_entity_count();
@@ -390,4 +441,326 @@ test "debug: collision detection step-by-step analysis" {
 
     // Note: This test doesn't fail on purpose - it's for diagnostics
     std.debug.print("🔧 Debug test completed - see output above for collision analysis\n", .{});
+}
+
+test "minimal sphere stack - 3 spheres collision diagnosis" {
+    std.debug.print("\n🔬 Minimal Sphere Stack Test - Diagnosing SPHERE vs SPHERE collision\n", .{});
+
+    // Initialize engine with 3 spheres in vertical stack
+    game_engine.init();
+
+    // Create 3 spheres: bottom, middle, top (simple stack)
+    const bottom_id = game_engine.spawn_entity(0.0, -7.0, 0.0, 0.5); // Near floor at Y=-8
+    const middle_id = game_engine.spawn_entity(0.0, -6.0, 0.0, 0.5); // 1 unit above bottom
+    const top_id = game_engine.spawn_entity(0.0, -5.0, 0.0, 0.5);    // 1 unit above middle
+
+    std.debug.print("🏗️ Created 3-sphere stack:\n", .{});
+    std.debug.print("   Bottom (id={}): Y={d:.2}\n", .{ bottom_id, game_engine.get_entity_position_y(bottom_id) });
+    std.debug.print("   Middle (id={}): Y={d:.2}\n", .{ middle_id, game_engine.get_entity_position_y(middle_id) });
+    std.debug.print("   Top (id={}): Y={d:.2}\n", .{ top_id, game_engine.get_entity_position_y(top_id) });
+
+    // Run physics simulation and monitor settling
+    std.debug.print("\n🎬 Running physics simulation:\n", .{});
+
+    var frame: u32 = 0;
+    const max_frames = 100;
+    const delta_time: f32 = 1.0 / 60.0; // 60fps
+
+    while (frame < max_frames) {
+        game_engine.update(delta_time);
+        frame += 1;
+
+        // Log every 10 frames for detailed analysis
+        if (frame % 10 == 0) {
+            const bottom_y = game_engine.get_entity_position_y(bottom_id);
+            const middle_y = game_engine.get_entity_position_y(middle_id);
+            const top_y = game_engine.get_entity_position_y(top_id);
+            const collision_state = game_engine.get_collision_state();
+
+            std.debug.print("Frame {d:3}: Bottom={d:6.2}, Middle={d:6.2}, Top={d:6.2}, Collisions=0x{x:02}\n",
+                .{ frame, bottom_y, middle_y, top_y, collision_state });
+        }
+
+        // Check if spheres have settled (very small velocity changes)
+        const bottom_vy = @abs(game_engine.get_entity_velocity_y(bottom_id));
+        const middle_vy = @abs(game_engine.get_entity_velocity_y(middle_id));
+        const top_vy = @abs(game_engine.get_entity_velocity_y(top_id));
+
+        if (bottom_vy < 0.01 and middle_vy < 0.01 and top_vy < 0.01) {
+            std.debug.print("🏁 Spheres settled at frame {d}\n", .{frame});
+            break;
+        }
+    }
+
+    // Final positions analysis
+    const final_bottom_y = game_engine.get_entity_position_y(bottom_id);
+    const final_middle_y = game_engine.get_entity_position_y(middle_id);
+    const final_top_y = game_engine.get_entity_position_y(top_id);
+
+    std.debug.print("\n📊 Final Analysis:\n", .{});
+    std.debug.print("   Bottom sphere: Y={d:.3} (expected: -7.500)\n", .{final_bottom_y});
+    std.debug.print("   Middle sphere: Y={d:.3} (expected: -6.500)\n", .{final_middle_y});
+    std.debug.print("   Top sphere: Y={d:.3} (expected: -5.500)\n", .{final_top_y});
+
+    // Calculate sphere-to-sphere distances
+    const bottom_to_middle_dist = final_middle_y - final_bottom_y;
+    const middle_to_top_dist = final_top_y - final_middle_y;
+
+    std.debug.print("   Bottom-Middle distance: {d:.3} (expected: 1.000)\n", .{bottom_to_middle_dist});
+    std.debug.print("   Middle-Top distance: {d:.3} (expected: 1.000)\n", .{middle_to_top_dist});
+
+    // Diagnose potential issues
+    if (final_bottom_y < -7.8) {
+        std.debug.print("🚨 ISSUE: Bottom sphere sinking below expected position (possible over-compression)\n", .{});
+    }
+
+    if (bottom_to_middle_dist < 0.8 or bottom_to_middle_dist > 1.2) {
+        std.debug.print("🚨 ISSUE: Abnormal sphere-sphere separation distance\n", .{});
+    }
+
+    if (middle_to_top_dist < 0.8 or middle_to_top_dist > 1.2) {
+        std.debug.print("🚨 ISSUE: Abnormal sphere-sphere separation distance\n", .{});
+    }
+
+    // 🔍 ASSERTION CHECK: Bottom sphere should be at floor contact position
+    const expected_bottom_y: f32 = -7.5; // world_bounds.y (-8.0) + radius (0.5)
+    const tolerance: f32 = 0.1; // Allow small physics settling tolerance
+
+    std.debug.print("🔍 TRACING: spawn_entity called with radius=0.5, expected floor contact at Y={d:.3}\n", .{expected_bottom_y});
+    std.debug.print("🔍 TRACING: Actual bottom sphere settled at Y={d:.3}\n", .{final_bottom_y});
+    std.debug.print("🔍 TRACING: Deviation from expected: {d:.3} units\n", .{final_bottom_y - expected_bottom_y});
+
+    if (@abs(final_bottom_y - expected_bottom_y) > tolerance) {
+        std.debug.print("❌ ASSERTION FAILED: Bottom sphere Y={d:.3} deviates more than {d:.3} from expected {d:.3}\n",
+            .{ final_bottom_y, tolerance, expected_bottom_y });
+        std.debug.print("   This indicates incorrect radius parameter passing or collision resolution\n", .{});
+        return error.BottomSphereNotOnFloor;
+    } else {
+        std.debug.print("✅ ASSERTION PASSED: Bottom sphere Y={d:.3} within tolerance of expected {d:.3}\n",
+            .{ final_bottom_y, expected_bottom_y });
+    }
+
+    std.debug.print("🔧 Assertion test complete - checking floor contact requirement\n", .{});
+}
+
+test "high-energy sphere collision - matching failing test scenario" {
+    std.debug.print("\n💥 High-Energy Sphere Collision Test - Matching failing test scenario\n", .{});
+
+    // Initialize engine with exact same setup as failing test
+    game_engine.init();
+
+    // Create exact same scenario as the failing test
+    const bottom_sphere = game_engine.spawn_entity(0.0, -7.0, 0.0, 0.5); // Near floor at Y=-8
+    const top_sphere = game_engine.spawn_entity(0.0, 2.0, 0.0, 0.5);     // Falling from above
+
+    std.debug.print("🏗️ Created 2-sphere high-energy collision setup:\n", .{});
+    std.debug.print("   Bottom sphere (id={}): Y={d:.2}\n", .{ bottom_sphere, game_engine.get_entity_position_y(bottom_sphere) });
+    std.debug.print("   Top sphere (id={}): Y={d:.2}\n", .{ top_sphere, game_engine.get_entity_position_y(top_sphere) });
+
+    // Give the top sphere some downward velocity (gravity will add more) - exact same as failing test
+    game_engine.set_entity_velocity(top_sphere, 0.0, -2.0, 0.0);
+    std.debug.print("   Set top sphere initial velocity: VY=-2.0\n", .{});
+
+    // Run physics for same duration as failing test
+    std.debug.print("\n🎬 Running physics simulation (60 frames, 0.016 delta):\n", .{});
+
+    for (0..60) |frame| {
+        game_engine.update(0.016);
+
+        // Log every 10 frames for detailed analysis
+        if (frame % 10 == 9) { // Log at frames 9, 19, 29, etc.
+            const bottom_y = game_engine.get_entity_position_y(bottom_sphere);
+            const top_y = game_engine.get_entity_position_y(top_sphere);
+            const bottom_vy = game_engine.get_entity_velocity_y(bottom_sphere);
+            const top_vy = game_engine.get_entity_velocity_y(top_sphere);
+            const collision_state = game_engine.get_collision_state();
+
+            std.debug.print("Frame {d:2}: Bottom=({d:6.2}, vy={d:5.2}), Top=({d:6.2}, vy={d:5.2}), Collisions=0x{x:02}\n",
+                .{ frame + 1, bottom_y, bottom_vy, top_y, top_vy, collision_state });
+        }
+    }
+
+    // Final positions analysis
+    const final_bottom_y = game_engine.get_entity_position_y(bottom_sphere);
+    const final_top_y = game_engine.get_entity_position_y(top_sphere);
+    const final_bottom_vy = game_engine.get_entity_velocity_y(bottom_sphere);
+    const final_top_vy = game_engine.get_entity_velocity_y(top_sphere);
+
+    std.debug.print("\n📊 Final Analysis (High-Energy Collision):\n", .{});
+    std.debug.print("   Bottom sphere: Y={d:.3}, VY={d:.3} (expected Y: -7.500)\n", .{ final_bottom_y, final_bottom_vy });
+    std.debug.print("   Top sphere: Y={d:.3}, VY={d:.3} (expected Y: -6.500)\n", .{ final_top_y, final_top_vy });
+
+    const sphere_separation = final_top_y - final_bottom_y;
+    std.debug.print("   Sphere separation: {d:.3} (expected: 1.000)\n", .{sphere_separation});
+
+    // Analyze the specific issue
+    if (final_bottom_y < -7.8) {
+        std.debug.print("🚨 CONFIRMED ISSUE: Bottom sphere over-compressed to Y={d:.3}\n", .{final_bottom_y});
+        std.debug.print("   Compression amount: {d:.3} units below expected\n", .{-7.5 - final_bottom_y});
+    }
+
+    if (sphere_separation < 0.8 or sphere_separation > 1.2) {
+        std.debug.print("🚨 ISSUE: Abnormal sphere separation: {d:.3}\n", .{sphere_separation});
+    }
+
+    std.debug.print("🔧 This matches the failing test scenario - investigating collision resolution\n", .{});
+}
+
+test "detailed sphere collision analysis - frame by frame" {
+    std.debug.print("\n🔍 Detailed Frame-by-Frame Sphere Collision Analysis\n", .{});
+
+    // Initialize engine with same scenario as failing test
+    game_engine.init();
+
+    const bottom_sphere = game_engine.spawn_entity(0.0, -7.0, 0.0, 0.5);
+    const top_sphere = game_engine.spawn_entity(0.0, 2.0, 0.0, 0.5);
+
+    // Set initial velocity
+    game_engine.set_entity_velocity(top_sphere, 0.0, -2.0, 0.0);
+
+    std.debug.print("🏗️ Setup: Bottom at Y=-7.0, Top at Y=2.0 with VY=-2.0\n", .{});
+    std.debug.print("   Expected collision when distance <= 1.0 (radius 0.5 + radius 0.5)\n", .{});
+
+    // Monitor every single frame for the first 30 frames
+    for (0..30) |frame| {
+        const bottom_y_before = game_engine.get_entity_position_y(bottom_sphere);
+        const top_y_before = game_engine.get_entity_position_y(top_sphere);
+        const distance_before = @abs(top_y_before - bottom_y_before);
+
+        game_engine.update(0.016);
+
+        const bottom_y_after = game_engine.get_entity_position_y(bottom_sphere);
+        const top_y_after = game_engine.get_entity_position_y(top_sphere);
+        const bottom_vy = game_engine.get_entity_velocity_y(bottom_sphere);
+        const top_vy = game_engine.get_entity_velocity_y(top_sphere);
+        const distance_after = @abs(top_y_after - bottom_y_after);
+        const collision_state = game_engine.get_collision_state();
+
+        std.debug.print("Frame {d:2}: Dist {d:5.2}→{d:5.2}, Top({d:5.2}→{d:5.2}, vy={d:5.2}), Bottom({d:5.2}→{d:5.2}, vy={d:5.2}), Col=0x{x:02}\n",
+            .{ frame + 1, distance_before, distance_after, top_y_before, top_y_after, top_vy, bottom_y_before, bottom_y_after, bottom_vy, collision_state });
+
+        // Check for collision conditions
+        if (distance_after <= 1.0 and collision_state == 0) {
+            std.debug.print("🚨 COLLISION MISSED: Distance {d:.3} ≤ 1.0 but no collision detected!\n", .{distance_after});
+        }
+
+        if (collision_state & 0x10 != 0) {
+            std.debug.print("✅ COLLISION DETECTED: Distance {d:.3}, resolving collision\n", .{distance_after});
+            break;
+        }
+
+        // Stop early if spheres are clearly separating
+        if (top_y_after < -5.0) {
+            std.debug.print("🏁 Top sphere reached Y={d:.2}, collision should have occurred by now\n", .{top_y_after});
+            break;
+        }
+    }
+
+    std.debug.print("🔧 Collision analysis complete - investigating collision detection logic\n", .{});
+}
+
+test "collision detection comparison - legacy vs universal" {
+    std.debug.print("\n🔍 Collision Detection Comparison: Legacy vs Universal System\n", .{});
+
+    // Test case: two spheres with radius 0.5 at distance 0.8 (should collide)
+    const pos1 = core.Vec3{ .x = 0, .y = 0, .z = 0 };
+    const pos2 = core.Vec3{ .x = 0, .y = 0.8, .z = 0 }; // Distance = 0.8, combined radius = 1.0
+    const radius = 0.5;
+    const extents = core.Vec3{ .x = radius, .y = radius, .z = radius };
+
+    std.debug.print("Test case: Two spheres, radius={d:.1}, distance={d:.1} (should collide since {d:.1} < {d:.1})\n",
+        .{ radius, 0.8, 0.8, radius * 2.0 });
+
+    // Test legacy collision detection
+    const legacy_result = core.checkSphereCollision(pos1, radius, pos2, radius);
+    std.debug.print("Legacy checkSphereCollision: {any}\n", .{legacy_result});
+
+    // Test universal collision detection
+    const universal_result = core.checkCollision(
+        pos1, core.CollisionShape.SPHERE, extents,
+        pos2, core.CollisionShape.SPHERE, extents
+    );
+    std.debug.print("Universal checkCollision: {any}\n", .{universal_result});
+
+    // Test case 2: High-energy scenario from failing test
+    const bottom_pos = core.Vec3{ .x = 0, .y = -7.0, .z = 0 };
+    const top_pos = core.Vec3{ .x = 0, .y = 0.5, .z = 0 }; // Distance = 7.5, radius = 0.5 each
+    const test_radius = 0.5;
+    const test_extents = core.Vec3{ .x = test_radius, .y = test_radius, .z = test_radius };
+
+    std.debug.print("\nTest case 2: High-energy scenario, radius={d:.1}, distance={d:.1} (should NOT collide since {d:.1} > {d:.1})\n",
+        .{ test_radius, 7.5, 7.5, test_radius * 2.0 });
+
+    const legacy_result2 = core.checkSphereCollision(bottom_pos, test_radius, top_pos, test_radius);
+    std.debug.print("Legacy checkSphereCollision: {any}\n", .{legacy_result2});
+
+    const universal_result2 = core.checkCollision(
+        bottom_pos, core.CollisionShape.SPHERE, test_extents,
+        top_pos, core.CollisionShape.SPHERE, test_extents
+    );
+    std.debug.print("Universal checkCollision: {any}\n", .{universal_result2});
+
+    std.debug.print("🔧 Detection comparison complete\n", .{});
+}
+
+test "physics update order boundary violation test" {
+    std.debug.print("\n🧪 Physics Update Order: Testing boundary violation hypothesis\n", .{});
+
+    // Initialize engine exactly like failing test
+    game_engine.init();
+    game_engine.despawn_all_entities();
+
+    // Create exact scenario: bottom sphere at Y=-7.0, top sphere at Y=2.0 with velocity -2.0
+    const bottom_sphere = game_engine.spawn_entity(0.0, -7.0, 0.0, 0.5);
+    const top_sphere = game_engine.spawn_entity(0.0, 2.0, 0.0, 0.5);
+    game_engine.set_entity_velocity(top_sphere, 0.0, -2.0, 0.0);
+
+    std.debug.print("Initial setup: Bottom={d:.2}, Top={d:.2}\n", .{
+        game_engine.get_entity_position_y(bottom_sphere),
+        game_engine.get_entity_position_y(top_sphere)
+    });
+
+    // Run simulation but check boundary violations
+    var frame: u32 = 0;
+    var boundary_violations: u32 = 0;
+
+    while (frame < 60) {
+        game_engine.update(0.016);
+        frame += 1;
+
+        // Check if bottom sphere violates floor boundary (Y < -7.5)
+        const bottom_y = game_engine.get_entity_position_y(bottom_sphere);
+        const expected_floor_y: f32 = -7.5; // world_bounds.y (-8.0) + radius (0.5)
+
+        if (bottom_y < expected_floor_y - 0.01) { // Small tolerance for floating point
+            boundary_violations += 1;
+            if (boundary_violations == 1 or frame % 10 == 0) {
+                std.debug.print("🚨 Frame {d}: Bottom sphere Y={d:.3} violates floor boundary {d:.3}\n",
+                    .{ frame, bottom_y, expected_floor_y });
+            }
+        }
+
+        // Stop early if we detect consistent violations
+        if (boundary_violations >= 10) {
+            std.debug.print("⚠️ Multiple boundary violations detected, stopping early\n", .{});
+            break;
+        }
+    }
+
+    const final_bottom_y = game_engine.get_entity_position_y(bottom_sphere);
+    const final_top_y = game_engine.get_entity_position_y(top_sphere);
+
+    std.debug.print("\nFinal Results:\n", .{});
+    std.debug.print("  Bottom sphere: Y={d:.3} (expected: -7.500)\n", .{final_bottom_y});
+    std.debug.print("  Top sphere: Y={d:.3} (expected: -6.500)\n", .{final_top_y});
+    std.debug.print("  Boundary violations: {d}\n", .{boundary_violations});
+
+    if (boundary_violations > 0) {
+        std.debug.print("✅ HYPOTHESIS CONFIRMED: Entity-entity collision pushes spheres through world boundaries\n", .{});
+        std.debug.print("   Root cause: Physics update order allows collision resolution to override boundary constraints\n", .{});
+    } else {
+        std.debug.print("❌ Hypothesis rejected: No boundary violations detected\n", .{});
+    }
+
+    std.debug.print("🔧 Physics update order test complete\n", .{});
 }

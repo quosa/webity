@@ -2,6 +2,12 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
+if (typeof TextDecoder === 'undefined') {
+    // Node.js environment - use util.TextDecoder for jslog
+    const { TextDecoder } = require('util');
+    (global as any).TextDecoder = TextDecoder;
+}
+
 const expectedExports = [
     'memory', // auto-exported
     'init',
@@ -46,7 +52,20 @@ describe('WASM File Loading', () => {
                 const wasmBuffer = readFileSync(wasmPath);
                 expect(wasmBuffer.length).toBeGreaterThan(0);
 
-                const { instance } = await WebAssembly.instantiate(new Uint8Array(wasmBuffer));
+                let wasmMemory: WebAssembly.Memory | null = null;
+                const { instance } = await WebAssembly.instantiate(new Uint8Array(wasmBuffer), {
+                    env: {
+                        jslog: (ptr: number, len: number) => {
+                            // Use the memory reference captured after instantiation
+                            if (wasmMemory && wasmMemory.buffer) {
+                                const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
+                                const msg = new TextDecoder('utf8').decode(bytes);
+                                console.log(msg);
+                            }
+                        }
+                    }
+                });
+                wasmMemory = instance.exports['memory'] as WebAssembly.Memory;
                 const actualExports = Object.keys(instance.exports);
 
                 // Verify all expected exports are present

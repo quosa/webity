@@ -42,13 +42,29 @@ export interface WasmPhysicsInterface {
     get_entity_velocity_y(_index: number): number;
     get_entity_velocity_z(_index: number): number;
 
+    // Collision shape configuration (optional - may not be present in older WASM)
+    spawn_entity_with_collider?(_x: number, _y: number, _z: number, _collision_shape: number, _extent_x: number, _extent_y: number, _extent_z: number, _mesh_type_id: number): number;
+    set_entity_collision_shape?(_id: number, _shape: number, _extent_x: number, _extent_y: number, _extent_z: number): void;
+    get_entity_collision_shape?(_id: number): number;
+    get_entity_collision_extent_x?(_id: number): number;
+    get_entity_collision_extent_y?(_id: number): number;
+    get_entity_collision_extent_z?(_id: number): number;
+
     // Collision debug functions
     get_collision_checks_performed(): number;
     get_collisions_detected(): number;
     get_kinematic_collision_flag(): boolean;
     get_collision_state(): number;
     debug_get_entity_physics_info(_id: number, _info_type: number): number;
+    debug_get_collision_radius?(_id: number): number;
     get_wasm_version(): number;
+
+    // Collision event logging functions
+    get_collision_event_counter(): number;
+    get_last_collision_entities(): number; // Returns packed u64 (32 bits each entity ID)
+    get_last_collision_pos1(_axis: number): number; // axis: 0=x, 1=y, 2=z
+    get_last_collision_pos2(_axis: number): number; // axis: 0=x, 1=y, 2=z
+    clear_collision_event_counter(): void;
 
     // WASM memory
     memory: WebAssembly.Memory;
@@ -134,10 +150,17 @@ export class WasmPhysicsBridge {
         if (meshIndex === undefined) {
             throw new Error(`❌ Mesh index not set for MeshRenderer in GameObject "${gameObject.name}" - ensure added to Scene after renderer initialized`);
         }
-        // Calculate physics radius from RigidBody colliderSize (use X component for spheres)
-        const physicsRadius = rigidBody ? rigidBody.colliderSize.x : 0.5; // Default to 0.5 for static objects
+        // Get collision shape information from RigidBody
+        const collisionShape = rigidBody ? rigidBody.collisionShape : 0; // Default to SPHERE
+        const extents = rigidBody ? rigidBody.extents : { x: 0.5, y: 0.5, z: 0.5 }; // Default sphere
 
-        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, mass=${mass}, radius=${physicsRadius}, isKinematic=${isKinematic}`);
+        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, mass=${mass}, shape=${collisionShape}, extents=(${extents.x}, ${extents.y}, ${extents.z}), isKinematic=${isKinematic}`);
+
+        // 🔍 RADIUS TRACING: Debug the exact radius value being passed to WASM
+        console.log(`🔍 RADIUS TRACE: Passing radius=${extents.x} to WASM add_entity for "${gameObject.name}" (entity ${wasmEntityId})`);
+
+        // Always use legacy add_entity to preserve colors, mass, scale, etc.
+        // Then set collision shape separately if enhanced collision system is available
         this.wasm.add_entity(
             wasmEntityId,
             transform.position.x,
@@ -153,9 +176,15 @@ export class WasmPhysicsBridge {
             meshIndex,
             0, // material ID (TODO: implement material system)
             mass,
-            physicsRadius,
+            extents.x, // Use extents.x as radius for backward compatibility
             isKinematic
         );
+
+        // If enhanced collision system is available, update the collision shape
+        if (this.wasm.set_entity_collision_shape) {
+            this.wasm.set_entity_collision_shape(wasmEntityId, collisionShape, extents.x, extents.y, extents.z);
+            console.log(`🔧 Set collision shape ${collisionShape} with extents (${extents.x}, ${extents.y}, ${extents.z}) for entity ${wasmEntityId}`);
+        }
 
         // Set initial velocity if RigidBody exists and has velocity
         if (rigidBody && (rigidBody.velocity.x !== 0 || rigidBody.velocity.y !== 0 || rigidBody.velocity.z !== 0)) {
@@ -267,6 +296,84 @@ export class WasmPhysicsBridge {
     public setKinematic(_wasmEntityId: number, kinematic: boolean): void {
         console.log(`🎮 Set entity ${_wasmEntityId} kinematic: ${kinematic}`);
         // TODO: Implement WASM kinematic state update
+    }
+
+    // Set collision shape for entity
+    public setEntityCollisionShape(wasmEntityId: number, shape: number, extentX: number, extentY: number, extentZ: number): void {
+        if (this.wasm && this.wasm.set_entity_collision_shape) {
+            this.wasm.set_entity_collision_shape(wasmEntityId, shape, extentX, extentY, extentZ);
+            console.log(`🔧 Set collision shape ${shape} with extents (${extentX}, ${extentY}, ${extentZ}) for entity ${wasmEntityId}`);
+        } else {
+            console.warn(`❌ setEntityCollisionShape not available in WASM module for entity ${wasmEntityId}`);
+        }
+    }
+
+    // Get collision shape information for entity
+    public getEntityCollisionInfo(wasmEntityId: number): { shape: number; extents: { x: number; y: number; z: number } } | null {
+        if (this.wasm && this.wasm.get_entity_collision_shape && this.wasm.get_entity_collision_extent_x && this.wasm.get_entity_collision_extent_y && this.wasm.get_entity_collision_extent_z) {
+            try {
+                const shape = this.wasm.get_entity_collision_shape(wasmEntityId);
+                const x = this.wasm.get_entity_collision_extent_x(wasmEntityId);
+                const y = this.wasm.get_entity_collision_extent_y(wasmEntityId);
+                const z = this.wasm.get_entity_collision_extent_z(wasmEntityId);
+                return { shape, extents: { x, y, z } };
+            } catch (error) {
+                console.warn(`Failed to get collision info for entity ${wasmEntityId}:`, error);
+                return null;
+            }
+        }
+        return null;
+    }
+
+    // Debug: Get actual collision radius being used by WASM physics
+    public getEntityCollisionRadius(wasmEntityId: number): number | null {
+        if (this.wasm && this.wasm.debug_get_collision_radius) {
+            try {
+                const radius = this.wasm.debug_get_collision_radius(wasmEntityId);
+                return radius >= 0 ? radius : null; // -1.0 indicates entity not found
+            } catch (error) {
+                console.warn(`Failed to get collision radius for entity ${wasmEntityId}:`, error);
+                return null;
+            }
+        }
+        return null;
+    }
+
+    // Collision event logging methods
+    public getCollisionEventCounter(): number {
+        return this.wasm?.get_collision_event_counter() ?? 0;
+    }
+
+    public getLastCollisionData(): { entity1: number, entity2: number, pos1: [number, number, number], pos2: [number, number, number] } | null {
+        if (!this.wasm) return null;
+
+        try {
+            const packedEntities = this.wasm.get_last_collision_entities();
+            // Unpack the u64: high 32 bits = entity1, low 32 bits = entity2
+            const entity1 = (packedEntities >>> 32) & 0xFFFFFFFF;
+            const entity2 = packedEntities & 0xFFFFFFFF;
+
+            const pos1: [number, number, number] = [
+                this.wasm.get_last_collision_pos1(0), // x
+                this.wasm.get_last_collision_pos1(1), // y
+                this.wasm.get_last_collision_pos1(2)  // z
+            ];
+
+            const pos2: [number, number, number] = [
+                this.wasm.get_last_collision_pos2(0), // x
+                this.wasm.get_last_collision_pos2(1), // y
+                this.wasm.get_last_collision_pos2(2)  // z
+            ];
+
+            return { entity1, entity2, pos1, pos2 };
+        } catch (error) {
+            console.warn('Failed to get collision data:', error);
+            return null;
+        }
+    }
+
+    public clearCollisionEventCounter(): void {
+        this.wasm?.clear_collision_event_counter();
     }
 
     // Sync physics simulation results back to GameObjects
