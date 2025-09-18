@@ -16,7 +16,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
-    "test:wasm": "zig test src/core/game_core_test.zig && zig test src/core/game_engine_test.zig && zig test src/core/collision_test.zig",
+    "test:wasm": "./scripts/zig_tests.sh",
     "test:wasm:coverage": "./scripts/zig_coverage.sh",
     "verify": "npm run typecheck && npm run lint && npm test && npm run test:wasm"
   },
