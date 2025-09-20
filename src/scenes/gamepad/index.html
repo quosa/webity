@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Gamepad API Demo - WebGPU Engine</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                background: #222;
+                color: white;
+                font-family: Arial, sans-serif;
+            }
+
+            .container {
+                display: flex;
+                gap: 20px;
+            }
+
+            .left-panel {
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            #canvas {
+                border: 1px solid #555;
+                width: 800px !important;
+                height: 600px !important;
+                flex-shrink: 0; /* Prevent shrinking in flex container */
+            }
+
+            .controls {
+                min-width: 350px;
+                background: #333;
+                padding: 10px;
+                border-radius: 8px;
+            }
+
+            .control-group {
+                margin-bottom: 10px;
+                padding: 8px;
+                background: #444;
+                border-radius: 4px;
+            }
+
+            .control-group:last-child {
+                margin-bottom: 0; /* Remove bottom margin from last group */
+            }
+
+            .control-group h3 {
+                margin: 0 0 6px 0;
+                color: #4CAF50;
+                font-size: 14px;
+            }
+
+            .gamepad-list {
+                background: #2a2a2a;
+                padding: 10px;
+                border-radius: 4px;
+                margin-bottom: 10px;
+                max-height: 150px;
+                overflow-y: auto;
+            }
+
+            .gamepad-item {
+                padding: 8px;
+                margin: 5px 0;
+                background: #555;
+                border-radius: 4px;
+                font-family: monospace;
+                font-size: 12px;
+            }
+
+            .gamepad-item.connected {
+                background: #2d5016;
+                border-left: 4px solid #4CAF50;
+            }
+
+            .button-grid {
+                display: grid;
+                grid-template-columns: repeat(8, 1fr);
+                gap: 3px;
+                margin: 10px 0;
+            }
+
+            .button-indicator {
+                padding: 4px;
+                background: #555;
+                border-radius: 3px;
+                text-align: center;
+                font-size: 10px;
+                min-height: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .button-indicator.pressed {
+                background: #4CAF50;
+                color: #000;
+                font-weight: bold;
+            }
+
+            .axis-display {
+                background: #2a2a2a;
+                padding: 10px;
+                border-radius: 4px;
+                margin: 10px 0;
+            }
+
+            .axis-item {
+                display: flex;
+                justify-content: space-between;
+                margin: 5px 0;
+                font-family: monospace;
+                font-size: 12px;
+            }
+
+            .axis-bar {
+                width: 100px;
+                height: 8px;
+                background: #555;
+                border-radius: 4px;
+                position: relative;
+                margin-left: 10px;
+            }
+
+            .axis-bar::after {
+                content: '';
+                position: absolute;
+                left: 50%;
+                top: 0;
+                width: 2px;
+                height: 100%;
+                background: #888;
+                transform: translateX(-50%);
+            }
+
+            .axis-indicator {
+                height: 100%;
+                background: #4CAF50;
+                border-radius: 4px;
+                transition: width 0.1s ease;
+            }
+
+            .status {
+                background: #2a2a2a;
+                padding: 10px;
+                border-radius: 4px;
+                font-family: monospace;
+                font-size: 12px;
+            }
+
+            .log-output {
+                background: #1a1a1a;
+                padding: 10px;
+                border-radius: 4px;
+                max-height: 200px;
+                overflow-y: auto;
+                font-family: monospace;
+                font-size: 11px;
+                border: 1px solid #555;
+            }
+
+            .log-entry {
+                margin: 2px 0;
+                padding: 2px;
+            }
+
+            .log-entry.button {
+                color: #4CAF50;
+            }
+
+            .log-entry.axis {
+                color: #2196F3;
+            }
+
+            button {
+                padding: 4px 8px;
+                background: #555;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 3px 3px 3px 0;
+                font-size: 12px;
+            }
+
+            button:hover {
+                background: #666;
+            }
+
+            .error {
+                background: #660000;
+                color: #ffaaaa;
+                padding: 15px;
+                border-radius: 4px;
+                margin-top: 20px;
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="left-panel">
+                <canvas id="canvas" width="800" height="600"></canvas>
+
+                <div class="control-group">
+                    <h3>Input Log</h3>
+                    <div class="log-output" id="log-output">
+                        <!-- Button press log will appear here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <h3>Gamepad Connection Status</h3>
+                    <div class="gamepad-list" id="gamepad-list">
+                        <div>No gamepads detected. Connect a controller and press any button.</div>
+                    </div>
+                    <button onclick="refreshGamepads()">Refresh Gamepads</button>
+                    <button onclick="clearLog()">Clear Log</button>
+                </div>
+
+                <div class="control-group" id="button-group" style="display: none;">
+                    <h3>Button States</h3>
+                    <div class="button-grid" id="button-grid">
+                        <!-- Button indicators will be populated here -->
+                    </div>
+                </div>
+
+                <div class="control-group" id="axis-group" style="display: none;">
+                    <h3>Analog Sticks & Triggers</h3>
+                    <div class="axis-display" id="axis-display">
+                        <!-- Axis indicators will be populated here -->
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Status</h3>
+                    <div class="status">
+                        <div>Connected Gamepads: <span id="gamepad-count">0</span></div>
+                        <div>Active Gamepad: <span id="active-gamepad">None</span></div>
+                        <div>Last Input: <span id="last-input">None</span></div>
+                        <div>Input Count: <span id="input-count">0</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="error-display" class="error">
+            <!-- Error messages will be displayed here -->
+        </div>
+
+        <script type="module" src="./scene.ts"></script>
+    </body>
+</html>
