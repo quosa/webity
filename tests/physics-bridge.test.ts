@@ -45,6 +45,7 @@ describe('WasmPhysicsBridge', () => {
                 apply_force: jest.fn(),
                 set_entity_position: jest.fn(),
                 set_entity_velocity: jest.fn(),
+                set_entity_rotation: jest.fn(),
                 get_entity_transforms_offset: jest.fn(() => 0),
                 get_entity_metadata_offset: jest.fn(() => 0),
                 get_entity_metadata_size: jest.fn(() => 16),

@@ -1080,6 +1080,12 @@ pub export fn set_entity_rotation(index: u32, x: f32, y: f32, z: f32) void {
     entity_metadata[index].transform_dirty = true;
 }
 
+pub export fn set_entity_scale(index: u32, x: f32, y: f32, z: f32) void {
+    if (index >= entity_count or !entity_metadata[index].active) return;
+    physics_components[index].scale = .{ .x = x, .y = y, .z = z };
+    entity_metadata[index].transform_dirty = true;
+}
+
 pub export fn get_entity_mesh_type(index: u32) u8 {
     if (index >= entity_count or !entity_metadata[index].active) return 0; // Default to SPHERE
     return @intCast(entity_metadata[index].mesh_index);

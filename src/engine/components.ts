@@ -155,7 +155,6 @@ export class RotatorComponent extends Component {
             const rotY = this.rotationSpeed.y * deltaTime;
             const rotZ = this.rotationSpeed.z * deltaTime;
 
-
             this.gameObject.transform.rotate(rotX, rotY, rotZ);
         }
     }
@@ -248,8 +247,10 @@ export class RigidBody extends Component {
         if (!this.gameObject || !this.physicsBridge || this.wasmEntityId === undefined) return;
 
         const transform = this.gameObject.transform;
-        // Update entity in WASM physics system
+        // Update ALL transform properties in WASM physics system
         this.physicsBridge.updateEntity(this.wasmEntityId, transform.position, this.velocity);
+        this.physicsBridge.updateEntityRotation(this.wasmEntityId, transform.rotation);
+        this.physicsBridge.updateEntityScale(this.wasmEntityId, transform.scale);
     }
 
     // Sync physics simulation results from WASM

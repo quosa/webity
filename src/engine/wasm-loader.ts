@@ -48,7 +48,7 @@ export class WasmLoader {
             // Validate that all required v2 API functions exist
             const requiredFunctions = [
                 'init', 'update', 'add_entity', 'remove_entity', 'get_entity_count',
-                'apply_force', 'set_entity_position', 'set_entity_velocity',
+                'apply_force', 'set_entity_position', 'set_entity_velocity', 'set_entity_rotation',
                 'get_entity_transforms_offset', 'get_entity_metadata_offset', 'get_entity_metadata_size',
                 'get_entity_size', 'get_entity_stride', 'debug_get_entity_mesh_id',
                 'get_entity_position_x', 'get_entity_position_y', 'get_entity_position_z',
@@ -104,6 +104,7 @@ export class WasmLoader {
                 apply_force: wasmExports.apply_force,
                 set_entity_position: wasmExports.set_entity_position,
                 set_entity_velocity: wasmExports.set_entity_velocity,
+                set_entity_rotation: wasmExports.set_entity_rotation,
 
                 // Zero-copy buffer access
                 get_entity_transforms_offset: wasmExports.get_entity_transforms_offset,
