@@ -8,6 +8,7 @@ import { WasmPhysicsBridge } from './wasm-physics-bridge';
 import { MeshRenderer, RigidBody } from './components';
 import { InputManager } from './input';
 import { InputController, CameraController, GameObjectController, OrbitCameraController } from './input-controller';
+import { GamepadInputManager, GamepadConfiguration, GAMEPAD_PRESETS } from './gamepad-input';
 
 export class Scene {
     private entities = new Map<string, GameObject>();
@@ -19,6 +20,7 @@ export class Scene {
 
     // Input Management
     private inputManager?: InputManager;
+    private gamepadInputManager?: GamepadInputManager;
     private activeInputController: InputController | null = null;
     private inputTarget: 'camera' | 'orbit' | GameObject | null = null;
 
@@ -35,9 +37,15 @@ export class Scene {
         // Initialize physics bridge
         this.physicsBridge = new WasmPhysicsBridge();
 
-        // Initialize input manager
+        // Initialize input managers
         this.inputManager = new InputManager();
         this.inputManager.init((key: number, pressed: boolean) => {
+            this.activeInputController?.handleInput(key, pressed);
+        });
+
+        this.gamepadInputManager = new GamepadInputManager();
+        this.gamepadInputManager.init((key: number, pressed: boolean, _analogValue?: number) => {
+            // For now, ignore analog value and just pass to existing input controller
             this.activeInputController?.handleInput(key, pressed);
         });
 
@@ -354,12 +362,30 @@ export class Scene {
         window.dispatchEvent(event);
     }
 
+    // Gamepad configuration methods
+    setGamepadConfiguration(config: GamepadConfiguration): void {
+        this.gamepadInputManager?.setConfiguration(config);
+    }
+
+    getGamepadConfiguration(): GamepadConfiguration | undefined {
+        return this.gamepadInputManager?.getConfiguration();
+    }
+
+    getGamepadPresets(): Record<string, GamepadConfiguration> {
+        return GAMEPAD_PRESETS;
+    }
+
+    getConnectedGamepads() {
+        return this.gamepadInputManager?.getConnectedGamepads() || [];
+    }
+
     // Dispose method to clean up resources
     dispose(): void {
         this.inputManager?.dispose();
+        this.gamepadInputManager?.dispose();
         this.activeInputController = null;
         this.inputTarget = null;
-        console.log('🧹 Scene disposed - input manager cleaned up');
+        console.log('🧹 Scene disposed - input managers cleaned up');
     }
 
     // Utility Methods

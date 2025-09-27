@@ -1239,3 +1239,31 @@ The current polymorphic controller pattern provides an excellent foundation for 
 - **Clean Separation**: Input logic separated from game logic, making complex features manageable
 
 The roadmap maintains the proven architectural patterns while adding the features needed to compete with commercial game engines like Unity and Unreal.
+
+---
+
+## 🚨 CURRENT LIMITATIONS
+
+### **Gamepad Input - No Analog Force Proportionality**
+
+**Issue**: The current gamepad implementation only provides binary on/off input for force application. Whether you move the analog stick 10% or 100%, it applies the same force strength.
+
+**Technical Details**:
+- Gamepad system captures analog values (0.0 to 1.0) correctly
+- Values are only used to determine if a key is "pressed" or "released"
+- Actual analog magnitude gets lost in the virtual key mapping system
+- Force application is always `force.x += this.forceStrength` (constant 2.0)
+
+**Impact**:
+- Less nuanced control compared to modern games
+- No subtle positioning with light stick movements
+- No speed variation based on stick deflection
+
+**Current Workaround**:
+- System works well for digital-style gameplay
+- Sensitivity can be adjusted via configuration
+
+**Future Solution**:
+Would require enhancing the InputController interface to handle analog values and modifying force calculation to use `force.x += analogValue * this.forceStrength` for proportional control.
+
+**Status**: Documented limitation - not blocking current gamepad functionality

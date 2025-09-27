@@ -1,233 +1,51 @@
-// Gamepad API Demo Scene
+// Gamepad API Demo Scene - Enhanced with unified input system
 import { Scene } from '../../engine/scene-system.js';
 import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
 import { GameObject } from '../../engine/gameobject.js';
 import { CollisionShape, MeshRenderer, RigidBody } from '../../engine/components.js';
 import { createGridMesh, createCubeMesh, createSphereMesh } from '../../renderer/mesh-utils.js';
+import { GAMEPAD_PRESETS } from '../../engine/gamepad-input.js';
 
-interface GamepadState {
-    id: string;
-    index: number;
-    connected: boolean;
-    lastSeen: number;
-    buttonStates: boolean[];
-    axisValues: number[];
-}
-
-class GamepadManager {
-    private gamepads: Map<number, GamepadState> = new Map();
+// UI manager for gamepad demo - uses Scene's integrated gamepad system
+class GamepadUIManager {
+    private scene: Scene;
     private inputCount = 0;
     private lastInput = 'None';
     private logEntries: string[] = [];
     private maxLogEntries = 100;
-    private scene: Scene | null = null;
-    private currentLeftStick = { x: 0, y: 0 }; // Track current stick position
+    private currentConfiguration: string = 'physics-object';
 
-    constructor(scene?: Scene) {
-        this.scene = scene || null;
-        // Gamepad connection events
-        window.addEventListener('gamepadconnected', (e) => {
-            this.onGamepadConnected(e as GamepadEvent);
-        });
+    constructor(scene: Scene) {
+        this.scene = scene;
 
-        window.addEventListener('gamepaddisconnected', (e) => {
-            this.onGamepadDisconnected(e as GamepadEvent);
-        });
+        // Set initial gamepad configuration
+        const config = GAMEPAD_PRESETS[this.currentConfiguration];
+        if (config) {
+            this.scene.setGamepadConfiguration(config);
+        }
 
-        // Start polling for gamepad input
-        this.startPolling();
+        // Start UI update loop
+        this.startUIUpdate();
     }
 
-    private onGamepadConnected(event: GamepadEvent) {
-        const gamepad = event.gamepad;
-        console.log('Gamepad connected:', gamepad.id);
-
-        this.gamepads.set(gamepad.index, {
-            id: gamepad.id,
-            index: gamepad.index,
-            connected: true,
-            lastSeen: Date.now(),
-            buttonStates: new Array(gamepad.buttons.length).fill(false),
-            axisValues: new Array(gamepad.axes.length).fill(0)
-        });
-
-        this.addLogEntry(`Connected: ${gamepad.id} (Index: ${gamepad.index})`, 'connection');
-        this.updateUI();
+    private startUIUpdate(): void {
+        // Update UI every 100ms
+        setInterval(() => {
+            this.updateUI();
+        }, 100);
     }
 
-    private onGamepadDisconnected(event: GamepadEvent) {
-        const gamepad = event.gamepad;
-        console.log('Gamepad disconnected:', gamepad.id);
-
-        this.gamepads.delete(gamepad.index);
-        this.addLogEntry(`Disconnected: ${gamepad.id}`, 'connection');
-        this.updateUI();
-    }
-
-    private startPolling() {
-        const poll = () => {
-            this.pollGamepads();
-            requestAnimationFrame(poll);
-        };
-        poll();
-    }
-
-    private pollGamepads() {
-        const gamepads = navigator.getGamepads();
-
-        for (let i = 0; i < gamepads.length; i++) {
-            const gamepad = gamepads[i];
-            if (gamepad && this.gamepads.has(i)) {
-                this.processGamepadInput(gamepad);
-            }
+    public switchConfiguration(configName: string): void {
+        const config = GAMEPAD_PRESETS[configName];
+        if (config) {
+            this.currentConfiguration = configName;
+            this.scene.setGamepadConfiguration(config);
+            this.addLogEntry(`Switched to ${config.name} configuration`, 'system');
+            console.log(`🎮 Switched to gamepad configuration: ${config.name}`);
         }
     }
 
-    private processGamepadInput(gamepad: Gamepad) {
-        const state = this.gamepads.get(gamepad.index);
-        if (!state) return;
-
-        // Check button states
-        for (let i = 0; i < gamepad.buttons.length; i++) {
-            const button = gamepad.buttons[i];
-            if (!button) continue;
-
-            const wasPressed = state.buttonStates[i];
-            const isPressed = button.pressed;
-
-            if (isPressed !== wasPressed) {
-                state.buttonStates[i] = isPressed;
-
-                if (isPressed) {
-                    this.onButtonPressed(gamepad.index, i, button.value);
-                } else {
-                    this.onButtonReleased(gamepad.index, i);
-                }
-            }
-        }
-
-        // Check axis values (with deadzone)
-        const deadzone = 0.1;
-        for (let i = 0; i < gamepad.axes.length; i++) {
-            const axis = gamepad.axes[i];
-            if (axis === undefined) continue;
-
-            const lastValue = state.axisValues[i] || 0;
-            const currentValue = Math.abs(axis) < deadzone ? 0 : axis;
-
-            if (Math.abs(currentValue - lastValue) > 0.01) {
-                state.axisValues[i] = currentValue;
-                this.onAxisChanged(gamepad.index, i, currentValue);
-            }
-        }
-
-        state.lastSeen = Date.now();
-    }
-
-    private onButtonPressed(gamepadIndex: number, buttonIndex: number, value: number) {
-        const buttonName = this.getButtonName(buttonIndex);
-        const message = `Gamepad ${gamepadIndex}: ${buttonName} pressed (${value.toFixed(2)})`;
-
-        this.addLogEntry(message, 'button');
-        this.lastInput = `${buttonName} pressed`;
-        this.inputCount++;
-
-        // Handle bounce buttons (4 = LB/L1, 5 = RB/R1)
-        if ((buttonIndex === 4 || buttonIndex === 5) && this.scene && controlCube) {
-            this.applyBounceImpulse();
-        }
-
-        console.log(message);
-        this.updateUI();
-    }
-
-    private applyBounceImpulse() {
-        if (!this.scene || !controlCube) return;
-
-        const bounceForce = 6.0; // Strong upward impulse
-        const rigidBody = controlCube.getComponent(RigidBody);
-        const entityId = rigidBody?.getWasmEntityId();
-
-        if (entityId === undefined) return;
-
-        // Apply strong upward force for bounce effect
-        this.scene.physicsBridge.applyForce(entityId, { x: 0, y: bounceForce, z: 0 });
-        console.log('🦘 Bounce impulse applied!');
-    }
-
-    private onButtonReleased(gamepadIndex: number, buttonIndex: number) {
-        const buttonName = this.getButtonName(buttonIndex);
-        const message = `Gamepad ${gamepadIndex}: ${buttonName} released`;
-
-        this.addLogEntry(message, 'button');
-        this.lastInput = `${buttonName} released`;
-        this.inputCount++;
-
-        console.log(message);
-        this.updateUI();
-    }
-
-    private onAxisChanged(gamepadIndex: number, axisIndex: number, value: number) {
-        const axisName = this.getAxisName(axisIndex);
-        const message = `Gamepad ${gamepadIndex}: ${axisName} = ${value.toFixed(3)}`;
-
-        // Only log significant axis changes to avoid spam
-        if (Math.abs(value) > 0.5 || value === 0) {
-            this.addLogEntry(message, 'axis');
-            this.lastInput = `${axisName} moved`;
-            this.inputCount++;
-        }
-
-        // Update current stick position for smooth movement
-        if (axisIndex === 0) {
-            this.currentLeftStick.x = value;
-        } else if (axisIndex === 1) {
-            this.currentLeftStick.y = value;
-        }
-
-        this.updateUI();
-    }
-
-    // Call this every frame for smooth movement
-    public updateCubeMovement() {
-        if (!this.scene || !controlCube) return;
-
-        const moveForce = 1.5; // Reduced force (half of 3.0)
-        const rigidBody = controlCube.getComponent(RigidBody);
-        const entityId = rigidBody?.getWasmEntityId();
-
-        if (entityId === undefined) return;
-
-        // Apply forces based on current stick position
-        if (Math.abs(this.currentLeftStick.x) > 0.1 || Math.abs(this.currentLeftStick.y) > 0.1) {
-            this.scene.physicsBridge.applyForce(entityId, {
-                x: this.currentLeftStick.x * moveForce,
-                y: 0,
-                z: -this.currentLeftStick.y * moveForce
-            });
-        }
-    }
-
-    private getButtonName(index: number): string {
-        const buttonNames = [
-            'A/Cross', 'B/Circle', 'X/Square', 'Y/Triangle',
-            'LB/L1', 'RB/R1', 'LT/L2', 'RT/R2',
-            'Select/Share', 'Start/Options', 'LS', 'RS',
-            'D-Up', 'D-Down', 'D-Left', 'D-Right',
-            'Home/PS', 'Capture/Touchpad'
-        ];
-        return buttonNames[index] || `Button ${index}`;
-    }
-
-    private getAxisName(index: number): string {
-        const axisNames = [
-            'Left Stick X', 'Left Stick Y',
-            'Right Stick X', 'Right Stick Y'
-        ];
-        return axisNames[index] || `Axis ${index}`;
-    }
-
-    private addLogEntry(message: string, _type: string) {
+    public addLogEntry(message: string, _type: string): void {
         const timestamp = new Date().toLocaleTimeString();
         this.logEntries.unshift(`[${timestamp}] ${message}`);
 
@@ -236,9 +54,11 @@ class GamepadManager {
         }
 
         this.updateLogDisplay();
+        this.inputCount++;
+        this.lastInput = message;
     }
 
-    private updateLogDisplay() {
+    private updateLogDisplay(): void {
         const logOutput = document.getElementById('log-output');
         if (logOutput) {
             logOutput.innerHTML = this.logEntries
@@ -248,27 +68,29 @@ class GamepadManager {
         }
     }
 
-    private updateUI() {
+    private updateUI(): void {
         this.updateGamepadList();
         this.updateButtonDisplay();
         this.updateAxisDisplay();
         this.updateStatus();
     }
 
-    private updateGamepadList() {
+    private updateGamepadList(): void {
         const gamepadList = document.getElementById('gamepad-list');
         if (!gamepadList) return;
 
-        if (this.gamepads.size === 0) {
+        const connectedGamepads = this.scene.getConnectedGamepads();
+
+        if (connectedGamepads.length === 0) {
             gamepadList.innerHTML = '<div>No gamepads detected. Connect a controller and press any button.</div>';
             return;
         }
 
-        const html = Array.from(this.gamepads.values())
-            .map(state => `
+        const html = connectedGamepads
+            .map(gamepad => `
                 <div class="gamepad-item connected">
-                    <strong>Index ${state.index}:</strong> ${state.id}
-                    <br>Buttons: ${state.buttonStates.length} | Axes: ${state.axisValues.length}
+                    <strong>Index ${gamepad.index}:</strong> ${gamepad.id}
+                    <br>Connected and active
                 </div>
             `)
             .join('');
@@ -276,24 +98,28 @@ class GamepadManager {
         gamepadList.innerHTML = html;
     }
 
-    private updateButtonDisplay() {
+    private updateButtonDisplay(): void {
         const buttonGroup = document.getElementById('button-group');
         const buttonGrid = document.getElementById('button-grid');
 
         if (!buttonGroup || !buttonGrid) return;
 
-        const activeGamepad = this.getActiveGamepad();
-        if (!activeGamepad) {
+        const connectedGamepads = this.scene.getConnectedGamepads();
+        if (connectedGamepads.length === 0) {
             buttonGroup.style.display = 'none';
             return;
         }
 
         buttonGroup.style.display = 'block';
 
-        const gamepad = navigator.getGamepads()[activeGamepad.index];
-        if (!gamepad) return;
+        // Get the current gamepad from the browser API
+        const gamepads = navigator.getGamepads();
+        const firstGamepad = connectedGamepads[0];
+        if (!firstGamepad) return;
+        const activeGamepad = gamepads[firstGamepad.index];
+        if (!activeGamepad) return;
 
-        const html = gamepad.buttons
+        const html = activeGamepad.buttons
             .map((button, index) => {
                 const buttonName = this.getButtonName(index);
                 const pressedClass = button.pressed ? 'pressed' : '';
@@ -308,24 +134,28 @@ class GamepadManager {
         buttonGrid.innerHTML = html;
     }
 
-    private updateAxisDisplay() {
+    private updateAxisDisplay(): void {
         const axisGroup = document.getElementById('axis-group');
         const axisDisplay = document.getElementById('axis-display');
 
         if (!axisGroup || !axisDisplay) return;
 
-        const activeGamepad = this.getActiveGamepad();
-        if (!activeGamepad) {
+        const connectedGamepads = this.scene.getConnectedGamepads();
+        if (connectedGamepads.length === 0) {
             axisGroup.style.display = 'none';
             return;
         }
 
         axisGroup.style.display = 'block';
 
-        const gamepad = navigator.getGamepads()[activeGamepad.index];
-        if (!gamepad) return;
+        // Get the current gamepad from the browser API
+        const gamepads = navigator.getGamepads();
+        const firstGamepad = connectedGamepads[0];
+        if (!firstGamepad) return;
+        const activeGamepad = gamepads[firstGamepad.index];
+        if (!activeGamepad) return;
 
-        const html = gamepad.axes
+        const html = activeGamepad.axes
             .map((axis, index) => {
                 const axisName = this.getAxisName(index);
                 const value = axis.toFixed(3);
@@ -345,56 +175,54 @@ class GamepadManager {
         axisDisplay.innerHTML = html;
     }
 
-    private updateStatus() {
+    private updateStatus(): void {
         const gamepadCount = document.getElementById('gamepad-count');
         const activeGamepad = document.getElementById('active-gamepad');
         const lastInput = document.getElementById('last-input');
         const inputCount = document.getElementById('input-count');
 
-        if (gamepadCount) gamepadCount.textContent = this.gamepads.size.toString();
+        const connectedGamepads = this.scene.getConnectedGamepads();
+
+        if (gamepadCount) gamepadCount.textContent = connectedGamepads.length.toString();
         if (activeGamepad) {
-            const active = this.getActiveGamepad();
-            activeGamepad.textContent = active ? `Index ${active.index}` : 'None';
+            const firstGamepad = connectedGamepads[0];
+            activeGamepad.textContent = firstGamepad ? `Index ${firstGamepad.index}` : 'None';
         }
         if (lastInput) lastInput.textContent = this.lastInput;
         if (inputCount) inputCount.textContent = this.inputCount.toString();
     }
 
-    private getActiveGamepad(): GamepadState | null {
-        // Return the first connected gamepad, or null if none
-        return Array.from(this.gamepads.values())[0] || null;
+    private getButtonName(index: number): string {
+        const buttonNames = [
+            'A/Cross', 'B/Circle', 'X/Square', 'Y/Triangle',
+            'LB/L1', 'RB/R1', 'LT/L2', 'RT/R2',
+            'Select/Share', 'Start/Options', 'LS', 'RS',
+            'D-Up', 'D-Down', 'D-Left', 'D-Right',
+            'Home/PS', 'Capture/Touchpad'
+        ];
+        return buttonNames[index] || `Button ${index}`;
     }
 
-    public refreshGamepads() {
-        console.log('Refreshing gamepad list...');
-        const gamepads = navigator.getGamepads();
-
-        // Clear existing gamepads
-        this.gamepads.clear();
-
-        // Re-detect connected gamepads
-        for (let i = 0; i < gamepads.length; i++) {
-            const gamepad = gamepads[i];
-            if (gamepad) {
-                this.gamepads.set(gamepad.index, {
-                    id: gamepad.id,
-                    index: gamepad.index,
-                    connected: true,
-                    lastSeen: Date.now(),
-                    buttonStates: new Array(gamepad.buttons.length).fill(false),
-                    axisValues: new Array(gamepad.axes.length).fill(0)
-                });
-            }
-        }
-
-        this.addLogEntry(`Refreshed: Found ${this.gamepads.size} gamepad(s)`, 'system');
-        this.updateUI();
+    private getAxisName(index: number): string {
+        const axisNames = [
+            'Left Stick X', 'Left Stick Y', 'Left Stick Z',
+            'Right Stick X', 'Right Stick Y', 'Right Stick Z',
+        ];
+        return axisNames[index] || `Axis ${index}`;
     }
 
-    public clearLog() {
+    public clearLog(): void {
         this.logEntries = [];
         this.updateLogDisplay();
         console.log('Log cleared');
+    }
+
+    public getAvailableConfigurations(): string[] {
+        return Object.keys(GAMEPAD_PRESETS);
+    }
+
+    public getCurrentConfiguration(): string {
+        return this.currentConfiguration;
     }
 }
 
@@ -535,7 +363,6 @@ async function main() {
             throw new Error('Canvas element not found');
         }
 
-        // Initialize renderer first
         const renderer = new WebGPURendererV2();
         await renderer.init(canvas);
 
@@ -552,18 +379,30 @@ async function main() {
         // Create the scene content
         await createGamepadScene(scene);
 
+        // Set initial input target to control the cube
+        scene.setInputTarget(controlCube);
+
         // Start the scene
         scene.start();
 
-        // Initialize gamepad manager with scene reference
-        const gamepadManager = new GamepadManager(scene);
+        // Initialize gamepad UI manager
+        const gamepadUIManager = new GamepadUIManager(scene);
 
         // Make functions available globally for button clicks
-        (window as any).refreshGamepads = () => gamepadManager.refreshGamepads();
-        (window as any).clearLog = () => gamepadManager.clearLog();
+        (window as any).refreshGamepads = () => {
+            console.log('🔄 Refresh gamepads clicked');
+            // The scene's gamepad manager handles this automatically
+        };
+        (window as any).clearLog = () => gamepadUIManager.clearLog();
+
+        // Switch gamepad configuration
+        (window as any).switchGamepadConfig = (configName: string) => {
+            gamepadUIManager.switchConfiguration(configName);
+        };
 
         // Export scene to window for debugging
         (window as any).gamepadScene = scene;
+        (window as any).gamepadUIManager = gamepadUIManager;
 
         console.log('✅ Gamepad demo scene initialized successfully');
 
@@ -573,9 +412,6 @@ async function main() {
             const rawDeltaTime = (currentTime - lastTime) / 1000;
             const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
             lastTime = currentTime;
-
-            // Update gamepad movement every frame for smooth control
-            gamepadManager.updateCubeMovement();
 
             // Update scene - this renders the frame
             scene.update(deltaTime);
@@ -587,6 +423,7 @@ async function main() {
         requestAnimationFrame(gameLoop);
 
         console.log('🎮 Connect a gamepad and press any button to see it appear in the list');
+        console.log('🎮 Use left stick to move the cube, LB/RB to bounce!');
 
     } catch (error) {
         console.error('Failed to initialize gamepad demo:', error);

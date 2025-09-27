@@ -3,7 +3,7 @@
 
 import { Scene } from '../../engine/scene-system.js';
 import { GameObject } from '../../engine/gameobject.js';
-import { MeshRenderer, RigidBody } from '../../engine/components.js';
+import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components.js';
 import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
 import { createCubeMesh, createSphereMesh, createGridMesh } from '../../renderer/mesh-utils.js';
 
@@ -33,7 +33,7 @@ function addGameObjectsToScene(scene: Scene): void {
     const playerMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
     playerBall.addComponent(playerMeshRenderer);
 
-    const playerRigidBody = new RigidBody(1.0, false); // Dynamic physics
+    const playerRigidBody = new RigidBody(1.0, false, CollisionShape.SPHERE, { x: 1.0, y: 1.0, z: 1.0 }); // Dynamic physics with 1.0 radius
     playerBall.addComponent(playerRigidBody);
 
     scene.addGameObject(playerBall);
@@ -47,7 +47,7 @@ function addGameObjectsToScene(scene: Scene): void {
     const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
     controlCube.addComponent(cubeMeshRenderer);
 
-    const cubeRigidBody = new RigidBody(1.5, false); // Heavier than ball
+    const cubeRigidBody = new RigidBody(1.5, false, CollisionShape.BOX, { x: 0.5, y: 0.5, z: 0.5 }); // Heavier than ball, BOX collision
     controlCube.addComponent(cubeRigidBody);
 
     scene.addGameObject(controlCube);
@@ -186,7 +186,7 @@ function addGameObjectsToScene(scene: Scene): void {
     });
     randomBall.addComponent(meshRenderer);
 
-    const rigidBody = new RigidBody(0.5 + Math.random(), false);
+    const rigidBody = new RigidBody(0.5 + Math.random(), false, CollisionShape.SPHERE, { x: 1.0, y: 1.0, z: 1.0 }); // Sphere collision with 1.0 radius
     randomBall.addComponent(rigidBody);
 
     scene.addGameObject(randomBall);

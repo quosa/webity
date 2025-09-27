@@ -35,13 +35,21 @@ export class CameraController implements InputController {
     update(deltaTime: number): void {
         const movement = { forward: 0, right: 0, up: 0 };
 
-        // WASD camera movement
+        // WASD keyboard movement
         if (this.currentInputState.has(87)) movement.forward += 1;  // W - forward
         if (this.currentInputState.has(83)) movement.forward -= 1;  // S - backward
         if (this.currentInputState.has(68)) movement.right += 1;    // D - right
         if (this.currentInputState.has(65)) movement.right -= 1;    // A - left
         if (this.currentInputState.has(32)) movement.up += 1;       // Space - up
         if (this.currentInputState.has(45)) movement.up -= 1;       // - - down
+
+        // Gamepad virtual keys (from GamepadInputManager)
+        if (this.currentInputState.has(1001)) movement.forward += 1;  // camera-forward
+        if (this.currentInputState.has(1002)) movement.forward -= 1;  // camera-back
+        if (this.currentInputState.has(1003)) movement.right -= 1;    // camera-left
+        if (this.currentInputState.has(1004)) movement.right += 1;    // camera-right
+        if (this.currentInputState.has(1005)) movement.up += 1;       // camera-up
+        if (this.currentInputState.has(1006)) movement.up -= 1;       // camera-down
 
         if (movement.forward || movement.right || movement.up) {
             const speed = this.moveSpeed * deltaTime;
@@ -51,6 +59,9 @@ export class CameraController implements InputController {
                 movement.up * speed
             );
         }
+
+        // TODO: Add camera rotation support for camera-look-yaw (1007) and camera-look-pitch (1008)
+        // This would require extending the Camera class with rotation methods
     }
 
     setMoveSpeed(speed: number): void {
@@ -70,10 +81,10 @@ export class CameraController implements InputController {
  */
 export class GameObjectController implements InputController {
     private gameObject: GameObject;
-    private forceStrength: number = 4.0;
+    private forceStrength: number = 1.0;
     private currentInputState = new Set<number>();
 
-    constructor(gameObject: GameObject, forceStrength: number = 4.0) {
+    constructor(gameObject: GameObject, forceStrength: number = 2.0) {
         this.gameObject = gameObject;
         this.forceStrength = forceStrength;
     }
@@ -95,13 +106,21 @@ export class GameObjectController implements InputController {
 
         const force = { x: 0, y: 0, z: 0 };
 
-        // WASD force application
+        // WASD keyboard force application
         if (this.currentInputState.has(87)) force.z -= this.forceStrength;  // W - forward
         if (this.currentInputState.has(83)) force.z += this.forceStrength;  // S - backward
         if (this.currentInputState.has(68)) force.x += this.forceStrength;  // D - right
         if (this.currentInputState.has(65)) force.x -= this.forceStrength;  // A - left
         if (this.currentInputState.has(32)) force.y += this.forceStrength;  // Space - up
         if (this.currentInputState.has(45)) force.y -= this.forceStrength;  // - - down
+
+        // Gamepad virtual keys for forces
+        if (this.currentInputState.has(1011)) force.z -= this.forceStrength;  // force-forward
+        if (this.currentInputState.has(1012)) force.z += this.forceStrength;  // force-back
+        if (this.currentInputState.has(1013)) force.x -= this.forceStrength;  // force-left
+        if (this.currentInputState.has(1014)) force.x += this.forceStrength;  // force-right
+        if (this.currentInputState.has(1015)) force.y += this.forceStrength;  // force-up
+        if (this.currentInputState.has(1016)) force.y -= this.forceStrength;  // force-down
 
         if (force.x || force.y || force.z) {
             // Apply force to WASM physics entity via the physics bridge
@@ -111,6 +130,9 @@ export class GameObjectController implements InputController {
                 scene.physicsBridge.applyForce(entityId, force);
             }
         }
+
+        // TODO: Add rotation support for rotation-yaw (1031), rotation-pitch (1032), rotation-roll (1033)
+        // This would require adding rotation methods to the physics bridge
     }
 
     setForceStrength(strength: number): void {
@@ -160,7 +182,7 @@ export class OrbitCameraController implements InputController {
         let pitch = 0;
         let zoom = 0;
 
-        // WASD for orbit controls
+        // WASD keyboard for orbit controls
         if (this.currentInputState.has(65)) yaw -= 1;    // A - orbit left
         if (this.currentInputState.has(68)) yaw += 1;    // D - orbit right
         if (this.currentInputState.has(87)) pitch += 1;  // W - orbit up
@@ -169,6 +191,12 @@ export class OrbitCameraController implements InputController {
         // Space/- for zoom
         if (this.currentInputState.has(32)) zoom -= 1;   // Space - zoom in
         if (this.currentInputState.has(45)) zoom += 1;   // - - zoom out
+
+        // Gamepad virtual keys for orbit controls
+        if (this.currentInputState.has(1021)) yaw += 1;    // orbit-yaw (positive = right)
+        if (this.currentInputState.has(1022)) pitch += 1;  // orbit-pitch (positive = up)
+        if (this.currentInputState.has(1023)) zoom -= 1;   // orbit-zoom-in
+        if (this.currentInputState.has(1024)) zoom += 1;   // orbit-zoom-out
 
         if (yaw || pitch) {
             const rotationSpeed = this.orbitSpeed * deltaTime;
