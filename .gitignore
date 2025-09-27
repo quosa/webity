@@ -24,6 +24,7 @@ dist/
 build/
 out/
 *.tsbuildinfo
+*.dSYM/
 
 # TypeScript
 *.d.ts.map
