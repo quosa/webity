@@ -736,103 +736,56 @@ pub fn resolveBoxCollision(pos1: *Vec3, vel1: *Vec3, _: Vec3, mass1: f32, is_kin
     const normal = collision_info.contact_normal;
     const penetration = collision_info.penetration_depth;
 
-    // 🎯 ENHANCED FLOOR CONSTRAINT: Initialize kinematic override flags
-    // These will be used throughout the function for consistent kinematic behavior
-    var entity1_kinematic_override = is_kinematic1;
-    var entity2_kinematic_override = is_kinematic2;
+    // 🎯 SIMPLIFIED STACKING: Remove aggressive floor constraint logic
+    // The original floor constraint was too aggressive and prevented proper stacking
 
-    // Separate overlapping boxes with floor constraint awareness
+    // Separate overlapping boxes with proper kinematic handling
     if (penetration > 0.0) {
         if (is_kinematic1 and is_kinematic2) {
             // Both kinematic - no separation needed
             return;
         } else if (is_kinematic1) {
-            // Only box1 is kinematic - move box2 away completely with larger buffer
-            const separation = penetration + 0.05; // Increased buffer
+            // Only box1 is kinematic - move box2 away completely
+            const separation = penetration + 0.01; // Small buffer
             pos2.* = vec3_add(pos2.*, vec3_scale(normal, separation));
         } else if (is_kinematic2) {
-            // Only box2 is kinematic - move box1 away completely with larger buffer
-            const separation = penetration + 0.05; // Increased buffer
-            pos1.* = vec3_subtract(pos1.*, vec3_scale(normal, separation));
+            // Only box2 is kinematic - move box1 away from box2
+            // Move box1 in direction of the normal (which points away from box2)
+            const separation = penetration + 0.01; // Small buffer
+            pos1.* = vec3_add(pos1.*, vec3_scale(normal, separation));
         } else {
-            // Both dynamic - CONSTRAINT-AWARE SEPARATION
-            // 🏗️ FLOOR CONSTRAINT CHECK: Don't push entities below world bounds
-            const world_floor = -8.0; // World bounds floor Y coordinate
-            const floor_threshold = 0.1; // Small tolerance for "on floor" detection
-            const box_half_height = 1.0; // Box half-height for bottom surface calculation
-
-            // Check if entity1's bottom surface is on or very close to the floor
-            const entity1_bottom = pos1.y - box_half_height;
-            const entity1_on_floor = (entity1_bottom - world_floor) <= floor_threshold;
-
-            // Check if entity2's bottom surface is on or very close to the floor
-            const entity2_bottom = pos2.y - box_half_height;
-            const entity2_on_floor = (entity2_bottom - world_floor) <= floor_threshold;
-
-            // 🎯 ENHANCED FLOOR CONSTRAINT: Treat floor-constrained entities as kinematic
-            // This prevents them from being affected by both position AND velocity corrections
-
-            if (entity1_on_floor and !is_kinematic1) {
-                entity1_kinematic_override = true;
-                // Calculate proper stacking position for entity2
-                // Entity2 should be positioned so its bottom surface touches entity1's top surface
-                const entity1_top_y = pos1.y + box_half_height; // Top of entity1
-                const proper_entity2_y = entity1_top_y + box_half_height; // Bottom of entity2 should touch top of entity1
-                pos2.y = proper_entity2_y;
-                // Zero out entity1's velocity to prevent drift
-                vel1.x = 0.0;
-                vel1.y = 0.0;
-                vel1.z = 0.0;
-                // Also zero entity2's Y velocity to prevent bouncing
-                vel2.y = 0.0;
-                var log_buffer: [256]u8 = undefined;
-                const log_msg = std.fmt.bufPrint(&log_buffer, "🏗️ FLOOR CONSTRAINT: Entity1 kinematic, Entity2 stacked at Y={d:.3}. Penetration={d:.3}\n", .{ proper_entity2_y, penetration }) catch "FLOOR CONSTRAINT: Entity1 kinematic stacked\n";
-                log(log_msg.ptr, log_msg.len);
-            } else if (entity2_on_floor and !is_kinematic2) {
-                entity2_kinematic_override = true;
-                // Calculate proper stacking position for entity1
-                const entity2_top_y = pos2.y + box_half_height; // Top of entity2
-                const proper_entity1_y = entity2_top_y + box_half_height; // Bottom of entity1 should touch top of entity2
-                pos1.y = proper_entity1_y;
-                // Zero out entity2's velocity to prevent drift
-                vel2.x = 0.0;
-                vel2.y = 0.0;
-                vel2.z = 0.0;
-                // Also zero entity1's Y velocity to prevent bouncing
-                vel1.y = 0.0;
-                var log_buffer: [256]u8 = undefined;
-                const log_msg = std.fmt.bufPrint(&log_buffer, "🏗️ FLOOR CONSTRAINT: Entity2 kinematic, Entity1 stacked at Y={d:.3}. Penetration={d:.3}\n", .{ proper_entity1_y, penetration }) catch "FLOOR CONSTRAINT: Entity2 kinematic stacked\n";
-                log(log_msg.ptr, log_msg.len);
-            } else {
-                // Normal case - both entities can move freely
-                const normal_separation_distance = penetration * 0.5 + 0.02;
-                pos1.* = vec3_subtract(pos1.*, vec3_scale(normal, normal_separation_distance));
-                pos2.* = vec3_add(pos2.*, vec3_scale(normal, normal_separation_distance));
-                var log_buffer: [256]u8 = undefined;
-                const log_msg = std.fmt.bufPrint(&log_buffer, "🔍 NORMAL SEPARATION: Both entities moved freely. Penetration={d:.3}\n", .{penetration}) catch "NORMAL SEPARATION: Both moved\n";
-                log(log_msg.ptr, log_msg.len);
-            }
-
-            // Use override kinematic flags for velocity resolution (instead of original parameters)
+            // Both dynamic - split separation equally
+            const separation_distance = (penetration + 0.01) * 0.5;
+            pos1.* = vec3_subtract(pos1.*, vec3_scale(normal, separation_distance));
+            pos2.* = vec3_add(pos2.*, vec3_scale(normal, separation_distance));
         }
     }
 
     // Calculate relative velocity in the direction of the collision normal
-    const rel_vel = vec3_subtract(vel1.*, vel2.*); // vel1 - vel2 for approach velocity
+    // Use standard physics convention: vel2 - vel1 (relative velocity of object 2 w.r.t object 1)
+    const rel_vel = vec3_subtract(vel2.*, vel1.*); // vel2 - vel1 for relative velocity
     const vel_along_normal = dot(rel_vel, normal);
 
-    // Don't resolve if objects are separating (moving away from each other)
+    // Debug: Log velocity resolution details
+    const debug_enabled = false; // Set to true for debugging
+    if (debug_enabled) {
+        var debug_buffer: [256]u8 = undefined;
+        const debug_msg = std.fmt.bufPrint(&debug_buffer, "🔧 VEL RESOLVE: rel_vel=({d:.2},{d:.2}), normal=({d:.2},{d:.2}), vel_along_normal={d:.2}\n", .{ rel_vel.x, rel_vel.y, normal.x, normal.y, vel_along_normal }) catch "VEL RESOLVE: debug error\n";
+        log(debug_msg.ptr, debug_msg.len);
+    }
+
+    // Don't resolve if objects are separating
     if (vel_along_normal > 0) return;
 
     // Calculate impulse magnitude (treat kinematic bodies as infinite mass)
     var impulse_magnitude: f32 = 0.0;
-    if (entity1_kinematic_override and entity2_kinematic_override) {
+    if (is_kinematic1 and is_kinematic2) {
         // Both kinematic - no velocity change needed
         return;
     } else {
         // Calculate effective inverse masses (0 for kinematic = infinite mass)
-        const inv_mass1 = if (entity1_kinematic_override) 0.0 else 1.0 / mass1;
-        const inv_mass2 = if (entity2_kinematic_override) 0.0 else 1.0 / mass2;
+        const inv_mass1 = if (is_kinematic1) 0.0 else 1.0 / mass1;
+        const inv_mass2 = if (is_kinematic2) 0.0 else 1.0 / mass2;
         const total_inv_mass = inv_mass1 + inv_mass2;
 
         // Avoid division by zero
@@ -847,14 +800,86 @@ pub fn resolveBoxCollision(pos1: *Vec3, vel1: *Vec3, _: Vec3, mass1: f32, is_kin
     const impulse = vec3_scale(normal, impulse_magnitude);
 
     // Apply velocity changes (kinematic bodies don't change velocity)
-    if (!entity1_kinematic_override) {
+    if (!is_kinematic1) {
         const inv_mass1 = 1.0 / mass1;
-        vel1.* = vec3_add(vel1.*, vec3_scale(impulse, inv_mass1)); // Fixed: add instead of subtract
+        vel1.* = vec3_subtract(vel1.*, vec3_scale(impulse, inv_mass1));
     }
 
-    if (!entity2_kinematic_override) {
+    if (!is_kinematic2) {
         const inv_mass2 = 1.0 / mass2;
-        vel2.* = vec3_subtract(vel2.*, vec3_scale(impulse, inv_mass2)); // Fixed: subtract instead of add
+        vel2.* = vec3_add(vel2.*, vec3_scale(impulse, inv_mass2));
+    }
+}
+
+/// Resolve sphere-box collision with proper physics
+fn resolveSphereBoxCollision(sphere_pos: *Vec3, sphere_vel: *Vec3, _: f32, sphere_mass: f32, sphere_kinematic: bool, box_pos: *Vec3, box_vel: *Vec3, _: Vec3, box_mass: f32, box_kinematic: bool, restitution: f32, collision_info: CollisionInfo) void {
+    const normal = collision_info.contact_normal;
+    const penetration = collision_info.penetration_depth;
+
+    // Position separation: move sphere away from box
+    if (penetration > 0.0) {
+        if (sphere_kinematic and box_kinematic) {
+            return;
+        } else if (sphere_kinematic) {
+            // Only sphere is kinematic - move box away from sphere
+            // Normal points from box toward sphere, so SUBTRACT to move box away
+            const separation = penetration + 0.01;
+            box_pos.* = vec3_subtract(box_pos.*, vec3_scale(normal, separation));
+        } else if (box_kinematic) {
+            // Only box is kinematic - move sphere away from box
+            // Normal points from box toward sphere, so ADD to move sphere away
+            const separation = penetration + 0.05; // Increased separation to prevent re-collision
+            sphere_pos.* = vec3_add(sphere_pos.*, vec3_scale(normal, separation));
+        } else {
+            // Both dynamic - split separation
+            const separation_distance = (penetration + 0.05) * 0.5; // Increased separation
+            sphere_pos.* = vec3_add(sphere_pos.*, vec3_scale(normal, separation_distance));
+            box_pos.* = vec3_subtract(box_pos.*, vec3_scale(normal, separation_distance));
+        }
+    }
+
+    // Velocity resolution using proper sphere-box physics
+    const rel_vel = vec3_subtract(sphere_vel.*, box_vel.*);
+    const vel_along_normal = dot(rel_vel, normal);
+
+    // Don't resolve if objects are separating or in resting contact
+    if (vel_along_normal > -0.2) return; // Stronger threshold for sphere-box resting contact
+
+    // Calculate impulse magnitude
+    var impulse_magnitude: f32 = 0.0;
+    if (sphere_kinematic and box_kinematic) {
+        return;
+    } else {
+        const inv_mass_sphere = if (sphere_kinematic) 0.0 else 1.0 / sphere_mass;
+        const inv_mass_box = if (box_kinematic) 0.0 else 1.0 / box_mass;
+        const total_inv_mass = inv_mass_sphere + inv_mass_box;
+
+        if (total_inv_mass > 0.0) {
+            impulse_magnitude = -(1.0 + restitution) * vel_along_normal / total_inv_mass;
+        } else {
+            return;
+        }
+    }
+
+    // Apply impulse with proper sphere physics consideration
+    const impulse = vec3_scale(normal, impulse_magnitude);
+
+    if (!sphere_kinematic) {
+        const inv_mass_sphere = 1.0 / sphere_mass;
+        sphere_vel.* = vec3_add(sphere_vel.*, vec3_scale(impulse, inv_mass_sphere));
+
+        // Apply slight damping to help sphere settle on small bounces
+        const velocity_magnitude = magnitude(sphere_vel.*);
+        if (velocity_magnitude < 1.0) { // Stronger damping for very small velocities
+            sphere_vel.* = vec3_scale(sphere_vel.*, 0.85); // 15% velocity reduction
+        } else if (velocity_magnitude < 3.0) { // Moderate damping for small velocities
+            sphere_vel.* = vec3_scale(sphere_vel.*, 0.92); // 8% velocity reduction
+        }
+    }
+
+    if (!box_kinematic) {
+        const inv_mass_box = 1.0 / box_mass;
+        box_vel.* = vec3_subtract(box_vel.*, vec3_scale(impulse, inv_mass_box));
     }
 }
 
@@ -867,15 +892,17 @@ pub fn resolveCollision(pos1: *Vec3, vel1: *Vec3, shape1: CollisionShape, extent
                 resolveSphereCollisionWithKinematic(pos1, vel1, mass1, extents1.x, is_kinematic1, pos2, vel2, mass2, extents2.x, is_kinematic2, restitution);
             },
             .BOX => {
-                // Sphere-box collision: use box collision resolution with collision info
-                resolveBoxCollision(pos1, vel1, Vec3{ .x = extents1.x, .y = extents1.x, .z = extents1.x }, mass1, is_kinematic1, pos2, vel2, extents2, mass2, is_kinematic2, restitution, collision_info);
+                // Sphere-box collision: use specialized sphere-box resolver
+                resolveSphereBoxCollision(pos1, vel1, extents1.x, mass1, is_kinematic1, pos2, vel2, extents2, mass2, is_kinematic2, restitution, collision_info);
             },
             .PLANE => {}, // Future implementation
         },
         .BOX => switch (shape2) {
             .SPHERE => {
-                // Box-sphere collision: use box collision resolution with collision info
-                resolveBoxCollision(pos1, vel1, extents1, mass1, is_kinematic1, pos2, vel2, Vec3{ .x = extents2.x, .y = extents2.x, .z = extents2.x }, mass2, is_kinematic2, restitution, collision_info);
+                // Box-sphere collision: swap order and negate normal for sphere-box resolver
+                var flipped_collision_info = collision_info;
+                flipped_collision_info.contact_normal = vec3_negate(collision_info.contact_normal);
+                resolveSphereBoxCollision(pos2, vel2, extents2.x, mass2, is_kinematic2, pos1, vel1, extents1, mass1, is_kinematic1, restitution, flipped_collision_info);
             },
             .BOX => {
                 // Box-box collision: use box collision resolution

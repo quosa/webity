@@ -153,7 +153,9 @@ describe('RigidBody Component', () => {
 
         test('should sync to WASM when bridge is available', () => {
             const mockBridge = {
-                updateEntity: jest.fn()
+                updateEntity: jest.fn(),
+                updateEntityRotation: jest.fn(),
+                updateEntityScale: jest.fn()
             };
             rigidBody.setWasmEntityId(456);
             rigidBody.setPhysicsBridge(mockBridge);

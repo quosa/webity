@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Stack Test - WebGPU Physics</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                background: #1a1a1a;
+                color: white;
+                font-family: 'Courier New', monospace;
+            }
+            canvas {
+                border: 1px solid #444;
+                background: #000;
+                display: block;
+                margin: 20px auto;
+            }
+            .controls {
+                max-width: 800px;
+                margin: 0 auto;
+                text-align: center;
+            }
+            .info {
+                background: #2a2a2a;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+            }
+            button {
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                margin: 5px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            button:hover {
+                background: #45a049;
+            }
+            button:disabled {
+                background: #666;
+                cursor: not-allowed;
+            }
+
+            .play-pause-btn {
+                background: rgba(255, 255, 255, 0.1);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 10px 15px;
+                margin: 5px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                font-family: inherit;
+                transition: all 0.2s ease;
+            }
+
+            .play-pause-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+            }
+
+            .engine-status {
+                display: inline-block;
+                margin: 0 10px;
+                padding: 5px 10px;
+                background: rgba(0, 255, 0, 0.2);
+                border: 1px solid rgba(0, 255, 0, 0.5);
+                border-radius: 3px;
+                font-size: 12px;
+            }
+
+            .debug-status {
+                display: inline-block;
+                margin: 0 10px;
+                padding: 5px 10px;
+                background: rgba(0, 255, 255, 0.2);
+                border: 1px solid rgba(0, 255, 255, 0.5);
+                border-radius: 3px;
+                font-size: 12px;
+            }
+
+            #error-display {
+                background: #ff4444;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🎾 Stack Test</h1>
+
+        <div class="controls">
+            <div class="info">
+                <strong>Test Scenario:</strong> Two perfectly aligned spheres stacked vertically with no initial velocity.
+                <br>Expected: Spheres should remain stable on top of each other (no jitter, no separation).
+            </div>
+
+            <div class="engine-control">
+                <button id="playPauseBtn" class="play-pause-btn" title="Play/Pause Physics Engine">
+                    ⏸️
+                </button>
+                <span id="engineStatus" class="engine-status">Engine Running</span>
+                <span id="debugStatus" class="debug-status">Debug: ON</span>
+            </div>
+
+            <button onclick="resetScene()">🔄 Reset Scene</button>
+            <button onclick="addBall()">➕ Add Ball</button>
+            <button onclick="addSingleFloorBall()">🔍 Test Single Floor Ball</button>
+            <button onclick="runPhysicsTest()">🧪 Physics Test</button>
+
+            <div class="info">
+                <div>📊 Entities: <span id="entity-count">0</span></div>
+                <div>🎯 FPS: <span id="fps">0</span></div>
+                <div>⚡ Physics: <span id="physics-status">Ready</span></div>
+                <div>🎮 Controls: L key = Toggle debug logging | Click pause button = Pause/Resume</div>
+            </div>
+        </div>
+
+        <canvas id="canvas" width="800" height="600"></canvas>
+
+        <div id="error-display"></div>
+
+        <script type="module" src="./ball-stack-scene.ts"></script>
+    </body>
+</html>

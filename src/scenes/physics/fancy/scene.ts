@@ -4,7 +4,7 @@
 import { Scene } from '../../../engine/scene-system';
 import { WebGPURendererV2 } from '../../../renderer/webgpu.renderer';
 import { GameObject } from '../../../engine/gameobject';
-import { RigidBody, MeshRenderer } from '../../../engine/components';
+import { RigidBody, MeshRenderer, CollisionShape } from '../../../engine/components';
 import { createTriangleMesh, createCubeMesh, createSphereMesh, createGridMesh } from '../../../renderer/mesh-utils';
 
 // Mesh interference test function removed - was used for debugging
@@ -27,11 +27,14 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
     // No collider - floor is just visual at world bounds
     scene.addGameObject(floor);
 
-    // LEFT COLUMN: Stack of sphere balls (orange/red tones)
+    // LEFT COLUMN: Stack of sphere balls with box colliders (orange/red tones)
     const leftBalls = [];
     for (let i = 0; i < 5; i++) {
         const ball = new GameObject(`left-ball-${i}`, `LeftBall${i}`);
-        ball.transform.setPosition(-10, -6 + i * 2.5, 0);
+        // Add jitter to position for instability
+        const jitterX = (Math.random() - 0.5) * 0.2; // ±0.1 units
+        const jitterZ = (Math.random() - 0.5) * 0.2; // ±0.1 units
+        ball.transform.setPosition(-10 + jitterX, -6 + i * 2.5, 0 + jitterZ);
         ball.transform.setScale(1.0, 1.0, 1.0);
 
         const hue = 0.1 + (i * 0.15); // Orange to red gradient
@@ -43,19 +46,22 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
         const ballRigidBody = new RigidBody(
             2.0,        // mass: 2kg
             true,       // useGravity: true
-            'sphere',   // colliderType: sphere
-            { x: 1.0, y: 1.0, z: 1.0 } // Collision radius = 1.0
+            CollisionShape.BOX,      // collisionShape: box (for instability)
+            { x: 1.0, y: 1.0, z: 1.0 } // Box extents = 1.0x1.0x1.0
         );
         ball.addComponent(ballRigidBody);
         scene.addGameObject(ball);
         leftBalls.push(ball);
     }
 
-    // RIGHT COLUMN: Stack of cube boxes (blue/cyan tones)
+    // RIGHT COLUMN: Stack of cube boxes with box colliders (blue/cyan tones)
     const rightCubes = [];
     for (let i = 0; i < 5; i++) {
         const cube = new GameObject(`right-cube-${i}`, `RightCube${i}`);
-        cube.transform.setPosition(10, -6 + i * 2.5, 0);
+        // Add jitter to position for slight instability
+        const jitterX = (Math.random() - 0.5) * 0.15; // ±0.075 units (less than spheres)
+        const jitterZ = (Math.random() - 0.5) * 0.15; // ±0.075 units
+        cube.transform.setPosition(10 + jitterX, -6 + i * 2.5, 0 + jitterZ);
         cube.transform.setScale(1.8, 1.8, 1.8);
 
         const hue = 0.5 + (i * 0.1); // Blue to cyan gradient
@@ -67,8 +73,8 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
         const cubeRigidBody = new RigidBody(
             3.0,        // mass: 3kg (heavier than spheres)
             true,       // useGravity: true
-            'sphere',   // colliderType: sphere (using sphere collision for cubes)
-            { x: 0.9, y: 0.9, z: 0.9 } // Collision radius slightly smaller than visual
+            CollisionShape.BOX,      // collisionShape: box (for stability)
+            { x: 0.9, y: 0.9, z: 0.9 } // Box extents slightly smaller than visual (1.8 scale)
         );
         cube.addComponent(cubeRigidBody);
         scene.addGameObject(cube);
@@ -88,17 +94,17 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
     const platformRigidBody = new RigidBody(
         5.0,        // mass: 5.0 (non-zero but still kinematic)
         false,      // useGravity: false
-        'sphere',   // colliderType: sphere
-        { x: 1.0, y: 1.0, z: 1.0 } // Platform collision radius = 2.0 (still sphere collider, x = radius!)
+        CollisionShape.BOX,      // collisionShape: box (matching visual cube)
+        { x: 2.0, y: 2.0, z: 2.0 } // Platform box extents = 2.0x2.0x2.0 (matching 2x scale)
     );
     platformRigidBody.setKinematic(true); // Kinematic - won't move
     platform.addComponent(platformRigidBody);
     scene.addGameObject(platform);
 
-    // CENTER TOP: 3x3 Ball Array falling from above
+    // CENTER TOP: 2x2 Ball Array falling from above (reduced for better stability)
     const fallBalls = [];
-    for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 3; col++) {
+    for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 2; col++) {
             const ball = new GameObject(`fall-ball-${row}-${col}`, `FallBall${row}${col}`);
             const x = -2 + col * 2;  // Spread across platform
             // Add pseudo-random height variation based on position (deterministic but varied)
@@ -118,7 +124,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
             const ballRigidBody = new RigidBody(
                 1.0,        // mass: 1kg
                 true,       // useGravity: true
-                'sphere',   // colliderType: sphere
+                CollisionShape.SPHERE,   // collisionShape: sphere
                 { x: 0.8, y: 0.8, z: 0.8 } // Collision radius matches scale
             );
             ball.addComponent(ballRigidBody);
@@ -202,7 +208,7 @@ function setupInputControls(scene: Scene): void {
         const ballRigidBody = new RigidBody(
             1.0 + Math.random() * 2, // Mass 1-3kg
             true,       // useGravity
-            'sphere',
+            CollisionShape.SPHERE,
             { x: 1.0, y: 1.0, z: 1.0 }
         );
         newBall.addComponent(ballRigidBody);

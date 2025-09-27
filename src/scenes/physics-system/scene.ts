@@ -3,7 +3,7 @@
 
 import { Scene } from '../../engine/scene-system';
 import { GameObject } from '../../engine/gameobject';
-import { MeshRenderer, RigidBody } from '../../engine/components';
+import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components';
 import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
 import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
 
@@ -27,8 +27,8 @@ async function createPhysicsTestScene(scene: Scene): Promise<Scene> {
     const cubeRigidBody = new RigidBody(
         2.0,        // mass: 2kg
         true,       // useGravity: affected by gravity
-        'box',      // colliderType: box collider
-        { x: 1, y: 1, z: 1 } // colliderSize: 1x1x1 unit cube
+        CollisionShape.BOX,      // collisionShape: box collider
+        { x: 1, y: 1, z: 1 } // extents: 1x1x1 unit cube
     );
     fallingCube.addComponent(cubeRigidBody);
 
@@ -45,7 +45,7 @@ async function createPhysicsTestScene(scene: Scene): Promise<Scene> {
     const kinematicRigidBody = new RigidBody(
         1.0,        // mass: 1kg (ignored for kinematic)
         false,      // useGravity: false
-        'box',      // colliderType: box collider
+        CollisionShape.BOX,      // collisionShape: box collider
         { x: 1, y: 1, z: 1 }
     );
     kinematicRigidBody.setKinematic(true); // Kinematic: not affected by physics forces
@@ -64,7 +64,7 @@ async function createPhysicsTestScene(scene: Scene): Promise<Scene> {
     const sphereRigidBody = new RigidBody(
         0.5,        // mass: 0.5kg (lighter)
         true,       // useGravity: true
-        'sphere',   // colliderType: sphere collider
+        CollisionShape.SPHERE,   // collisionShape: sphere collider
         { x: 1, y: 1, z: 1 }
     );
     sphereRigidBody.setVelocity(2, 0, 0); // Initial velocity: 2 units/sec to the right

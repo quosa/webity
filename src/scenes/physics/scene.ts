@@ -3,7 +3,7 @@
 
 import { Scene } from '../../engine/scene-system';
 import { GameObject } from '../../engine/gameobject';
-import { MeshRenderer, RigidBody } from '../../engine/components';
+import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components';
 import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
 import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
 
@@ -31,8 +31,8 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
     const cubeRigidBody = new RigidBody(
         1.0,        // mass: 1kg
         true,       // useGravity: affected by gravity
-        'box',      // colliderType: box collider
-        { x: 2, y: 2, z: 2 } // colliderSize: 2x2x2 unit cube
+        CollisionShape.BOX,      // collisionShape: box collider
+        { x: 2, y: 2, z: 2 } // extents: 2x2x2 unit cube
     );
     // cubeRigidBody.isKinematic = true; // Uncomment to test kinematic behavior
     physicsCube.addComponent(cubeRigidBody);
@@ -50,8 +50,8 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
     const sphereRigidBody = new RigidBody(
         0.5,        // mass: 0.5kg
         true,       // useGravity: true
-        'sphere',   // colliderType: sphere collider
-        { x: 1.0, y: 1.0, z: 1.0 } // colliderSize: 1 unit sphere
+        CollisionShape.SPHERE,   // collisionShape: sphere collider
+        { x: 1.0, y: 1.0, z: 1.0 } // extents: 1 unit sphere
     );
     // sphereRigidBody.isKinematic = true;
     physicsSphere.addComponent(sphereRigidBody);
@@ -84,8 +84,8 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
     const sphereRigidBody1 = new RigidBody(
         1.0,        // mass: 1kg
         true,       // useGravity: affected by gravity
-        'sphere',      // colliderType: box collider
-        { x: 1, y: 1, z: 1 } // colliderSize: 2x2x2 unit cube
+        CollisionShape.SPHERE,      // collisionShape: sphere collider
+        { x: 1, y: 1, z: 1 } // extents: 1x1x1 unit sphere
     );
     sphere1.addComponent(sphereRigidBody1);
 
@@ -102,8 +102,8 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
     const sphereRigidBody2 = new RigidBody(
         0.5,        // mass: 0.5kg
         true,       // useGravity: true
-        'sphere',   // colliderType: sphere collider
-        { x: 2.0, y: 2.0, z: 2.0 } // colliderSize: 2 unit radius sphere (matches transform scale)
+        CollisionShape.SPHERE,   // collisionShape: sphere collider
+        { x: 2.0, y: 2.0, z: 2.0 } // extents: 2 unit radius sphere (matches transform scale)
     );
     sphere2.addComponent(sphereRigidBody2);
 

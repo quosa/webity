@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Box-Sphere Collision Test - WebGPU Engine</title>
+        <style>
+            body {
+                font-family: 'Arial', sans-serif;
+                margin: 0;
+                padding: 10px;
+                background: linear-gradient(135deg, #1e3c72, #2a5298);
+                color: white;
+                overflow: hidden;
+            }
+
+            .container {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+
+            .header {
+                text-align: center;
+                margin-bottom: 10px;
+            }
+
+            .header h1 {
+                margin: 0;
+                font-size: 24px;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            }
+
+            .header p {
+                margin: 5px 0;
+                opacity: 0.9;
+                font-size: 14px;
+            }
+
+            .content {
+                display: flex;
+                gap: 15px;
+                flex: 1;
+                min-height: 0;
+            }
+
+            .canvas-container {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                background: rgba(0,0,0,0.2);
+                border-radius: 8px;
+                padding: 10px;
+            }
+
+            #canvas {
+                flex: 1;
+                border-radius: 4px;
+                background: #000;
+                width: 100%;
+                height: 100%;
+            }
+
+            .controls {
+                width: 200px;
+                background: rgba(0,0,0,0.3);
+                border-radius: 8px;
+                padding: 15px;
+                backdrop-filter: blur(10px);
+            }
+
+            .control-group {
+                margin-bottom: 20px;
+            }
+
+            .control-group h3 {
+                margin: 0 0 10px 0;
+                font-size: 16px;
+                color: #ffeb3b;
+            }
+
+            button {
+                width: 100%;
+                padding: 8px;
+                margin: 3px 0;
+                border: none;
+                border-radius: 4px;
+                background: #4caf50;
+                color: white;
+                cursor: pointer;
+                font-size: 12px;
+                transition: background 0.2s;
+            }
+
+            button:hover {
+                background: #45a049;
+            }
+
+            button:disabled {
+                background: #666;
+                cursor: not-allowed;
+            }
+
+            .info {
+                background: rgba(0,0,0,0.4);
+                padding: 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .back-link {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                color: white;
+                text-decoration: none;
+                background: rgba(0,0,0,0.3);
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-size: 14px;
+                backdrop-filter: blur(5px);
+            }
+
+            .back-link:hover {
+                background: rgba(0,0,0,0.5);
+            }
+        </style>
+    </head>
+    <body>
+        <a href="../" class="back-link">← Back to Stack Tests</a>
+
+        <div class="container">
+            <div class="header">
+                <h1>🏀📦 Box-Sphere Collision Test</h1>
+                <p>Isolated test: Single sphere drops onto stationary box</p>
+            </div>
+
+            <div class="content">
+                <div class="canvas-container">
+                    <canvas id="canvas" width="800" height="600"></canvas>
+                </div>
+
+                <div class="controls">
+                    <div class="control-group">
+                        <h3>Test Controls</h3>
+                        <button id="resetBtn">🔄 Reset Scene</button>
+                        <button id="dropBtn">⬇️ Drop Sphere</button>
+                        <button id="pauseBtn">⏸️ Pause Physics</button>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Sphere Position</h3>
+                        <button id="leftBtn">← Left Side</button>
+                        <button id="centerBtn">🎯 Center</button>
+                        <button id="rightBtn">Right Side →</button>
+                    </div>
+
+                    <div class="info">
+                        <strong>Test Purpose:</strong><br>
+                        Debug sphere-box collision interaction in isolation.
+                        <br><br>
+                        <strong>Expected Behavior:</strong><br>
+                        • Sphere should bounce cleanly off box<br>
+                        • No sticking or gluing to surfaces<br>
+                        • No erratic orbital movement<br>
+                        • Clean separation after contact
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script type="module" src="./box-sphere-scene.ts"></script>
+    </body>
+</html>

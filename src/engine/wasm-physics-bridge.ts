@@ -20,6 +20,7 @@ export interface WasmPhysicsInterface {
     set_entity_position(_id: number, _x: number, _y: number, _z: number): void;
     set_entity_velocity(_id: number, _vx: number, _vy: number, _vz: number): void;
     set_entity_rotation(_id: number, _rx: number, _ry: number, _rz: number): void;
+    set_entity_scale(_id: number, _sx: number, _sy: number, _sz: number): void;
 
     // Zero-copy buffer access for GPU (future integration)
     get_entity_transforms_offset(): number;
@@ -283,6 +284,13 @@ export class WasmPhysicsBridge {
             const radY = rotation.y * Math.PI / 180;
             const radZ = rotation.z * Math.PI / 180;
             this.wasm.set_entity_rotation(wasmEntityId, radX, radY, radZ);
+        }
+    }
+
+    // Update entity scale in WASM
+    public updateEntityScale(wasmEntityId: number, scale: { x: number; y: number; z: number }): void {
+        if (this.wasm) {
+            this.wasm.set_entity_scale(wasmEntityId, scale.x, scale.y, scale.z);
         }
     }
 

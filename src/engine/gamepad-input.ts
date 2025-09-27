@@ -392,15 +392,15 @@ export class GamepadInputManager {
             if (value < 0) {
                 // Negative values should trigger the opposite action
                 switch (action) {
-                    case 'force-right': targetAction = 'force-left'; break;
-                    case 'force-left': targetAction = 'force-right'; break;
-                    case 'force-forward': targetAction = 'force-back'; break;
-                    case 'force-back': targetAction = 'force-forward'; break;
-                    case 'camera-right': targetAction = 'camera-left'; break;
-                    case 'camera-left': targetAction = 'camera-right'; break;
-                    case 'camera-forward': targetAction = 'camera-back'; break;
-                    case 'camera-back': targetAction = 'camera-forward'; break;
-                    default: targetAction = action; break;
+                case 'force-right': targetAction = 'force-left'; break;
+                case 'force-left': targetAction = 'force-right'; break;
+                case 'force-forward': targetAction = 'force-back'; break;
+                case 'force-back': targetAction = 'force-forward'; break;
+                case 'camera-right': targetAction = 'camera-left'; break;
+                case 'camera-left': targetAction = 'camera-right'; break;
+                case 'camera-forward': targetAction = 'camera-back'; break;
+                case 'camera-back': targetAction = 'camera-forward'; break;
+                default: targetAction = action; break;
                 }
             }
 
@@ -415,14 +415,14 @@ export class GamepadInputManager {
             let negativeAction: GamepadAction = action;
 
             switch (action) {
-                case 'force-right': negativeAction = 'force-left'; break;
-                case 'force-left': negativeAction = 'force-right'; break;
-                case 'force-forward': negativeAction = 'force-back'; break;
-                case 'force-back': negativeAction = 'force-forward'; break;
-                case 'camera-right': negativeAction = 'camera-left'; break;
-                case 'camera-left': negativeAction = 'camera-right'; break;
-                case 'camera-forward': negativeAction = 'camera-back'; break;
-                case 'camera-back': negativeAction = 'camera-forward'; break;
+            case 'force-right': negativeAction = 'force-left'; break;
+            case 'force-left': negativeAction = 'force-right'; break;
+            case 'force-forward': negativeAction = 'force-back'; break;
+            case 'force-back': negativeAction = 'force-forward'; break;
+            case 'camera-right': negativeAction = 'camera-left'; break;
+            case 'camera-left': negativeAction = 'camera-right'; break;
+            case 'camera-forward': negativeAction = 'camera-back'; break;
+            case 'camera-back': negativeAction = 'camera-forward'; break;
             }
 
             const negativeKey = VIRTUAL_KEYS[negativeAction];

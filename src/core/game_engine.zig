@@ -41,7 +41,7 @@ var camera_up: core.Vec3 = .{ .x = 0, .y = 1, .z = 0 };
 // Physics configuration (configurable instead of hardcoded)
 var physics_gravity: f32 = -9.8;
 var physics_damping: f32 = 0.99;
-var physics_restitution: f32 = 0.8;
+var physics_restitution: f32 = 0.6;
 var world_bounds: core.Vec3 = .{ .x = 8.0, .y = 8.0, .z = 8.0 };
 
 // Entity system
