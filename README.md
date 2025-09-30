@@ -21,10 +21,11 @@ This project was to vibe a ts -> wasm/zig -> webgpu pipeline with claude code.
 - **Copy-based WASM Integration** - Optimized data flow from physics simulation to rendering pipeline
 
 ### Physics & Simulation
+- **Advanced Collision System** - Box-box, sphere-sphere, and sphere-box collision detection with GPT-5 stabilization
 - **Real-time Physics** - Gravity, collision detection, force integration, and realistic bounce physics
-- **Entity-Entity Collisions** - Sphere-sphere collision detection with elastic collision response
-- **Boundary Collision System** - Floor and wall collision detection with proper restitution
+- **Collision Resolution** - Proper penetration resolution, momentum conservation, and restitution handling
 - **Multi-entity Support** - Handles 6,598+ entities at 60fps with proven performance baseline
+- **Physics Documentation** - Comprehensive collision detection conventions in `src/core/CLAUDE.md`
 
 ### 3D Rendering Pipeline
 - **WebGPU Renderer V2** - Modern GPU-accelerated rendering with instanced drawing
@@ -36,6 +37,7 @@ This project was to vibe a ts -> wasm/zig -> webgpu pipeline with claude code.
 - **Scene Browser** - Main entry point with visual scene selection interface
 - **Basic Shapes** - Triangle, cube, pyramid, sphere rendering validation
 - **Physics Demos** - Gravity simulation, collision detection, fancy physics showcase
+- **Stack Tests** - Physics stabilization testing with play/pause controls for jitter analysis
 - **Rain Particle System** - High-performance particle testing (5000+ entities)
 - **Camera Controls** - 3D navigation with WASD movement and interactive controls
 
@@ -46,10 +48,12 @@ This project was to vibe a ts -> wasm/zig -> webgpu pipeline with claude code.
 - **Three Control Modes** - Camera movement, GameObject physics forces, and orbit camera controls
 
 ### Development & Quality Assurance
-- **Comprehensive Test Suite** - 38+ TypeScript tests + 28+ Zig unit tests with full coverage
+- **Comprehensive Test Suite** - 38+ TypeScript tests + 30+ Zig unit tests with collision matrix validation
+- **Physics Testing** - Systematic collision detection and resolution test coverage
 - **Build Pipeline** - TypeScript + WASM compilation with hot reload development server
 - **HTTPS Development Server** - WebGPU-compatible server with self-signed certificates
 - **Quality Commands** - Integrated typecheck, lint, test, and verify workflows
+- **Developer Documentation** - Engine guides in `CLAUDE.md` files and scene development patterns
 
 ## Setup
 ```
@@ -268,11 +272,24 @@ scene.setGamepadConfiguration(GAMEPAD_PRESETS['orbit-camera']);   // Orbit camer
 
 ### Complete Example
 
-See `src/scenes/gamepad/scene.ts` for a full working example with:
+See `src/scenes/input-demo/scene.ts` for a full working example with:
 - Controllable physics cube
 - Ball stack for collision testing
 - UI showing gamepad status and input mapping
 - Configuration switching between control modes
+
+## Documentation
+
+### Developer Guides
+- **`CLAUDE.md`** - Main project overview and development guidelines
+- **`src/scenes/CLAUDE.md`** - Scene development patterns and conventions
+- **`src/core/CLAUDE.md`** - Physics engine collision detection and resolution documentation
+
+### Physics Engine Reference
+The collision system uses a consistent "Object1 Point of View" convention documented in `src/core/CLAUDE.md`:
+- All collision normals point in the direction Object1 needs to move to separate
+- Comprehensive test matrix for all collision type combinations
+- Proper kinematic vs dynamic object handling
 
 ## Claude Code Setup with LiteLLM Proxy
 

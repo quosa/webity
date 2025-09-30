@@ -15,6 +15,42 @@ fn native_log(ptr: [*]const u8, len: usize) void {
 pub const log = if (builtin.target.cpu.arch == .wasm32) jslog else native_log;
 
 // =============================================================================
+// COLLISION DETECTION AND RESOLUTION CONVENTIONS
+// =============================================================================
+//
+// This physics engine uses a consistent "Object1 Point of View" convention for
+// all collision detection and resolution calculations:
+//
+// COLLISION NORMAL CONVENTION:
+// - All collision normals point in the direction Object1 needs to move
+//   to separate from Object2
+// - This provides a consistent reference frame regardless of object types
+// - Example: checkBoxCollision(box1, box2) returns normal for box1's separation
+//
+// COLLISION RESOLUTION CONVENTION:
+// - Object1 is the "subject" of the collision resolution
+// - Impulses and position corrections are applied based on Object1's perspective
+// - The normal from detection directly tells us how to move Object1
+//
+// FUNCTION CALL PATTERNS:
+// - checkCollision(obj1, obj2) -> normal for obj1 to move away from obj2
+// - resolveCollision(obj1, obj2, normal) -> applies normal to obj1's movement
+//
+// KINEMATIC OBJECT HANDLING:
+// - Kinematic objects don't move during resolution (infinite mass)
+// - Dynamic objects bounce off kinematic objects following the normal direction
+// - When both objects are dynamic, they share the separation and impulse
+//
+// COORDINATE SYSTEM:
+// - X-axis: positive = right, negative = left
+// - Y-axis: positive = up, negative = down
+// - Z-axis: positive = away from camera, negative = toward camera
+//
+// This convention ensures that collision detection and resolution are always
+// consistent and predictable, making the physics behavior more intuitive for
+// developers working with the engine.
+//
+// =============================================================================
 
 // Constants
 pub const GRAVITY: f32 = -9.8;
@@ -34,6 +70,12 @@ pub const CollisionShape = enum(u8) {
     SPHERE = 0,
     BOX = 1,
     PLANE = 2, // Future implementation
+};
+
+pub const CollisionAxis = enum(u8) {
+    X = 0,
+    Y = 1,
+    Z = 2,
 };
 
 // Collision information structure
@@ -558,52 +600,77 @@ pub fn checkBoxCollision(pos1: Vec3, extents1: Vec3, pos2: Vec3, extents2: Vec3)
         log(debug_msg.ptr, debug_msg.len);
     }
 
-    // 🎯 SMART COLLISION NORMAL SELECTION: Prioritize Y-axis for stacking behavior
-    // Problem: When boxes have similar penetration depths, we want to prioritize
-    // vertical separation over horizontal separation for natural stacking
+    // 🎯 STANDARD COLLISION NORMAL SELECTION: Use minimum penetration axis (SAT)
+    // Find the axis with minimum penetration depth for stable collision resolution
 
     var min_penetration = penetration_x;
     var collision_normal = Vec3{ .x = if (delta.x < 0) 1.0 else -1.0, .y = 0, .z = 0 };
-    var collision_axis: u8 = 0; // 0=X, 1=Y, 2=Z
+    var collision_axis: CollisionAxis = CollisionAxis.X;
     var selected_reason: []const u8 = "minimum_x";
 
-    // Check Y-axis penetration with stacking bias
+    // Check Y-axis penetration
     if (penetration_y < min_penetration) {
         min_penetration = penetration_y;
-        collision_normal = Vec3{ .x = 0, .y = if (delta.y < 0) -1.0 else 1.0, .z = 0 };
-        collision_axis = 1;
+        collision_normal = Vec3{ .x = 0, .y = if (delta.y < 0) 1.0 else -1.0, .z = 0 };
+        collision_axis = CollisionAxis.Y;
         selected_reason = "minimum_y";
-    } else if (penetration_y <= min_penetration + 0.1) {
-        // STACKING PRIORITY: If Y penetration is close to minimum (within 0.1),
-        // prefer Y-axis for natural stacking behavior
-        min_penetration = penetration_y;
-        collision_normal = Vec3{ .x = 0, .y = if (delta.y < 0) -1.0 else 1.0, .z = 0 };
-        collision_axis = 1;
-        selected_reason = "stacking_priority_y";
     }
 
     // Check Z-axis penetration
     if (penetration_z < min_penetration) {
         min_penetration = penetration_z;
         collision_normal = Vec3{ .x = 0, .y = 0, .z = if (delta.z < 0) 1.0 else -1.0 };
-        collision_axis = 2;
+        collision_axis = CollisionAxis.Z;
         selected_reason = "minimum_z";
     }
 
     if (debug_enabled) {
         const axis_name = switch (collision_axis) {
-            0 => "X",
-            1 => "Y",
-            2 => "Z",
-            else => "?",
+            CollisionAxis.X => "X",
+            CollisionAxis.Y => "Y",
+            CollisionAxis.Z => "Z",
         };
         var result_buffer: [256]u8 = undefined;
         const result_msg = std.fmt.bufPrint(&result_buffer, "  Selected {s}-axis: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3}), reason={s}\n", .{ axis_name, min_penetration, collision_normal.x, collision_normal.y, collision_normal.z, selected_reason }) catch "COLLISION NORMAL RESULT: formatting error\n";
         log(result_msg.ptr, result_msg.len);
     }
 
-    // Calculate contact point (on the surface of box1 closest to box2)
-    const contact_point = vec3_add(pos1, vec3_scale(collision_normal, extents1.x * @abs(collision_normal.x) + extents1.y * @abs(collision_normal.y) + extents1.z * @abs(collision_normal.z)));
+    // Calculate contact point using axis difference approach (much more intuitive!)
+    // Contact point is on box1's surface facing box2, based on which box is where
+    var contact_point = pos1;
+
+    switch (collision_axis) {
+        CollisionAxis.X => {
+            // Move to box1's X face that's closest to box2
+            if (delta.x > 0) {
+                // box2 is to the right of box1 → contact on box1's right face
+                contact_point.x = pos1.x + extents1.x;
+            } else {
+                // box2 is to the left of box1 → contact on box1's left face
+                contact_point.x = pos1.x - extents1.x;
+            }
+        },
+        CollisionAxis.Y => {
+            // Move to box1's Y face that's closest to box2
+            if (delta.y > 0) {
+                // box2 is above box1 → contact on box1's top face
+                contact_point.y = pos1.y + extents1.y;
+            } else {
+                // box2 is below box1 → contact on box1's bottom face
+                contact_point.y = pos1.y - extents1.y;
+            }
+        },
+        CollisionAxis.Z => {
+            // Move to box1's Z face that's closest to box2
+            if (delta.z > 0) {
+                // box2 is away from camera → contact on box1's far face
+                contact_point.z = pos1.z + extents1.z;
+            } else {
+                // box2 is closer to camera → contact on box1's near face
+                contact_point.z = pos1.z - extents1.z;
+            }
+        },
+    }
 
     return CollisionInfo{
         .has_collision = true,
@@ -675,7 +742,7 @@ pub fn checkSphereBoxCollision(sphere_pos: Vec3, radius: f32, box_pos: Vec3, box
                 .has_collision = true,
                 .penetration_depth = penetration,
                 .contact_normal = normal,
-                .contact_point = closest_point,
+                .contact_point = vec3_add(sphere_pos, vec3_scale(normal, -radius)),
             };
         }
     }
@@ -715,10 +782,26 @@ pub fn checkCollision(pos1: Vec3, shape1: CollisionShape, extents1: Vec3, pos2: 
             .SPHERE => {
                 // Swap order and negate normal for box-sphere collision
                 if (checkSphereBoxCollision(pos2, extents2.x, pos1, extents1)) |collision_info| {
+                    // When we swap the call order, we need to maintain "Object1 POV" convention:
+                    // - Normal: negate to point in direction for BOX (object1) to move away from SPHERE (object2)
+                    // - Contact point: keep sphere surface contact point for now (TODO: transform to box surface)
+
+                    // Print raw collision info first
+                    var raw_buffer: [256]u8 = undefined;
+                    const raw_msg = std.fmt.bufPrint(&raw_buffer, "RAW collision info: normal=({d:.3},{d:.3},{d:.3}), penetration={d:.3}\n", .{ collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z, collision_info.penetration_depth }) catch "RAW collision info: formatting error\n";
+                    log(raw_msg.ptr, raw_msg.len);
+
+                    const negated_normal = vec3_negate(collision_info.contact_normal);
+
+                    // Print negated normal separately
+                    var negated_buffer: [256]u8 = undefined;
+                    const negated_msg = std.fmt.bufPrint(&negated_buffer, "NEGATED normal: ({d:.3},{d:.3},{d:.3})\n", .{ negated_normal.x, negated_normal.y, negated_normal.z }) catch "NEGATED normal: formatting error\n";
+                    log(negated_msg.ptr, negated_msg.len);
+
                     return CollisionInfo{
                         .has_collision = collision_info.has_collision,
                         .penetration_depth = collision_info.penetration_depth,
-                        .contact_normal = vec3_negate(collision_info.contact_normal),
+                        .contact_normal = negated_normal,
                         .contact_point = collision_info.contact_point,
                     };
                 }
@@ -745,25 +828,27 @@ pub fn resolveBoxCollision(pos1: *Vec3, vel1: *Vec3, _: Vec3, mass1: f32, is_kin
             // Both kinematic - no separation needed
             return;
         } else if (is_kinematic1) {
-            // Only box1 is kinematic - move box2 away completely
+            // Only box1 is kinematic - move box2 away
+            // Normal tells us how box1 should move, so box2 moves opposite
             const separation = penetration + 0.01; // Small buffer
-            pos2.* = vec3_add(pos2.*, vec3_scale(normal, separation));
+            pos2.* = vec3_subtract(pos2.*, vec3_scale(normal, separation));
         } else if (is_kinematic2) {
             // Only box2 is kinematic - move box1 away from box2
-            // Move box1 in direction of the normal (which points away from box2)
+            // Normal tells us exactly how box1 should move
             const separation = penetration + 0.01; // Small buffer
             pos1.* = vec3_add(pos1.*, vec3_scale(normal, separation));
         } else {
             // Both dynamic - split separation equally
+            // Move box1 in normal direction, box2 in opposite direction
             const separation_distance = (penetration + 0.01) * 0.5;
-            pos1.* = vec3_subtract(pos1.*, vec3_scale(normal, separation_distance));
-            pos2.* = vec3_add(pos2.*, vec3_scale(normal, separation_distance));
+            pos1.* = vec3_add(pos1.*, vec3_scale(normal, separation_distance));
+            pos2.* = vec3_subtract(pos2.*, vec3_scale(normal, separation_distance));
         }
     }
 
     // Calculate relative velocity in the direction of the collision normal
-    // Use standard physics convention: vel2 - vel1 (relative velocity of object 2 w.r.t object 1)
-    const rel_vel = vec3_subtract(vel2.*, vel1.*); // vel2 - vel1 for relative velocity
+    // Normal points in direction Object1 should move, so we want Object1's approach velocity
+    const rel_vel = vec3_subtract(vel1.*, vel2.*); // Object1's velocity relative to Object2
     const vel_along_normal = dot(rel_vel, normal);
 
     // Debug: Log velocity resolution details
@@ -800,14 +885,15 @@ pub fn resolveBoxCollision(pos1: *Vec3, vel1: *Vec3, _: Vec3, mass1: f32, is_kin
     const impulse = vec3_scale(normal, impulse_magnitude);
 
     // Apply velocity changes (kinematic bodies don't change velocity)
+    // Normal points in direction Object1 should move, so impulse moves Object1 in normal direction
     if (!is_kinematic1) {
         const inv_mass1 = 1.0 / mass1;
-        vel1.* = vec3_subtract(vel1.*, vec3_scale(impulse, inv_mass1));
+        vel1.* = vec3_add(vel1.*, vec3_scale(impulse, inv_mass1));
     }
 
     if (!is_kinematic2) {
         const inv_mass2 = 1.0 / mass2;
-        vel2.* = vec3_add(vel2.*, vec3_scale(impulse, inv_mass2));
+        vel2.* = vec3_subtract(vel2.*, vec3_scale(impulse, inv_mass2));
     }
 }
 
@@ -816,69 +902,88 @@ fn resolveSphereBoxCollision(sphere_pos: *Vec3, sphere_vel: *Vec3, _: f32, spher
     const normal = collision_info.contact_normal;
     const penetration = collision_info.penetration_depth;
 
-    // Position separation: move sphere away from box
-    if (penetration > 0.0) {
+    // Velocity resolution using proper sphere-box physics
+    const rel_vel = vec3_subtract(sphere_vel.*, box_vel.*);
+    const vel_along_normal = dot(rel_vel, normal);
+
+    // Don't resolve if objects are separating
+    // IMPORTANT: Check this BEFORE position separation to maintain energy conservation
+    if (vel_along_normal > 0) return; // Only resolve if objects are approaching
+
+    // GPT-5 PHYSICS STABILIZATION TECHNIQUES
+
+    // 1. RESTING CONTACT THRESHOLD: Set restitution = 0 for slow contacts
+    const RESTING_VELOCITY_THRESHOLD = 0.01; // 0.01 m/s as suggested
+    var effective_restitution = restitution;
+    if (@abs(vel_along_normal) < RESTING_VELOCITY_THRESHOLD) {
+        effective_restitution = 0.0; // No bounce for resting contacts
+    }
+
+    // 2. PENETRATION CORRECTION WITH SLOP: Only correct significant penetrations
+    const PENETRATION_SLOP = 0.001; // Allow small penetrations to exist
+    const BIAS_FACTOR = 0.3; // Partial correction to prevent over-correction
+
+    if (penetration <= PENETRATION_SLOP) {
+        // Penetration is too small to worry about - skip position correction
+        // This prevents micro-corrections that cause jitter
+        return;
+    }
+
+    // For kinematic objects, use exact floor boundary logic - no complex resting contact detection
+    // This ensures identical behavior to floor collisions which work perfectly
+
+    // Position separation with bias factor (partial correction)
+    if (penetration > PENETRATION_SLOP) {
+        const corrected_penetration = (penetration - PENETRATION_SLOP) * BIAS_FACTOR;
+
         if (sphere_kinematic and box_kinematic) {
             return;
         } else if (sphere_kinematic) {
             // Only sphere is kinematic - move box away from sphere
-            // Normal points from box toward sphere, so SUBTRACT to move box away
-            const separation = penetration + 0.01;
-            box_pos.* = vec3_subtract(box_pos.*, vec3_scale(normal, separation));
+            box_pos.* = vec3_subtract(box_pos.*, vec3_scale(normal, corrected_penetration));
         } else if (box_kinematic) {
             // Only box is kinematic - move sphere away from box
-            // Normal points from box toward sphere, so ADD to move sphere away
-            const separation = penetration + 0.05; // Increased separation to prevent re-collision
-            sphere_pos.* = vec3_add(sphere_pos.*, vec3_scale(normal, separation));
+            sphere_pos.* = vec3_add(sphere_pos.*, vec3_scale(normal, corrected_penetration));
         } else {
             // Both dynamic - split separation
-            const separation_distance = (penetration + 0.05) * 0.5; // Increased separation
+            const separation_distance = corrected_penetration * 0.5;
             sphere_pos.* = vec3_add(sphere_pos.*, vec3_scale(normal, separation_distance));
             box_pos.* = vec3_subtract(box_pos.*, vec3_scale(normal, separation_distance));
         }
     }
 
-    // Velocity resolution using proper sphere-box physics
-    const rel_vel = vec3_subtract(sphere_vel.*, box_vel.*);
-    const vel_along_normal = dot(rel_vel, normal);
+    // SIMPLIFIED APPROACH: For kinematic objects, use same logic as floor boundaries
+    // This ensures consistent energy behavior between floor and kinematic entity collisions
 
-    // Don't resolve if objects are separating or in resting contact
-    if (vel_along_normal > -0.2) return; // Stronger threshold for sphere-box resting contact
-
-    // Calculate impulse magnitude
-    var impulse_magnitude: f32 = 0.0;
     if (sphere_kinematic and box_kinematic) {
-        return;
+        return; // Both kinematic - no physics response
+    } else if (box_kinematic) {
+        // Box is kinematic (infinite mass) - use effective restitution for resting contacts
+        const vel_component_along_normal = dot(sphere_vel.*, normal);
+
+        if (vel_component_along_normal < 0) { // Only if approaching
+            const reflection = vec3_scale(normal, -vel_component_along_normal * (1.0 + effective_restitution));
+            sphere_vel.* = vec3_add(sphere_vel.*, reflection);
+        }
+    } else if (sphere_kinematic) {
+        // Sphere is kinematic (infinite mass) - use effective restitution for resting contacts
+        const inverted_normal = vec3_negate(normal);
+        const vel_component_along_normal = dot(box_vel.*, inverted_normal);
+
+        if (vel_component_along_normal < 0) { // Only if approaching
+            const reflection = vec3_scale(vec3_negate(normal), -vel_component_along_normal * (1.0 + effective_restitution));
+            box_vel.* = vec3_add(box_vel.*, reflection);
+        }
     } else {
-        const inv_mass_sphere = if (sphere_kinematic) 0.0 else 1.0 / sphere_mass;
-        const inv_mass_box = if (box_kinematic) 0.0 else 1.0 / box_mass;
+        // Both dynamic - use traditional impulse-based collision resolution
+        const inv_mass_sphere = 1.0 / sphere_mass;
+        const inv_mass_box = 1.0 / box_mass;
         const total_inv_mass = inv_mass_sphere + inv_mass_box;
 
-        if (total_inv_mass > 0.0) {
-            impulse_magnitude = -(1.0 + restitution) * vel_along_normal / total_inv_mass;
-        } else {
-            return;
-        }
-    }
+        const impulse_magnitude = -(1.0 + restitution) * vel_along_normal / total_inv_mass;
+        const impulse = vec3_scale(normal, impulse_magnitude);
 
-    // Apply impulse with proper sphere physics consideration
-    const impulse = vec3_scale(normal, impulse_magnitude);
-
-    if (!sphere_kinematic) {
-        const inv_mass_sphere = 1.0 / sphere_mass;
         sphere_vel.* = vec3_add(sphere_vel.*, vec3_scale(impulse, inv_mass_sphere));
-
-        // Apply slight damping to help sphere settle on small bounces
-        const velocity_magnitude = magnitude(sphere_vel.*);
-        if (velocity_magnitude < 1.0) { // Stronger damping for very small velocities
-            sphere_vel.* = vec3_scale(sphere_vel.*, 0.85); // 15% velocity reduction
-        } else if (velocity_magnitude < 3.0) { // Moderate damping for small velocities
-            sphere_vel.* = vec3_scale(sphere_vel.*, 0.92); // 8% velocity reduction
-        }
-    }
-
-    if (!box_kinematic) {
-        const inv_mass_box = 1.0 / box_mass;
         box_vel.* = vec3_subtract(box_vel.*, vec3_scale(impulse, inv_mass_box));
     }
 }

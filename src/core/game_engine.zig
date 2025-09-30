@@ -312,6 +312,18 @@ fn updateECSPhysics(delta_time: f32) void {
     // Step 2: Check entity-entity collisions BEFORE position integration
     checkEntityCollisions(delta_time);
 
+    // Step 2.5: GPT-5 VELOCITY CLAMPING - Zero out small velocities to prevent jitter
+    const VELOCITY_THRESHOLD = 0.01; // 0.01 m/s as suggested by GPT-5
+    for (physics_components[0..entity_count], 0..) |*phys, i| {
+        if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
+        if (phys.is_kinematic) continue;
+
+        // Clamp linear velocity components
+        if (@abs(phys.velocity.x) < VELOCITY_THRESHOLD) phys.velocity.x = 0.0;
+        if (@abs(phys.velocity.y) < VELOCITY_THRESHOLD) phys.velocity.y = 0.0;
+        if (@abs(phys.velocity.z) < VELOCITY_THRESHOLD) phys.velocity.z = 0.0;
+    }
+
     // Step 3: Update positions using collision-corrected velocities
     for (physics_components[0..entity_count], 0..) |*phys, i| {
         if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
@@ -649,7 +661,7 @@ fn checkEntityCollisions(delta_time: f32) void {
                     }
                 } else {
                     // Use universal collision dispatcher for BOX, PLANE, and mixed collision types
-                    if (core.checkCollision(phys1.position, phys1.collision_shape, phys1.extents, phys2.position, phys2.collision_shape, phys2.extents)) |_| {
+                    if (core.checkCollision(phys1.position, phys1.collision_shape, phys1.extents, phys2.position, phys2.collision_shape, phys2.extents)) |collision_info| {
                         collisions_detected += 1;
                         any_collision_resolved = true;
 
@@ -686,11 +698,11 @@ fn checkEntityCollisions(delta_time: f32) void {
                         const vel1_before = core.Vec3{ .x = phys1.velocity.x, .y = phys1.velocity.y, .z = phys1.velocity.z };
                         const vel2_before = core.Vec3{ .x = phys2.velocity.x, .y = phys2.velocity.y, .z = phys2.velocity.z };
 
-                        const collision_info = core.checkCollision(phys1.position, phys1.collision_shape, phys1.extents, phys2.position, phys2.collision_shape, phys2.extents).?;
+                        // Use the collision_info from the detection call above (no double-call needed)
                         core.resolveCollision(&phys1.position, &phys1.velocity, phys1.collision_shape, phys1.extents, phys1.mass, phys1.is_kinematic, &phys2.position, &phys2.velocity, phys2.collision_shape, phys2.extents, phys2.mass, phys2.is_kinematic, physics_restitution, collision_info);
 
-                        // 📊 LOG BOX COLLISION RESOLUTION DETAILS (limited)
-                        if (collision_log_count <= 25) {
+                        // 📊 LOG BOX COLLISION RESOLUTION DETAILS (very limited - only first 3 collisions)
+                        if (collision_log_count <= 3) {
                             var box_res_log_buffer: [512]u8 = undefined;
                             const box_res_log_msg = std.fmt.bufPrint(&box_res_log_buffer, "📊 BOX RESOLUTION: Entity {} pos ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}] vel ({d:.3},{d:.3},{d:.3})->[{d:.3},{d:.3},{d:.3}]\n", .{ i, pos1_before.x, pos1_before.y, pos1_before.z, phys1.position.x, phys1.position.y, phys1.position.z, vel1_before.x, vel1_before.y, vel1_before.z, phys1.velocity.x, phys1.velocity.y, phys1.velocity.z }) catch "BOX RESOLUTION: formatting error\n";
                             log(box_res_log_msg.ptr, box_res_log_msg.len);
@@ -1482,6 +1494,7 @@ pub export fn debug_get_entity_physics_info(id: u32, info_type: u8) f32 {
             7 => phys.radius,
             8 => if (phys.is_kinematic) 1.0 else 0.0,
             9 => if (entity_metadata[index].physics_enabled) 1.0 else 0.0,
+            10 => @as(f32, @floatFromInt(@intFromEnum(phys.collision_shape))),
             else => -999.0, // Invalid info_type marker
         };
     }

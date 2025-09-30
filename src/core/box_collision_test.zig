@@ -10,8 +10,8 @@ const CollisionInfo = core.CollisionInfo;
 // Helper function to check if two Vec3 are approximately equal
 fn vec3_equals(a: Vec3, b: Vec3, tolerance: f32) bool {
     return @abs(a.x - b.x) <= tolerance and
-           @abs(a.y - b.y) <= tolerance and
-           @abs(a.z - b.z) <= tolerance;
+        @abs(a.y - b.y) <= tolerance and
+        @abs(a.z - b.z) <= tolerance;
 }
 
 // Helper function to check if two floats are approximately equal
@@ -55,8 +55,7 @@ test "box-box collision - face contact (X axis)" {
         const expected_normal = Vec3{ .x = -1, .y = 0, .z = 0 };
         try testing.expect(vec3_equals(collision_info.contact_normal, expected_normal, 0.01));
 
-        std.debug.print("✅ Box-box face collision detected: penetration={d:.3}, normal=({d:.1},{d:.1},{d:.1})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Box-box face collision detected: penetration={d:.3}, normal=({d:.1},{d:.1},{d:.1})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         try testing.expect(false); // Should have detected collision
     }
@@ -75,15 +74,13 @@ test "box-box collision - face contact (Y axis)" {
         try testing.expect(collision_info.has_collision);
         try testing.expect(float_equals(collision_info.penetration_depth, 0.3, 0.01)); // 1.5 - 1.2 = 0.3
 
-        std.debug.print("🔍 DEBUG: Actual normal=({d:.3},{d:.3},{d:.3}), penetration={d:.3}\n",
-            .{ collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z, collision_info.penetration_depth });
+        std.debug.print("🔍 DEBUG: Actual normal=({d:.3},{d:.3},{d:.3}), penetration={d:.3}\n", .{ collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z, collision_info.penetration_depth });
 
-        // Normal should point in Y direction (from box1 toward box2)
-        const expected_normal = Vec3{ .x = 0, .y = 1, .z = 0 }; // Fixed: should be +Y since box2 is above box1
+        // Normal should move box1 away from box2 (downward since box2 is above box1)
+        const expected_normal = Vec3{ .x = 0, .y = -1, .z = 0 }; // Move box1 downward
         try testing.expect(vec3_equals(collision_info.contact_normal, expected_normal, 0.01));
 
-        std.debug.print("✅ Box-box Y-axis collision: penetration={d:.3}, normal=({d:.1},{d:.1},{d:.1})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Box-box Y-axis collision: penetration={d:.3}, normal=({d:.1},{d:.1},{d:.1})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         try testing.expect(false);
     }
@@ -130,8 +127,7 @@ test "sphere-box collision - sphere hits box face" {
         // So sphere should overlap by 0.8 - (2 - 1) = -0.2, which means no collision
         // Let me adjust the position
 
-        std.debug.print("✅ Sphere-box collision: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Sphere-box collision: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         std.debug.print("ℹ️ No collision detected (expected for this configuration)\n", .{});
     }
@@ -153,8 +149,7 @@ test "sphere-box collision - sphere hits box face (overlapping)" {
         // Penetration = sphere_radius - distance_to_face = 0.8 - (1.5 - 1.0) = 0.3
         try testing.expect(float_equals(collision_info.penetration_depth, 0.3, 0.01));
 
-        std.debug.print("✅ Sphere-box face overlap: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Sphere-box face overlap: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         try testing.expect(false); // Should detect collision
     }
@@ -177,8 +172,7 @@ test "sphere-box collision - sphere hits box corner" {
         // Since sphere radius is 1.0, this should be no collision
         // Let me adjust the test case
 
-        std.debug.print("✅ Sphere-box corner collision: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Sphere-box corner collision: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         std.debug.print("ℹ️ No corner collision detected (expected for this configuration)\n", .{});
     }
@@ -200,8 +194,7 @@ test "sphere-box collision - sphere inside box" {
         // Distance to nearest face = 2.0 (box extends to ±2), so penetration = 0.5 + 2.0 = 2.5
         try testing.expect(collision_info.penetration_depth > 0);
 
-        std.debug.print("✅ Sphere inside box: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Sphere inside box: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         try testing.expect(false); // Should detect collision
     }
@@ -220,10 +213,7 @@ test "mixed collision dispatcher - sphere vs sphere" {
     const pos2 = Vec3{ .x = 1.5, .y = 0, .z = 0 }; // Overlapping spheres
     const extents2 = Vec3{ .x = 1, .y = 1, .z = 1 }; // radius = 1
 
-    if (core.checkCollision(
-        pos1, CollisionShape.SPHERE, extents1,
-        pos2, CollisionShape.SPHERE, extents2
-    )) |collision_info| {
+    if (core.checkCollision(pos1, CollisionShape.SPHERE, extents1, pos2, CollisionShape.SPHERE, extents2)) |collision_info| {
         try testing.expect(collision_info.has_collision);
         try testing.expect(float_equals(collision_info.penetration_depth, 0.5, 0.01)); // 2.0 - 1.5 = 0.5
 
@@ -242,10 +232,7 @@ test "mixed collision dispatcher - box vs box" {
     const pos2 = Vec3{ .x = 1.8, .y = 0, .z = 0 }; // Overlapping boxes
     const extents2 = Vec3{ .x = 1, .y = 1, .z = 1 };
 
-    if (core.checkCollision(
-        pos1, CollisionShape.BOX, extents1,
-        pos2, CollisionShape.BOX, extents2
-    )) |collision_info| {
+    if (core.checkCollision(pos1, CollisionShape.BOX, extents1, pos2, CollisionShape.BOX, extents2)) |collision_info| {
         try testing.expect(collision_info.has_collision);
         try testing.expect(float_equals(collision_info.penetration_depth, 0.2, 0.01)); // 2.0 - 1.8 = 0.2
 
@@ -264,14 +251,10 @@ test "mixed collision dispatcher - sphere vs box" {
     const box_pos = Vec3{ .x = 0, .y = 0, .z = 0 };
     const box_extents = Vec3{ .x = 1, .y = 1, .z = 1 };
 
-    if (core.checkCollision(
-        sphere_pos, CollisionShape.SPHERE, sphere_extents,
-        box_pos, CollisionShape.BOX, box_extents
-    )) |collision_info| {
+    if (core.checkCollision(sphere_pos, CollisionShape.SPHERE, sphere_extents, box_pos, CollisionShape.BOX, box_extents)) |collision_info| {
         try testing.expect(collision_info.has_collision);
 
-        std.debug.print("✅ Sphere-box via dispatcher: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Sphere-box via dispatcher: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         std.debug.print("ℹ️ No sphere-box collision detected\n", .{});
     }
@@ -286,14 +269,10 @@ test "mixed collision dispatcher - box vs sphere" {
     const sphere_pos = Vec3{ .x = 1.3, .y = 0, .z = 0 };
     const sphere_extents = Vec3{ .x = 0.8, .y = 0.8, .z = 0.8 };
 
-    if (core.checkCollision(
-        box_pos, CollisionShape.BOX, box_extents,
-        sphere_pos, CollisionShape.SPHERE, sphere_extents
-    )) |collision_info| {
+    if (core.checkCollision(box_pos, CollisionShape.BOX, box_extents, sphere_pos, CollisionShape.SPHERE, sphere_extents)) |collision_info| {
         try testing.expect(collision_info.has_collision);
 
-        std.debug.print("✅ Box-sphere via dispatcher: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n",
-            .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
+        std.debug.print("✅ Box-sphere via dispatcher: penetration={d:.3}, normal=({d:.3},{d:.3},{d:.3})\n", .{ collision_info.penetration_depth, collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.contact_normal.z });
     } else {
         std.debug.print("ℹ️ No box-sphere collision detected\n", .{});
     }
@@ -306,23 +285,24 @@ test "mixed collision dispatcher - box vs sphere" {
 test "box collision resolution - dynamic vs kinematic" {
     std.debug.print("\n🧪 Testing box collision resolution - dynamic vs kinematic\n", .{});
 
-    var box1_pos = Vec3{ .x = 0, .y = 0, .z = 0 };
+    var box1_pos = Vec3{ .x = 0, .y = 0, .z = 0 }; // At origin
     var box1_vel = Vec3{ .x = 5, .y = 0, .z = 0 }; // Moving right
     const box1_extents = Vec3{ .x = 1, .y = 1, .z = 1 };
     const box1_mass: f32 = 1.0;
     const box1_kinematic = false;
 
-    var box2_pos = Vec3{ .x = 1.5, .y = 0, .z = 0 }; // Platform
+    var box2_pos = Vec3{ .x = 1.5, .y = 0, .z = 0 }; // Platform (X=1.5)
     var box2_vel = Vec3{ .x = 0, .y = 0, .z = 0 }; // Stationary
     const box2_extents = Vec3{ .x = 1, .y = 1, .z = 1 };
-    const box2_mass: f32 = 0.0; // Mass doesn't matter for kinematic
+    const box2_mass: f32 = 0.0; // Mass doesn't matter for kinematic (=infinite)
     const box2_kinematic = true;
 
     // Create collision info
     const collision_info = CollisionInfo{
         .has_collision = true,
         .penetration_depth = 0.5,
-        .contact_normal = Vec3{ .x = -1, .y = 0, .z = 0 }, // Normal pointing from box1 to box2
+        // Normal points in the direction that Object1 needs to move to separate from Object2
+        .contact_normal = Vec3{ .x = -1, .y = 0, .z = 0 },
         .contact_point = Vec3{ .x = 1, .y = 0, .z = 0 },
     };
 
@@ -332,24 +312,15 @@ test "box collision resolution - dynamic vs kinematic" {
     const orig_box2_x = box2_pos.x;
     const orig_box2_vel_x = box2_vel.x;
 
-    std.debug.print("🔍 BEFORE: box1_pos=({d:.2},{d:.2}), box2_pos=({d:.2},{d:.2})\n",
-        .{ box1_pos.x, box1_pos.y, box2_pos.x, box2_pos.y });
-    std.debug.print("🔍 BEFORE: box1_vel=({d:.2},{d:.2}), box2_vel=({d:.2},{d:.2})\n",
-        .{ box1_vel.x, box1_vel.y, box2_vel.x, box2_vel.y });
-    std.debug.print("🔍 COLLISION: normal=({d:.2},{d:.2}), penetration={d:.2}\n",
-        .{ collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.penetration_depth });
+    std.debug.print("🔍 BEFORE: box1_pos=({d:.2},{d:.2}), box2_pos=({d:.2},{d:.2})\n", .{ box1_pos.x, box1_pos.y, box2_pos.x, box2_pos.y });
+    std.debug.print("🔍 BEFORE: box1_vel=({d:.2},{d:.2}), box2_vel=({d:.2},{d:.2})\n", .{ box1_vel.x, box1_vel.y, box2_vel.x, box2_vel.y });
+    std.debug.print("🔍 COLLISION: normal=({d:.2},{d:.2}), penetration={d:.2}\n", .{ collision_info.contact_normal.x, collision_info.contact_normal.y, collision_info.penetration_depth });
 
     // Resolve collision
-    core.resolveBoxCollision(
-        &box1_pos, &box1_vel, box1_extents, box1_mass, box1_kinematic,
-        &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic,
-        0.8, collision_info
-    );
+    core.resolveBoxCollision(&box1_pos, &box1_vel, box1_extents, box1_mass, box1_kinematic, &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic, 0.8, collision_info);
 
-    std.debug.print("🔍 AFTER: box1_pos=({d:.2},{d:.2}), box2_pos=({d:.2},{d:.2})\n",
-        .{ box1_pos.x, box1_pos.y, box2_pos.x, box2_pos.y });
-    std.debug.print("🔍 AFTER: box1_vel=({d:.2},{d:.2}), box2_vel=({d:.2},{d:.2})\n",
-        .{ box1_vel.x, box1_vel.y, box2_vel.x, box2_vel.y });
+    std.debug.print("🔍 AFTER: box1_pos=({d:.2},{d:.2}), box2_pos=({d:.2},{d:.2})\n", .{ box1_pos.x, box1_pos.y, box2_pos.x, box2_pos.y });
+    std.debug.print("🔍 AFTER: box1_vel=({d:.2},{d:.2}), box2_vel=({d:.2},{d:.2})\n", .{ box1_vel.x, box1_vel.y, box2_vel.x, box2_vel.y });
 
     // Verify results:
     // 1. Kinematic box (box2) should NOT move
@@ -362,8 +333,7 @@ test "box collision resolution - dynamic vs kinematic" {
     // 3. Dynamic box velocity should change (collision response)
     try testing.expect(box1_vel.x < orig_box1_vel_x); // Velocity should be reduced/reversed
 
-    std.debug.print("✅ Box collision resolved: box1 pos {d:.2} -> {d:.2}, vel {d:.2} -> {d:.2}\n",
-        .{ orig_box1_x, box1_pos.x, orig_box1_vel_x, box1_vel.x });
+    std.debug.print("✅ Box collision resolved: box1 pos {d:.2} -> {d:.2}, vel {d:.2} -> {d:.2}\n", .{ orig_box1_x, box1_pos.x, orig_box1_vel_x, box1_vel.x });
     std.debug.print("   Kinematic box2 stayed: pos {d:.2}, vel {d:.2}\n", .{ box2_pos.x, box2_vel.x });
 }
 
@@ -395,19 +365,14 @@ test "box collision resolution - dynamic vs dynamic" {
     const orig_box2_vel_x = box2_vel.x;
 
     // Resolve collision
-    core.resolveBoxCollision(
-        &box1_pos, &box1_vel, box1_extents, box1_mass, box1_kinematic,
-        &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic,
-        0.8, collision_info
-    );
+    core.resolveBoxCollision(&box1_pos, &box1_vel, box1_extents, box1_mass, box1_kinematic, &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic, 0.8, collision_info);
 
     // Verify results:
     // Both boxes should have their velocities changed
     try testing.expect(@abs(box1_vel.x - orig_box1_vel_x) > 0.01);
     try testing.expect(@abs(box2_vel.x - orig_box2_vel_x) > 0.01);
 
-    std.debug.print("✅ Dynamic-dynamic box collision: box1 vel {d:.2} -> {d:.2}, box2 vel {d:.2} -> {d:.2}\n",
-        .{ orig_box1_vel_x, box1_vel.x, orig_box2_vel_x, box2_vel.x });
+    std.debug.print("✅ Dynamic-dynamic box collision: box1 vel {d:.2} -> {d:.2}, box2 vel {d:.2} -> {d:.2}\n", .{ orig_box1_vel_x, box1_vel.x, orig_box2_vel_x, box2_vel.x });
 }
 
 // =============================================================================
@@ -439,8 +404,7 @@ test "collision performance - many box checks" {
     const duration_ns = end_time - start_time;
     const duration_us = @as(f64, @floatFromInt(duration_ns)) / 1000.0; // Convert to microseconds
 
-    std.debug.print("✅ Performance test: 1000 checks in {d:.1}μs ({d:.2}μs per check), {d} collisions detected\n",
-        .{ duration_us, duration_us / 1000.0, collision_count });
+    std.debug.print("✅ Performance test: 1000 checks in {d:.1}μs ({d:.2}μs per check), {d} collisions detected\n", .{ duration_us, duration_us / 1000.0, collision_count });
 
     // Performance assertion: should complete within reasonable time (< 1ms total)
     try testing.expect(duration_us < 1000.0);
@@ -514,10 +478,7 @@ test "stacking behavior - three boxes vertical stack (should maintain positions)
 
     // Test box1-box2 collision
     if (core.checkBoxCollision(box1_pos, box1_extents, box2_pos, box2_extents)) |collision_info| {
-        core.resolveBoxCollision(
-            &box1_pos, &box1_vel, box1_extents, box1_mass, box1_kinematic,
-            &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic,
-            0.0, collision_info // Zero restitution for stacking
+        core.resolveBoxCollision(&box1_pos, &box1_vel, box1_extents, box1_mass, box1_kinematic, &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic, 0.0, collision_info // Zero restitution for stacking
         );
 
         // After resolution, boxes should be properly separated
@@ -525,26 +486,20 @@ test "stacking behavior - three boxes vertical stack (should maintain positions)
         try testing.expect(vertical_separation >= 2.0); // Box height + small gap
         try testing.expect(vertical_separation <= 2.1); // Not too far apart
 
-        std.debug.print("✅ Box1-Box2 stacking: separation={d:.3}, box1_y={d:.3}, box2_y={d:.3}\n",
-            .{ vertical_separation, box1_pos.y, box2_pos.y });
+        std.debug.print("✅ Box1-Box2 stacking: separation={d:.3}, box1_y={d:.3}, box2_y={d:.3}\n", .{ vertical_separation, box1_pos.y, box2_pos.y });
     } else {
         try testing.expect(false); // Should detect collision for stacking
     }
 
     // Test box2-box3 collision
     if (core.checkBoxCollision(box2_pos, box2_extents, box3_pos, box3_extents)) |collision_info| {
-        core.resolveBoxCollision(
-            &box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic,
-            &box3_pos, &box3_vel, box3_extents, box3_mass, box3_kinematic,
-            0.0, collision_info
-        );
+        core.resolveBoxCollision(&box2_pos, &box2_vel, box2_extents, box2_mass, box2_kinematic, &box3_pos, &box3_vel, box3_extents, box3_mass, box3_kinematic, 0.0, collision_info);
 
         const vertical_separation = @abs(box3_pos.y - box2_pos.y);
         try testing.expect(vertical_separation >= 2.0);
         try testing.expect(vertical_separation <= 2.1);
 
-        std.debug.print("✅ Box2-Box3 stacking: separation={d:.3}, box2_y={d:.3}, box3_y={d:.3}\n",
-            .{ vertical_separation, box2_pos.y, box3_pos.y });
+        std.debug.print("✅ Box2-Box3 stacking: separation={d:.3}, box2_y={d:.3}, box3_y={d:.3}\n", .{ vertical_separation, box2_pos.y, box3_pos.y });
     }
 
     // Velocities should be zeroed for stable stacking
@@ -576,11 +531,7 @@ test "stacking behavior - mixed sphere-box stack" {
     // Check sphere-box collision
     if (core.checkSphereBoxCollision(sphere_pos, sphere_radius, box_pos, box_extents)) |collision_info| {
         // Use universal collision resolution
-        core.resolveCollision(
-            &sphere_pos, &sphere_vel, CollisionShape.SPHERE, sphere_extents, sphere_mass, sphere_kinematic,
-            &box_pos, &box_vel, CollisionShape.BOX, box_extents, box_mass, box_kinematic,
-            0.0, collision_info
-        );
+        core.resolveCollision(&sphere_pos, &sphere_vel, CollisionShape.SPHERE, sphere_extents, sphere_mass, sphere_kinematic, &box_pos, &box_vel, CollisionShape.BOX, box_extents, box_mass, box_kinematic, 0.0, collision_info);
 
         // Sphere should be positioned on top of box
         const sphere_bottom = sphere_pos.y - sphere_radius;
@@ -590,8 +541,7 @@ test "stacking behavior - mixed sphere-box stack" {
         try testing.expect(@abs(contact_gap) < 0.1); // Should be in contact
         try testing.expect(sphere_pos.y > box_pos.y); // Sphere above box
 
-        std.debug.print("✅ Sphere-box stacking: sphere_bottom={d:.3}, box_top={d:.3}, gap={d:.3}\n",
-            .{ sphere_bottom, box_top, contact_gap });
+        std.debug.print("✅ Sphere-box stacking: sphere_bottom={d:.3}, box_top={d:.3}, gap={d:.3}\n", .{ sphere_bottom, box_top, contact_gap });
     } else {
         std.debug.print("ℹ️ No sphere-box collision detected (may need position adjustment)\n", .{});
     }
@@ -630,17 +580,12 @@ test "sphere-box interaction - moving sphere hits stationary box (no orbit)" {
 
         // Check for collision
         if (core.checkSphereBoxCollision(sphere_pos, sphere_radius, box_pos, box_extents)) |collision_info| {
-            std.debug.print("🎯 Collision detected at step {d}: sphere_x={d:.3}, penetration={d:.3}\n",
-                .{ simulation_steps, sphere_pos.x, collision_info.penetration_depth });
+            std.debug.print("🎯 Collision detected at step {d}: sphere_x={d:.3}, penetration={d:.3}\n", .{ simulation_steps, sphere_pos.x, collision_info.penetration_depth });
 
             const original_sphere_vel_x = sphere_vel.x;
 
             // Resolve collision
-            core.resolveCollision(
-                &sphere_pos, &sphere_vel, CollisionShape.SPHERE, sphere_extents, sphere_mass, sphere_kinematic,
-                &box_pos, &box_vel, CollisionShape.BOX, box_extents, box_mass, box_kinematic,
-                0.8, collision_info
-            );
+            core.resolveCollision(&sphere_pos, &sphere_vel, CollisionShape.SPHERE, sphere_extents, sphere_mass, sphere_kinematic, &box_pos, &box_vel, CollisionShape.BOX, box_extents, box_mass, box_kinematic, 0.8, collision_info);
 
             // Sphere should bounce back (velocity should reverse or become positive)
             try testing.expect(sphere_vel.x > original_sphere_vel_x); // Less negative or positive
@@ -650,8 +595,7 @@ test "sphere-box interaction - moving sphere hits stationary box (no orbit)" {
             try testing.expect(@abs(sphere_vel.y) < 1.0);
             try testing.expect(@abs(sphere_vel.z) < 1.0);
 
-            std.debug.print("✅ Clean collision: sphere_vel {d:.2} -> {d:.2}, no orbit motion\n",
-                .{ original_sphere_vel_x, sphere_vel.x });
+            std.debug.print("✅ Clean collision: sphere_vel {d:.2} -> {d:.2}, no orbit motion\n", .{ original_sphere_vel_x, sphere_vel.x });
             break;
         }
 
@@ -697,10 +641,7 @@ test "sphere-box interaction - continuous contact stability" {
 
         // Check and resolve collision
         if (core.checkSphereBoxCollision(sphere_pos, sphere_radius, box_pos, box_extents)) |collision_info| {
-            core.resolveCollision(
-                &sphere_pos, &sphere_vel, CollisionShape.SPHERE, sphere_extents, sphere_mass, sphere_kinematic,
-                &box_pos, &box_vel, CollisionShape.BOX, box_extents, box_mass, box_kinematic,
-                0.1, collision_info // Low restitution for stable contact
+            core.resolveCollision(&sphere_pos, &sphere_vel, CollisionShape.SPHERE, sphere_extents, sphere_mass, sphere_kinematic, &box_pos, &box_vel, CollisionShape.BOX, box_extents, box_mass, box_kinematic, 0.1, collision_info // Low restitution for stable contact
             );
         }
 
@@ -721,6 +662,5 @@ test "sphere-box interaction - continuous contact stability" {
     try testing.expect(@abs(sphere_vel.y) < 0.2); // No significant Y motion
     try testing.expect(@abs(sphere_vel.z) < 0.2); // No significant Z motion
 
-    std.debug.print("✅ Continuous contact stability: {d}/60 unstable frames, final_vel=({d:.3},{d:.3},{d:.3})\n",
-        .{ unstable_frames, sphere_vel.x, sphere_vel.y, sphere_vel.z });
+    std.debug.print("✅ Continuous contact stability: {d}/60 unstable frames, final_vel=({d:.3},{d:.3},{d:.3})\n", .{ unstable_frames, sphere_vel.x, sphere_vel.y, sphere_vel.z });
 }

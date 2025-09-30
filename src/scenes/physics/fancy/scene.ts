@@ -84,7 +84,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
     // CENTER: Kinematic Platform
     const platform = new GameObject('kinematic-platform', 'Platform');
     platform.transform.setPosition(0, -7, 0);
-    platform.transform.setScale(2, 2, 2);
+    platform.transform.setScale(2, 2, 2); // cube was created with side=1
 
     const platformMeshRenderer = new MeshRenderer('cube', 'default', 'triangles',
         { x: 0.5, y: 0.5, z: 0.5, w: 1.0 } // Gray platform
@@ -95,7 +95,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
         5.0,        // mass: 5.0 (non-zero but still kinematic)
         false,      // useGravity: false
         CollisionShape.BOX,      // collisionShape: box (matching visual cube)
-        { x: 2.0, y: 2.0, z: 2.0 } // Platform box extents = 2.0x2.0x2.0 (matching 2x scale)
+        { x: 1.0, y: 1.0, z: 1.0 } // Platform box extents = 1.0x1.0x1.0 (for a 2x2x2 box)
     );
     platformRigidBody.setKinematic(true); // Kinematic - won't move
     platform.addComponent(platformRigidBody);
@@ -112,7 +112,6 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
             const y = 3 + row * 1.5 + heightVariation; // Stacked vertically with height variation
             const z = -2 + row * 2;  // Some depth variation
             ball.transform.setPosition(x, y, z);
-            ball.transform.setScale(0.8, 0.8, 0.8);
 
             // Color gradient: purple to pink
             const hue = 0.8 + (row + col) * 0.05;
@@ -125,7 +124,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
                 1.0,        // mass: 1kg
                 true,       // useGravity: true
                 CollisionShape.SPHERE,   // collisionShape: sphere
-                { x: 0.8, y: 0.8, z: 0.8 } // Collision radius matches scale
+                { x: 1.0, y: 1.0, z: 1.0 } // Sphere radius = 1.0 (standard unit sphere, scale handled by transform)
             );
             ball.addComponent(ballRigidBody);
             scene.addGameObject(ball);

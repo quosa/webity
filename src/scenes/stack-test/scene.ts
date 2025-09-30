@@ -11,12 +11,10 @@ let scene: Scene | undefined;
 let ballCount = 0;
 let isMonitoringCollisions = false;
 let lastLoggedCollisionCounter = 0;
+let isPlaying = true;
 
 function createInitialStackScene(scene: Scene): void {
-    console.log('🏗️ Creating 3-box stack test scene (NO FLOOR ENTITY)...');
-
-    // NO floor grid entity - using world bounds collision only
-    console.log('📐 No floor grid entity - using world bounds collision only (should eliminate interference)');
+    console.log('🏗️ Creating 3-box stack test scene...');
 
     // Create bottom box - positioned to rest on world bounds floor
     // World bounds floor is at Y=-8, box half-height is 1.0, so box center should be at Y=-7.0
@@ -35,53 +33,25 @@ function createInitialStackScene(scene: Scene): void {
         { x: 1.0, y: 1.0, z: 1.0 } // extents: half-extents for box collision
     );
 
-    console.log('🔍 BOX STACK DEBUG - Bottom box:');
-    console.log('   Transform scale:', bottomBox.transform.scale);
-    console.log('   RigidBody extents (half-extents):', bottomRigidBody.extents);
-    console.log('   RigidBody collision shape: BOX');
-    console.log('   Expected final Y position: -8.0 + 1.0 = -7.0 (floor + half-height)');
+    // Debug info available in runPhysicsTest() if needed
 
     bottomBox.addComponent(bottomRigidBody);
     scene.addGameObject(bottomBox);
-    console.log('🟠 Added bottom box at Y=-7.0 (should rest on floor)');
-
-    // Create middle box - positioned with 0.1 unit gap above bottom box
-    // Bottom box top at Y=-6.0, gap 0.1, so middle box center at Y=-5.9
+    // Create middle box - positioned with gap above bottom box for natural falling
     const middleBox = new GameObject('middle-box', 'MiddleBox');
-    middleBox.transform.setPosition(0, -4.5, 0); // Small gap for natural falling
-    middleBox.transform.setScale(1, 1, 1); // Unity scale
-
-    const middleMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
-    middleBox.addComponent(middleMeshRenderer);
-
-    const middleRigidBody = new RigidBody(
-        1.0,                      // mass: 1kg
-        true,                     // useGravity: true
-        CollisionShape.BOX,       // collisionShape: box
-        { x: 1.0, y: 1.0, z: 1.0 } // extents: half-extents for box collision
-    );
-    middleBox.addComponent(middleRigidBody);
+    middleBox.transform.setPosition(0, -4.5, 0);
+    middleBox.transform.setScale(1, 1, 1);
+    middleBox.addComponent(new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 })); // Green
+    middleBox.addComponent(new RigidBody(1.0, true, CollisionShape.BOX, { x: 1.0, y: 1.0, z: 1.0 }));
     scene.addGameObject(middleBox);
-    console.log('🟢 Added middle box at Y=-5.9 (0.1 gap above bottom, should fall and stack)');
 
-    // Create top box - positioned with 0.1 unit gap above middle box
-    // Middle box top at Y=-4.0 (assuming middle settles at Y=-5.0), gap 0.1, so top box center at Y=-3.9
+    // Create top box - positioned higher to allow natural falling
     const topBox = new GameObject('top-box', 'TopBox');
-    topBox.transform.setPosition(0, -2.2, 0); // Start higher to allow natural falling
-    topBox.transform.setScale(1, 1, 1); // Unity scale
-
-    const topMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 }); // Blue
-    topBox.addComponent(topMeshRenderer);
-
-    const topRigidBody = new RigidBody(
-        1.0,                      // mass: 1kg
-        true,                     // useGravity: true
-        CollisionShape.BOX,       // collisionShape: box
-        { x: 1.0, y: 1.0, z: 1.0 } // extents: half-extents for box collision
-    );
-    topBox.addComponent(topRigidBody);
+    topBox.transform.setPosition(0, -2.2, 0);
+    topBox.transform.setScale(1, 1, 1);
+    topBox.addComponent(new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 })); // Blue
+    topBox.addComponent(new RigidBody(1.0, true, CollisionShape.BOX, { x: 1.0, y: 1.0, z: 1.0 }));
     scene.addGameObject(topBox);
-    console.log('🔵 Added top box at Y=2.0 (should fall and stack on middle box)');
 
     ballCount = 3;
 
@@ -89,10 +59,27 @@ function createInitialStackScene(scene: Scene): void {
     scene.camera.setPosition([5, -3, -10]);
     scene.camera.lookAt([0, -7, 0]);
 
-    console.log(`✅ 3-box stack test scene created with ${scene.getEntityCount()} entities`);
+    console.log(`✅ Stack test scene created with ${scene.getEntityCount()} entities`);
 }
 
 // Global functions for HTML interface
+(window as any).togglePlayPause = () => {
+    isPlaying = !isPlaying;
+
+    const button = document.getElementById('play-pause-btn');
+    if (button) {
+        if (isPlaying) {
+            button.textContent = '⏸️ Pause';
+            console.log('▶️ Physics simulation RESUMED');
+        } else {
+            button.textContent = '▶️ Play';
+            console.log('⏸️ Physics simulation PAUSED');
+        }
+    }
+
+    updateStatus();
+};
+
 (window as any).resetScene = () => {
     if (!scene) return;
 
@@ -108,7 +95,7 @@ function createInitialStackScene(scene: Scene): void {
     createInitialStackScene(scene);
     ballCount = 3;
 
-    console.log('🔄 Scene reset to 3-ball stack');
+    console.log('🔄 Scene reset');
     updateStatus();
 };
 
@@ -175,7 +162,7 @@ function createInitialStackScene(scene: Scene): void {
 
     scene.addGameObject(testBall);
 
-    console.log('🔍 Added single floor test ball at X=5, Y=-7.0 to test world bounds collision');
+    console.log('🔍 Added single floor test ball at X=5');
     updateStatus();
 };
 
@@ -395,6 +382,11 @@ function updateStatus() {
     if (countElement) {
         countElement.textContent = scene.getEntityCount().toString();
     }
+
+    const physicsStatusElement = document.getElementById('physics-status');
+    if (physicsStatusElement) {
+        physicsStatusElement.textContent = isPlaying ? 'Running' : 'Paused';
+    }
 }
 
 function showError(message: string) {
@@ -437,41 +429,31 @@ async function main() {
 
         // 🔍 COLLISION DEBUGGING INSTRUCTIONS
         console.log('');
-        console.log('🔍 COLLISION DEBUGGING TOOLS AVAILABLE:');
-        console.log('   startCollisionMonitoring() - Start real-time collision event logging');
-        console.log('   stopCollisionMonitoring()  - Stop real-time collision event logging');
-        console.log('   clearCollisionEvents()     - Clear collision event counter');
-        console.log('   runPhysicsTest()           - Run full physics diagnostics with collision data');
+        console.log('🔍 DEBUGGING TOOLS AVAILABLE:');
+        console.log('   🎮 PLAY/PAUSE: Use the "⏸️ Pause" button to freeze physics simulation');
+        console.log('   🔍 COLLISION MONITORING:');
+        console.log('     startCollisionMonitoring() - Start real-time collision event logging');
+        console.log('     stopCollisionMonitoring()  - Stop real-time collision event logging');
+        console.log('     clearCollisionEvents()     - Clear collision event counter');
+        console.log('     runPhysicsTest()           - Run full physics diagnostics with collision data');
         console.log('');
-        console.log('🎯 TESTING GOAL: Boxes should "melt into one another" without erratic fighting behavior');
-        console.log('   (Collision resolution is disabled - only detection active)');
+        console.log('🎯 JITTER INVESTIGATION: Watch for micro-oscillations in sphere-on-box stacking');
+        console.log('   Pause the simulation to observe stabilization results more clearly');
+        console.log('   GPT-5 stabilization techniques should reduce jitter significantly');
         console.log('');
 
-        // Animation loop with FPS counter and 3-second timeout
+        // Animation loop with FPS counter and play/pause support
         let lastTime = performance.now();
         let frameCount = 0;
         let lastFpsTime = 0;
-        const startTime = performance.now();
-        const SIMULATION_TIMEOUT = 2500; // 2.5 seconds in milliseconds
-        let simulationStopped = false;
 
         const gameLoop = (currentTime: number) => {
             const rawDeltaTime = (currentTime - lastTime) / 1000;
             const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
             lastTime = currentTime;
 
-            // Check if 2.5 seconds have passed
-            if (currentTime - startTime >= SIMULATION_TIMEOUT && !simulationStopped) {
-                console.log('⏱️ SIMULATION TIMEOUT: Stopping after 2.5 seconds to keep logs manageable');
-                simulationStopped = true;
-
-                // Run final diagnostics
-                console.log('📊 FINAL DIAGNOSTICS:');
-                (window as any).runPhysicsTest();
-                return; // Stop the game loop
-            }
-
-            if (!simulationStopped) {
+            // Only update physics when playing
+            if (isPlaying) {
                 // Update scene
                 scene?.update(deltaTime);
 
@@ -479,11 +461,13 @@ async function main() {
                 checkForNewCollisions();
             }
 
-            // Update FPS counter
+            // Always update FPS counter (even when paused, to show 0 FPS)
             frameCount++;
             if (currentTime - lastFpsTime >= 1000) {
                 const fpsElement = document.getElementById('fps');
-                if (fpsElement) fpsElement.textContent = frameCount.toString();
+                if (fpsElement) {
+                    fpsElement.textContent = isPlaying ? frameCount.toString() : '0 (paused)';
+                }
 
                 updateStatus();
 
@@ -491,9 +475,8 @@ async function main() {
                 lastFpsTime = currentTime;
             }
 
-            if (!simulationStopped) {
-                requestAnimationFrame(gameLoop);
-            }
+            // Always continue the game loop for UI updates and play/pause functionality
+            requestAnimationFrame(gameLoop);
         };
 
         // Start the game loop

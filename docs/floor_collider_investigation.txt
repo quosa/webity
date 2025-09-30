@@ -1,0 +1,102 @@
+
+
+
+
+###############################################################################
+add_entity
+
+ - collision test
+ - ts: wasm-loader
+ - ts: wasm-physics-bridge
+
+    wasm:
+    pub export fn add_entity(
+        id: u32,
+        x: f32, y: f32, z: f32,
+        scaleX: f32, scaleY: f32, scaleZ: f32,
+        colorR: f32, colorG: f32, colorB: f32, colorA: f32,
+        meshIndex: u32,
+        materialId: u32,
+        mass: f32,
+        radius: f32,
+        isKinematic: bool) void {
+
+    wasm physics bridge
+    public addEntity(gameObject: GameObject): number | null {
+
+    // Entity Management
+    addGameObject(gameObject: GameObject): void {
+        this.entities.set(gameObject.id, gameObject);
+        gameObject.setScene(this);
+
+        try {
+            // Add ALL GameObjects to WASM for zero-copy rendering (physics and static entities)
+            this._addMeshIndex(gameObject);
+            const wasmEntityId = this.physicsBridge.addEntity(gameObject);
+            const rigidBody = gameObject.getComponent(RigidBody);
+            const entityType = rigidBody ? 'physics' : 'static';
+            console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity (wasmId: ${wasmEntityId})`);
+        } catch (error) {
+            console.error(`❌ Failed to add GameObject "${gameObject.name}" to WASM:`, error);
+        }
+    }
+
+
+So the issue is that we register every game object for rendering sake, but now they also get added to the physics part.
+
+We can only have dynamic or kinematic entities, but we don't have an option where the entity is render only
+
+###############################################################################
+spawnEntityInternal
+
+Called from:
+
+// Multi-entity exports for Phase 6.2
+pub export fn spawn_entity(x: f32, y: f32, z: f32, radius: f32) u32 {
+    return spawnEntityInternal(x, y, z, radius, MeshType.SPHERE);
+}
+!!! 0 references
+ - collision test
+ - game engine test
+
+
+// Enhanced entity spawning with mesh type support for Phase 7
+pub export fn spawn_entity_with_mesh(x: f32, y: f32, z: f32, radius: f32, mesh_type_id: u8) u32 {
+    const mesh_type: MeshType = switch (mesh_type_id) {
+        0 => MeshType.TRIANGLE,
+        1 => MeshType.CUBE,
+        2 => MeshType.SPHERE,
+        3 => MeshType.PYRAMID,
+        4 => MeshType.GRID,
+        else => MeshType.TRIANGLE, // Default to triangle for invalid types
+    };
+    return spawnEntityInternal(x, y, z, radius, mesh_type);
+}
+!!! 0 references
+
+
+###############################################################################
+spawn_entity_with_collider
+
+pub export fn spawn_entity_with_collider(
+    x: f32,
+    y: f32,
+    z: f32,
+    collision_shape: u8, // 0=sphere, 1=box, 2=plane
+    extent_x: f32, // radius for sphere, half-width for box, normal.x for plane
+    extent_y: f32, // unused for sphere, half-height for box, normal.y for plane
+    extent_z: f32, // unused for sphere, half-depth for box, normal.z for plane
+    mesh_type_id: u8,
+) u32 {
+
+ - ts: wasm-loader
+ - ts: wasm-physics-bridge
+ - ts: physics-bridge test
+ - ts: direct wasm loading test (just check the existance)
+
+
+
+
+
+pub export fn update(delta_time: f32) void {
+    fn updateECSPhysics(delta_time: f32) void {

@@ -13,10 +13,6 @@ let sphere: GameObject | undefined;
 let box: GameObject | undefined;
 let isPaused = false;
 
-// Collision monitoring
-let isMonitoringCollisions = false;
-let lastLoggedCollisionCounter = 0;
-
 function createBoxSphereTestScene(scene: Scene): void {
     console.log('📦🏀 Creating isolated box-sphere collision test...');
 
