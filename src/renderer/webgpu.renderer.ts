@@ -1,6 +1,16 @@
-// src/v2/webgpu.renderer.ts
-// Clean WebGPU renderer focused on GPU resource management and rendering
+// Clean WebGPU renderer focused on GPU resource management and WASM-driven instanced rendering
 /// <reference types="@webgpu/types" />
+// (If your tsconfig lib already includes 'dom', these ambient global WebGPU types will exist.)
+// Add defensive, minimal declarations for editors/build setups missing @webgpu/types. Erased at runtime.
+declare const GPUTextureUsage: {
+    COPY_SRC: number; COPY_DST: number; TEXTURE_BINDING: number; STORAGE_BINDING: number; RENDER_ATTACHMENT: number;
+};
+declare const GPUBufferUsage: {
+    MAP_READ: number; MAP_WRITE: number; COPY_SRC: number; COPY_DST: number; INDEX: number; VERTEX: number; UNIFORM: number; STORAGE: number; INDIRECT: number; QUERY_RESOLVE: number;
+};
+// Minimal shape for GPUTexture to satisfy TS if DOM lib absent
+interface GPUTexture { createView(_descriptor?: any): any; destroy(): void; }
+
 
 // import { EntityManager, EntityData } from './entities';
 import { GPUBufferManager } from './gpu-buffer-manager';
@@ -18,15 +28,14 @@ export type { EntityData } from '../engine/entities';
 
 
 class Texture {
-    gpuTexture: any; // GPUTexture (use 'any' for now to avoid type errors)
-    // Extend as needed
+    gpuTexture: GPUTexture;
     constructor(device: GPUDevice, texture: TextureData) {
         // TODO: Upload image to GPUTexture
         // Placeholder for now
         this.gpuTexture = device.createTexture({
             size: [texture.image.width, texture.image.height, 1],
             format: 'rgba8unorm',
-            usage: 0x04 | 0x02, // GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
     }
 }
@@ -47,7 +56,7 @@ export class WebGPURendererV2 {
     // private entityManager = new EntityManager();
     private bufferManager!: GPUBufferManager;
 
-    private depthTexture!: any; // GPUTexture
+    private depthTexture!: GPUTexture;
 
     async init(canvas: HTMLCanvasElement): Promise<void> {
         // Setup device/context
@@ -77,7 +86,7 @@ export class WebGPURendererV2 {
         this.depthTexture = this.device.createTexture({
             size: [canvas.width, canvas.height],
             format: 'depth24plus',
-            usage: 0x10, // GPUTextureUsage.RENDER_ATTACHMENT
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
     }
 
@@ -253,8 +262,7 @@ export class WebGPURendererV2 {
             },
         });
 
-        // TODO: consider a point pipeline for point clouds
-        // would have primitive.topology: 'point-list'
+        // Future: add point pipeline (primitive.topology: 'point-list') if point-clouds needed.
     }
 
     private createUniformBuffer(): void {
@@ -304,142 +312,7 @@ export class WebGPURendererV2 {
         this.textureRegistry.set(textureId, new Texture(this.device, texture));
     }
 
-    /*
-    addEntity(entityData: EntityData): void {
-        this.entityManager.add(entityData);
-    }
-
-    updateEntity(id: string, updates: Partial<EntityData>): void {
-        this.entityManager.update(id, updates);
-    }
-
-    removeEntity(id: string): void {
-        this.entityManager.remove(id);
-    }
-
-    clearEntities(): void {
-        this.entityManager = new EntityManager();
-    }
-
-    render(): void {
-        throw new Error('old rendering pipeline is deprecated!!! Use renderFromWasmBuffers() or mapInstanceDataFromWasm() instead.');
-    }
-
-    render(): void {
-        const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
-        const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
-        if (!sharedVertexBuffer || !sharedIndexBuffer) return;
-
-        // Group entities by render mode first, then by mesh
-        const triangleEntities = this.entityManager.getByRenderMode('triangles');
-        const lineEntities = this.entityManager.getByRenderMode('lines');
-        // Begin render pass with depth testing
-        const commandEncoder = this.device.createCommandEncoder();
-        const renderPass = commandEncoder.beginRenderPass({
-            colorAttachments: [
-                {
-                    view: this.context.getCurrentTexture().createView(),
-                    clearValue: { r: 0.1, g: 0.1, b: 0.2, a: 1.0 },
-                    loadOp: 'clear',
-                    storeOp: 'store',
-                },
-            ],
-            depthStencilAttachment: {
-                view: this.depthTexture.createView(),
-                depthClearValue: 1.0,
-                depthLoadOp: 'clear',
-                depthStoreOp: 'store',
-            },
-        });
-
-        // Render triangles
-        if (triangleEntities.length > 0) {
-            this.renderEntities(renderPass, this.renderPipeline, triangleEntities, sharedVertexBuffer, sharedIndexBuffer);
-        }
-
-        // Render lines
-        if (lineEntities.length > 0) {
-            this.renderEntities(renderPass, this.linePipeline, lineEntities, sharedVertexBuffer, sharedIndexBuffer);
-        }
-
-        // End render pass and submit
-        renderPass.end();
-        const commandBuffer = commandEncoder.finish();
-
-        this.device.queue.submit([commandBuffer]);
-    }
-
-    private renderEntities(
-        renderPass: any, // GPURenderPassEncoder
-        pipeline: GPURenderPipeline,
-        entities: Entity[],
-        sharedVertexBuffer: GPUBuffer,
-        sharedIndexBuffer: GPUBuffer
-    ): void {
-        renderPass.setPipeline(pipeline);
-        renderPass.setBindGroup(0, this.bindGroup);
-
-        // Group by mesh for instanced rendering
-        const meshGroups = new Map<string, Entity[]>();
-        for (const entity of entities) {
-            const meshId = entity.data.meshId;
-            if (!meshGroups.has(meshId)) {
-                meshGroups.set(meshId, []);
-            }
-            meshGroups.get(meshId)!.push(entity);
-        }
-
-        // Render each mesh group
-        for (const [meshId, instances] of meshGroups) {
-            const allocation = this.bufferManager.getMeshAllocation(meshId);
-            if (!allocation) {
-                console.warn(`Mesh allocation not found: ${meshId}`);
-                continue;
-            }
-
-
-            // Create instance buffer for this group
-            const instanceBuffer = this.createInstanceBuffer(instances);
-
-            // Use shared vertex and index buffers with offsets
-            const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
-            renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
-            renderPass.setVertexBuffer(1, instanceBuffer);
-
-            const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
-            renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
-            renderPass.drawIndexed(allocation.indexCount, instances.length);
-        }
-    }
-
-    private createInstanceBuffer(entities: Entity[]): GPUBuffer {
-        // Create instance data: [transform matrix (16 floats) + color (4 floats)] per instance
-        const instanceData = new Float32Array(entities.length * 20); // 20 floats per instance
-
-        for (let i = 0; i < entities.length; i++) {
-            const entity = entities[i]!;
-            const offset = i * 20;
-
-            // Get transform matrix from entity
-            const transform = entity.getTransformMatrix();
-            instanceData.set(transform, offset);
-
-            // Copy color (4 floats)
-            instanceData.set(entity.data.color, offset + 16);
-        }
-
-        // Create instance buffer
-        const instanceBuffer = this.device.createBuffer({
-            size: instanceData.byteLength,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true,
-        });
-        new Float32Array(instanceBuffer.getMappedRange()).set(instanceData);
-        instanceBuffer.unmap();
-
-        return instanceBuffer;
-    }
-    */
+    // Legacy entity-driven TS path removed. Rendering now relies on WASM-provided buffers & metadata.
 
     // Phase 5: Zero-copy WASM buffer integration
     mapInstanceDataFromWasm(wasmMemory: ArrayBuffer, offset: number, count: number): void {
@@ -487,8 +360,7 @@ export class WebGPURendererV2 {
         return `unknown_mesh_${wasmMeshId}`;
     }
 
-    // Phase 6: 2-pass WASM rendering (triangles + lines) - eliminates TypeScript rendering
-    // renderFromWasmBuffers(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number }): void {
+    // Phase 6: 2-pass WASM rendering (triangles + lines) - eliminates TypeScript entity iteration
     render(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number, get_entity_transforms_offset(): number }): void {
         const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
         const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
@@ -518,7 +390,7 @@ export class WebGPURendererV2 {
             },
         });
 
-        const maxSafeInstanceCount = 1000; // Reasonable upper bound
+        const maxSafeInstanceCount = 1000; // Conservative safety upper bound
         const instanceCount = this.bufferManager.getWasmEntityCount();
 
         // 🔒 CRITICAL: Validate instance count before rendering to prevent ghost triangles
@@ -565,20 +437,10 @@ export class WebGPURendererV2 {
 
         const wasmMemory = wasmModule.memory.buffer;
 
-        // TODO: REMOVE HARD-CODED MESH LIST - registry needs to know the render mode of each mesh
-        // Determine which mesh types belong to this render mode
+        // TODO: mesh registry should supply render mode per mesh (remove hard-coded lists)
         const triangleMeshes = ['triangle', 'cube', 'sphere', 'pyramid']; // Triangle meshes
         const lineMeshes = ['grid']; // Line meshes
         const targetMeshes = renderMode === 'triangles' ? triangleMeshes : lineMeshes;
-
-        // Debug: Check what mesh IDs WASM actually stored using the debug function
-        // if (renderMode === 'triangles' && 'debug_get_entity_mesh_id' in wasmModule) { // Only log once per render cycle
-        //     console.log('🔧 WASM Debug - Stored mesh IDs:');
-        //     for (let i = 0; i < instanceCount; i++) {
-        //         const storedMeshId = (wasmModule as any).debug_get_entity_mesh_id(i);
-        //         console.log(`  Entity ${i}: stored mesh_id=${storedMeshId}`);
-        //     }
-        // }
 
         // Group entities by mesh type, filtering for this render mode
         const meshGroups = new Map<string, number[]>(); // meshId -> array of entity indices
@@ -622,13 +484,11 @@ export class WebGPURendererV2 {
             const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
             renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
 
-            // TODO: THIS IS A TEMPORARY FIX - NEEDS TO BE REWORKED
+            // Temporary approach: build a contiguous instance buffer per mesh group
+            // because entity indices in WASM memory are not guaranteed contiguous per mesh.
+
             // We need to be able to either copy and use the wasm memory as-is
             // or we need to re-think the whole rendering wasm approach...
-
-            // 🔧 FIX: Create contiguous instance buffer for this mesh group
-            // The issue was: entity indices aren't contiguous (e.g., cubes at [1,3])
-            // so we can't use instanceOffset with drawIndexed count directly
 
             if (wasmModule?.memory && entityIndices.length > 0) {
                 const wasmMemory = wasmModule.memory.buffer;
@@ -646,7 +506,7 @@ export class WebGPURendererV2 {
                     meshInstanceData.set(entityData, i * 20);
                 }
 
-                // Create temporary GPU buffer for this mesh group
+                // Create temporary GPU buffer for this mesh group (one allocation per draw call)
                 const meshInstanceBuffer = this.device.createBuffer({
                     size: meshInstanceData.byteLength,
                     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -664,20 +524,7 @@ export class WebGPURendererV2 {
             }
         }
 
-        // console.log(`✅ ${renderMode} pass complete: ${totalEntitiesForMode} entities rendered`);
     }
-
-
-    /*
-    // Scene system integration methods
-    updateEntities(entities: EntityData[]): void {
-        // Clear existing entities and add new ones
-        this.clearEntities();
-        for (const entity of entities) {
-            this.addEntity(entity);
-        }
-    }
-    */
 
     updateCamera(viewProjectionMatrix: Float32Array): void {
         this.setViewProjectionMatrix(viewProjectionMatrix);
