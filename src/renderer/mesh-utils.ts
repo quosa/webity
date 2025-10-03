@@ -1,6 +1,5 @@
-// src/v2/mesh-utils.ts
 // Mesh creation utilities for WebGPU scenes
-import { MeshData } from './webgpu.renderer';
+import { MeshData } from './mesh-registry';
 
 /**
  * Create a cube mesh centered at origin

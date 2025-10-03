@@ -22,10 +22,6 @@ export type TextureData = {
     // ...other texture params
 };
 
-// Re-export types for convenience
-export type { MeshData } from './mesh-registry';
-export type { EntityData } from '../engine/entities';
-
 
 class Texture {
     gpuTexture: GPUTexture;
