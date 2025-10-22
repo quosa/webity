@@ -6,7 +6,8 @@
   publish = "dist"
 
   # Node version - using Node 22 LTS (stable, fully supported by Netlify)
-  environment = { NODE_VERSION = "22", PATH = "$HOME/.zig:$PATH" }
+  [build.environment]
+    NODE_VERSION = "22"
 
 # Headers for WASM and WebGPU support
 [[headers]]
