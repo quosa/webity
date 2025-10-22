@@ -41,7 +41,7 @@ test('check GPU support', async ({ page }) => {
 for (const testName of TEST_CASES) {
     test(`renders ${testName} scene and matches snapshot`, async ({ page }) => {
         // Go to your test page (now using relative path and baseURL from config)
-        await page.goto('/test-renderer.html', { waitUntil: 'networkidle' });
+        await page.goto('scenes/renderer/index.html', { waitUntil: 'networkidle' });
 
         // Wait for page to be done-done
         await page.waitForTimeout(1000);
