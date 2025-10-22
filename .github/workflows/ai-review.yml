@@ -8,8 +8,6 @@ on:
 jobs:
   ai-review:
     runs-on: ubuntu-latest
-    # Only run if OPENAI_API_KEY is configured (won't fail if missing)
-    if: ${{ secrets.OPENAI_API_KEY != '' }}
     permissions:
       contents: read
       pull-requests: write
@@ -22,6 +20,7 @@ jobs:
 
       - name: AI Code Review
         uses: anc95/ChatGPT-CodeReview@main
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -34,9 +33,13 @@ jobs:
           max_tokens: 10000
           review_simple_changes: false
 
+  # Notes:
+  # - This workflow is optional and will not block PRs if it fails
+  # - If OPENAI_API_KEY is not configured, the step will fail but continue
+  # - Add OPENAI_API_KEY secret to enable AI reviews
+  #
   # Alternative: Use CodeRabbit for free AI reviews
-  # To enable CodeRabbit:
   # 1. Visit https://coderabbit.ai/
   # 2. Install the CodeRabbit GitHub App to your repository
-  # 3. Comment out or remove the ai-review job above
-  # CodeRabbit will automatically review all PRs with AI assistance
+  # 3. Disable this workflow (delete file or comment out job)
+  # 4. CodeRabbit will automatically review all PRs with AI assistance
