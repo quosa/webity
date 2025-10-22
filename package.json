@@ -4,7 +4,7 @@
   "description": "Simple game engine with TypeScript, WebAssembly and WebGPU",
   "type": "module",
   "scripts": {
-    "build": "npm run build:vite && npm run build:wasm",
+    "build": "npm run build:wasm && npm run build:vite",
     "build:vite": "tsc && vite build",
     "build:wasm": "zig build-exe src/core/game_engine.zig -target wasm32-freestanding -fno-entry -rdynamic -O ReleaseSmall && mv game_engine.wasm public/",
     "clean": "rm -f public/game_engine.wasm dist/game_engine.wasm",
