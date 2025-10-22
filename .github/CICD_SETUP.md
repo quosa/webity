@@ -74,9 +74,10 @@ The CI/CD pipeline provides:
    - Click "Add new site" → "Import an existing project"
    - Connect to GitHub and select this repository
    - Build settings:
-     - Build command: `npm run build`
+     - Build command: Leave as default (configured in `netlify.toml`)
      - Publish directory: `dist`
    - Click "Deploy site"
+   - **Note**: Zig 0.15.1 is automatically installed during builds via `scripts/install-zig-netlify.sh`
 
 3. **Get Netlify Credentials**:
    - **Site ID**: Found in Site settings → General → Site details → Site ID
@@ -200,9 +201,16 @@ The AI review workflow is **completely optional** and automatically skips if not
 
 ### Build Failures
 
-**Zig Not Found**:
-- Check Zig version in workflow (should be 0.15.1)
-- Update version in `.github/workflows/*.yml` if needed
+**Zig Not Found (GitHub Actions)**:
+- Check Zig version in workflow files (should be 0.15.1)
+- Verify `goto-bus-stop/setup-zig@v2` action in `.github/workflows/*.yml`
+- Update version if needed
+
+**Zig Not Found (Netlify)**:
+- Zig 0.15.1 is automatically installed via `scripts/install-zig-netlify.sh`
+- Check Netlify build logs for install script errors
+- Verify script has executable permissions (`chmod +x scripts/install-zig-netlify.sh`)
+- Check download URL is accessible: `https://ziglang.org/download/0.15.1/`
 
 **Tests Failing**:
 - Run `npm run verify` locally
@@ -210,8 +218,9 @@ The AI review workflow is **completely optional** and automatically skips if not
 - Check workflow logs for details
 
 **WASM Build Issues**:
-- Verify `public/game_engine.wasm` is built
-- Check Zig compilation step in workflow
+- Verify `public/game_engine.wasm` is built correctly
+- Check Zig compilation step in workflow or Netlify build logs
+- Ensure `npm run build:wasm` completes successfully
 
 ### Deployment Issues
 

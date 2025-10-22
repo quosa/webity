@@ -1,12 +1,12 @@
 [build]
-  # Build command - handled by GitHub Actions
-  command = "npm run build"
+  # Build command - installs Zig then builds the project
+  command = "bash scripts/install-zig-netlify.sh && export PATH=\"$HOME/.zig:$PATH\" && npm run build"
 
   # Output directory after build
   publish = "dist"
 
   # Node version - using Node 22 LTS (stable, fully supported by Netlify)
-  environment = { NODE_VERSION = "22" }
+  environment = { NODE_VERSION = "22", PATH = "$HOME/.zig:$PATH" }
 
 # Headers for WASM and WebGPU support
 [[headers]]
