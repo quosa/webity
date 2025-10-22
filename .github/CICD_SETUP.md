@@ -19,7 +19,7 @@ The CI/CD pipeline provides:
 **Triggers**: On pull request open/update
 
 **What it does**:
-- Installs Node.js 18 and Zig 0.15.1
+- Installs Node.js 22 (LTS) and Zig 0.15.1
 - Runs `npm run verify` (typecheck + lint + test + test:wasm)
 - Builds WASM and TypeScript
 - Uploads build artifacts
@@ -52,14 +52,15 @@ The CI/CD pipeline provides:
 
 ### 4. AI Code Review (`ai-review.yml`)
 
-**Triggers**: On pull request open/update
+**Triggers**: On pull request open/update (only if `OPENAI_API_KEY` is configured)
 
 **What it does**:
 - Uses AI to analyze code changes
 - Posts review comments with suggestions
 - Focuses on bugs, security issues, and improvements
+- **Automatically skips if API key is not configured** (won't fail builds)
 
-**Status**: 🤖 Optional - provides AI-powered insights
+**Status**: 🤖 Optional - provides AI-powered insights, gracefully skips if not configured
 
 ## Setup Instructions
 
@@ -91,11 +92,11 @@ Add these secrets to your GitHub repository:
 
    | Secret Name | Value | Required For |
    |-------------|-------|--------------|
-   | `NETLIFY_AUTH_TOKEN` | Your Netlify personal access token | Deployments |
-   | `NETLIFY_SITE_ID` | Your Netlify site ID | Deployments |
-   | `OPENAI_API_KEY` | OpenAI API key (optional) | AI Reviews |
+   | `NETLIFY_AUTH_TOKEN` | Your Netlify personal access token | Deployments (required) |
+   | `NETLIFY_SITE_ID` | Your Netlify site ID | Deployments (required) |
+   | `OPENAI_API_KEY` | OpenAI API key (optional) | AI Reviews (optional) |
 
-**Note**: `OPENAI_API_KEY` is optional. If not provided, you can use CodeRabbit instead (see below).
+**Note**: `OPENAI_API_KEY` is completely optional. The AI review workflow automatically skips if this key is not provided and won't fail your builds. You can use CodeRabbit instead or skip AI reviews entirely (see below).
 
 ### Step 3: Enable Branch Protection
 
@@ -110,23 +111,28 @@ Protect your main branch and require status checks:
    - Select required checks: `validate` (from pr-validation.yml)
 4. Save changes
 
-### Step 4: AI Code Review Options
+### Step 4: AI Code Review Options (Optional)
+
+The AI review workflow is **completely optional** and automatically skips if not configured. Choose one option below or skip AI reviews entirely:
 
 **Option A: OpenAI GPT-4 (Paid)**
 - Add `OPENAI_API_KEY` to GitHub secrets
-- Workflow will use GPT-4 for code reviews
+- Workflow will automatically activate and use GPT-4 for code reviews
 - Cost: ~$0.01-0.03 per review
+- No other changes needed
 
 **Option B: CodeRabbit (Free for Open Source)**
 - Visit [coderabbit.ai](https://coderabbit.ai)
 - Install CodeRabbit GitHub App
 - Grant access to your repository
-- Disable or comment out the `ai-review.yml` workflow
+- Optionally disable the `ai-review.yml` workflow (CodeRabbit works independently)
 - CodeRabbit will automatically review all PRs
 
-**Option C: Disable AI Reviews**
-- Delete or disable `.github/workflows/ai-review.yml`
+**Option C: No AI Reviews**
+- Don't add `OPENAI_API_KEY` secret
+- The `ai-review.yml` workflow will automatically skip (won't fail builds)
 - Use manual code reviews only
+- No changes needed - this is the default behavior
 
 ## Usage
 
@@ -153,7 +159,7 @@ Protect your main branch and require status checks:
 5. **Automated Actions**:
    - ✅ PR Validation runs automatically
    - ✅ Preview deployment starts
-   - 🤖 AI review posts suggestions
+   - 🤖 AI review posts suggestions (if configured)
    - 💬 Comment appears with preview URL
 
 6. **Testing Your Changes**:
@@ -225,10 +231,15 @@ Protect your main branch and require status checks:
 
 ### AI Review Issues
 
-**No AI Reviews**:
-- Check if `OPENAI_API_KEY` is set (if using OpenAI)
-- Or install CodeRabbit GitHub App
-- Verify workflow has permissions to comment on PRs
+**No AI Reviews Appearing**:
+- This is normal if `OPENAI_API_KEY` is not configured - the workflow automatically skips
+- If you want AI reviews: Add `OPENAI_API_KEY` to GitHub secrets or install CodeRabbit GitHub App
+- Verify workflow has permissions to comment on PRs (if key is configured)
+
+**AI Review Failing**:
+- Check if `OPENAI_API_KEY` is valid (if using OpenAI)
+- Verify OpenAI API has sufficient credits
+- Check workflow logs for specific error messages
 
 **Review Quality**:
 - Adjust model parameters in `ai-review.yml`
@@ -274,7 +285,7 @@ For **private** projects:
 2. **Test Preview URLs**: Verify changes in preview before merging
 3. **Monitor Build Times**: Optimize if builds exceed free tier limits
 4. **Review AI Suggestions**: AI helps but doesn't replace human review
-5. **Keep Dependencies Updated**: Update Node.js and Zig versions as needed
+5. **Keep Dependencies Updated**: Currently using Node.js 22 (LTS) and Zig 0.15.1 - update as needed
 6. **Monitor Production**: Check production site after each deployment
 
 ## File Structure
