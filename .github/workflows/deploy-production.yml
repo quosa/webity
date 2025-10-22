@@ -41,7 +41,7 @@ jobs:
           publish-dir: './dist'
           production-deploy: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Production deployment from commit ${{ github.sha }}"
+          deploy-message: "Production: ${{ github.event.head_commit.message }} (${{ github.sha }})"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

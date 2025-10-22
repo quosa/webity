@@ -39,8 +39,7 @@ jobs:
           publish-dir: './dist'
           production-deploy: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy preview for PR #${{ github.event.number }}"
-          alias: pr-${{ github.event.number }}
+          deploy-message: "PR #${{ github.event.number }} - ${{ github.event.pull_request.title }} (${{ github.sha }})"
           github-deployment-environment: "preview-pr-${{ github.event.number }}"
           enable-commit-comment: false
           enable-pull-request-comment: true

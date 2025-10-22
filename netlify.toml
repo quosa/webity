@@ -37,7 +37,6 @@
   from = "/*"
   to = "/index.html"
   status = 200
-  conditions = { Role = ["*"] }
 
 # Plugin for better performance
 [[plugins]]
