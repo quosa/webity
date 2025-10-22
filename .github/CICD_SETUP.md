@@ -33,7 +33,7 @@ The CI/CD pipeline provides:
 **What it does**:
 - Builds the complete project
 - Deploys to Netlify preview environment
-- Posts comment with preview URL (e.g., `https://pr-123--YOUR_SITE.netlify.app`)
+- Posts comment with preview URL (e.g., `https://pr-123--webity-ci.netlify.app`)
 - Preview includes HTTPS (required for WebGPU)
 
 **Status**: ✅ Provides live preview URL for testing
@@ -46,7 +46,7 @@ The CI/CD pipeline provides:
 - Runs full verification suite again
 - Builds production bundle
 - Deploys to Netlify production site
-- Production URL: `https://YOUR_SITE.netlify.app`
+- Production URL: `https://webity-ci.netlify.app`
 
 **Status**: ✅ Automatic production deployment
 
@@ -179,7 +179,7 @@ The AI review workflow is **completely optional** and automatically skips if not
    - ✅ Production deployment runs
    - ✅ All tests run again
    - ✅ Build and deploy to production
-   - 🚀 Live at `https://YOUR_SITE.netlify.app`
+   - 🚀 Live at `https://webity-ci.netlify.app`
 
 ### Checking Deployment Status
 
@@ -193,7 +193,7 @@ The AI review workflow is **completely optional** and automatically skips if not
 - View deployment logs for debugging
 
 **Production URL**:
-- Visit `https://YOUR_SITE.netlify.app`
+- Visit `https://webity-ci.netlify.app`
 - Netlify provides the site name (you can customize it)
 
 ## Troubleshooting
