@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
-# Install Zig for Netlify builds
+# Install Zig 0.15.2 for Netlify builds
 # This script downloads and installs Zig if it's not already available
 
-ZIG_VERSION="0.16.0-dev.747+493ad58ff"
+ZIG_VERSION="0.15.2"
 ZIG_TARBALL="zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
-ZIG_URL="https://ziglang.org/builds/${ZIG_TARBALL}"
+ZIG_URL="https://ziglang.org/download/${ZIG_VERSION}/${ZIG_TARBALL}"
 INSTALL_DIR="${HOME}/.zig"
 
 echo "Checking for Zig installation..."
