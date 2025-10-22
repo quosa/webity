@@ -5,8 +5,8 @@
   # Output directory after build
   publish = "dist"
 
-  # Node version
-  environment = { NODE_VERSION = "18" }
+  # Node version - using Node 22 LTS (stable, fully supported by Netlify)
+  environment = { NODE_VERSION = "22" }
 
 # Headers for WASM and WebGPU support
 [[headers]]
