@@ -24,14 +24,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        with:
-          model: gpt-4
-          review_comment_lgtm: false
-          language: en
-          top_p: 1
-          temperature: 1
-          max_tokens: 10000
-          review_simple_changes: false
+          MODEL: gpt-4
+          LANGUAGE: en
+          TOP_P: 1
+          TEMPERATURE: 1
+          MAX_TOKENS: 10000
 
   # Notes:
   # - This workflow is optional and will not block PRs if it fails
