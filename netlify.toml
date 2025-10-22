@@ -1,0 +1,43 @@
+[build]
+  # Build command - installs Zig then builds the project
+  command = "bash scripts/install-zig-netlify.sh && export PATH=\"$HOME/.zig:$PATH\" && npm run build"
+
+  # Output directory after build
+  publish = "dist"
+
+  # Node version - using Node 22 LTS (stable, fully supported by Netlify)
+  [build.environment]
+    NODE_VERSION = "22"
+
+# Headers for WASM and WebGPU support
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Required for SharedArrayBuffer and WebGPU
+    Cross-Origin-Embedder-Policy = "require-corp"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+    # Security headers
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "no-referrer"
+
+    # WASM MIME type
+    Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:;"
+
+# WASM MIME type configuration
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
+
+# Redirects for SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Plugin for better performance
+[[plugins]]
+  package = "@netlify/plugin-lighthouse"

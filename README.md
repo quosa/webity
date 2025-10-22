@@ -291,6 +291,32 @@ The collision system uses a consistent "Object1 Point of View" convention docume
 - Comprehensive test matrix for all collision type combinations
 - Proper kinematic vs dynamic object handling
 
+## CI/CD Pipeline
+
+This repository includes a complete GitHub Actions CI/CD pipeline with automated testing and deployments.
+
+### Features
+- **Automated Testing** - All PRs validated with `npm run verify` (typecheck + lint + test + test:wasm)
+- **Preview Deployments** - Every PR gets a unique preview URL on Netlify for testing
+- **Production Deployment** - Automatic deployment to production on merge to main
+- **AI Code Reviews** - Optional AI-assisted code review suggestions on PRs
+- **Quality Gates** - All tests must pass before merging
+
+### Quick Start
+1. See [`.github/CICD_SETUP.md`](.github/CICD_SETUP.md) for complete setup instructions
+2. Set up Netlify account and add GitHub secrets (`NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`)
+3. Create a PR and the pipeline runs automatically
+4. Preview URL appears in PR comments for testing
+5. Merge approved PRs to deploy to production
+
+### Workflows
+- **`pr-validation.yml`** - Runs all tests on PRs
+- **`deploy-preview.yml`** - Deploys PR previews to Netlify
+- **`deploy-production.yml`** - Deploys main branch to production
+- **`ai-review.yml`** - AI-powered code review (optional)
+
+All workflows are free using Netlify and GitHub Actions free tiers.
+
 ## Claude Code Setup with LiteLLM Proxy
 
 - check the environment variables in .env
