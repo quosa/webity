@@ -382,7 +382,11 @@ test "box collision resolution - dynamic vs dynamic" {
 test "collision performance - many box checks" {
     std.debug.print("\n🧪 Testing collision performance - 1000 box collision checks\n", .{});
 
-    const start_time = std.time.nanoTimestamp();
+    // Zig 0.16 removed std.time.nanoTimestamp; use the monotonic Io clock instead.
+    var threaded_io: std.Io.Threaded = .init_single_threaded;
+    defer threaded_io.deinit();
+    const io = threaded_io.io();
+    const start_time = std.Io.Clock.now(.awake, io).toNanoseconds();
 
     var collision_count: u32 = 0;
     var i: u32 = 0;
@@ -400,7 +404,7 @@ test "collision performance - many box checks" {
         }
     }
 
-    const end_time = std.time.nanoTimestamp();
+    const end_time = std.Io.Clock.now(.awake, io).toNanoseconds();
     const duration_ns = end_time - start_time;
     const duration_us = @as(f64, @floatFromInt(duration_ns)) / 1000.0; // Convert to microseconds
 
