@@ -234,54 +234,10 @@ export class Scene {
 
         // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
         const wasmModule = this.physicsBridge.getWasmModule();
-        // this.renderer.renderFromWasmBuffers(wasmModule);
         this.renderer.render(wasmModule);
     }
 
     // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
-
-    /*
-    // Legacy TypeScript rendering (Phase 4 and earlier) - kept for fallback
-    render(): void {
-        if (!this.renderer) return;
-
-        // Update camera matrices
-        const aspect = this.renderer.getAspectRatio();
-        const viewProjectionMatrix = this.camera.getViewProjectionMatrix(aspect);
-
-        // Collect renderable entities from GameObjects
-        const renderableEntities = [];
-
-        for (const gameObject of this.entities.values()) {
-            const meshRenderer = gameObject.getMeshRenderer();
-            if (meshRenderer && gameObject.isActive()) {
-                // Convert GameObject to Entity format for renderer
-                // NOTE: Renderer expects rotation in RADIANS, but GameObject stores in DEGREES
-                const entity = {
-                    id: gameObject.id,
-                    meshId: meshRenderer.meshId,
-                    transform: {
-                        position: [gameObject.transform.position.x, gameObject.transform.position.y, gameObject.transform.position.z] as [number, number, number],
-                        rotation: [
-                            gameObject.transform.rotation.x * Math.PI / 180,  // Convert degrees to radians
-                            gameObject.transform.rotation.y * Math.PI / 180,  // Convert degrees to radians
-                            gameObject.transform.rotation.z * Math.PI / 180   // Convert degrees to radians
-                        ] as [number, number, number],
-                        scale: [gameObject.transform.scale.x, gameObject.transform.scale.y, gameObject.transform.scale.z] as [number, number, number]
-                    },
-                    color: [meshRenderer.color.x, meshRenderer.color.y, meshRenderer.color.z, meshRenderer.color.w] as [number, number, number, number],
-                    renderMode: meshRenderer.renderMode
-                };
-                renderableEntities.push(entity);
-            }
-        }
-
-        // Update renderer with current entities and camera
-        this.renderer.updateEntities(renderableEntities);
-        this.renderer.updateCamera(viewProjectionMatrix);
-        this.renderer.render();
-    }
-    */
 
     // Phase 5: Register all entities with WASM (now that WASM is initialized)
     private registerEntitiesWithWasm(): void {
