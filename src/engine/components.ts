@@ -1,6 +1,13 @@
 // src/v2/components.ts
 // Base Component system and built-in components
 
+import {
+    createLookAtMatrix,
+    createPerspectiveMatrix,
+    createOrthographicMatrix,
+    multiplyMat4,
+} from '../utils/math-utils';
+
 export abstract class Component {
     public gameObject: any; // Will be GameObject, but avoiding circular import
 
@@ -358,6 +365,11 @@ export class CameraComponent extends Component {
     // Camera control settings
     public isActiveCamera: boolean; // Whether this camera is currently active
 
+    // Orientation (3a: look-direction, not Euler). An explicit target is set via lookAt();
+    // when null the forward direction is derived from the GameObject's Euler rotation (legacy).
+    public target: [number, number, number] | null = null;
+    public up: [number, number, number] = [0, 1, 0];
+
     constructor(
         isPerspective: boolean = true,
         fov: number = Math.PI / 4, // 45 degrees
@@ -464,5 +476,49 @@ export class CameraComponent extends Component {
         this.bottom = bottom;
         this.near = near;
         this.far = far;
+    }
+
+    // ── View / projection ────────────────────────────────────────────────────────────
+    // 3a: the camera's position IS its GameObject's transform.position (unified); orientation
+    // is a look-direction (target/up). View matrix reuses the proven eye/target/up look-at math.
+
+    lookAt(x: number, y: number, z: number): void {
+        this.target = [x, y, z];
+    }
+
+    setTarget(target: [number, number, number]): void {
+        this.target = target;
+    }
+
+    setUp(up: [number, number, number]): void {
+        this.up = up;
+    }
+
+    setClipPlanes(near: number, far: number): void {
+        this.near = near;
+        this.far = far;
+    }
+
+    private resolveTarget(): [number, number, number] {
+        const p = this.gameObject.transform.position;
+        if (this.target) return this.target;
+        // No explicit target: look along the GameObject's Euler forward direction (legacy).
+        const forward = this.getForwardDirection();
+        return [p.x + forward[0], p.y + forward[1], p.z + forward[2]];
+    }
+
+    getViewMatrix(): Float32Array {
+        const p = this.gameObject.transform.position;
+        return createLookAtMatrix([p.x, p.y, p.z], this.resolveTarget(), this.up);
+    }
+
+    getProjectionMatrix(aspect: number): Float32Array {
+        return this.isPerspective
+            ? createPerspectiveMatrix(this.fov, aspect, this.near, this.far)
+            : createOrthographicMatrix(this.left, this.right, this.top, this.bottom, this.near, this.far);
+    }
+
+    getViewProjectionMatrix(aspect: number): Float32Array {
+        return multiplyMat4(this.getProjectionMatrix(aspect), this.getViewMatrix());
     }
 }
