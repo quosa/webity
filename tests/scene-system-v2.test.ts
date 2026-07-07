@@ -349,9 +349,11 @@ describe('Scene System (v2)', () => {
         obj.addComponent(new RotatorComponent(0, 45, 0)); // 45 deg/sec around Y
         scene.addGameObject(obj);
 
-        // Isolate the update loop from the (uninitialized) WASM physics bridge.
+        // Neutralize only the physics step, keeping the real (typed) bridge intact so
+        // that any additional bridge usage introduced in Scene.update() would surface
+        // rather than be masked by a stub.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (scene as any).physicsBridge = { update: jest.fn() };
+        jest.spyOn((scene as any).physicsBridge, 'update').mockImplementation(() => {});
         // No renderer is set, so Scene.render() returns early.
 
         scene.update(1.0); // 1 second
