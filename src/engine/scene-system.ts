@@ -178,7 +178,8 @@ export class Scene {
         // 1. Update input controller BEFORE other systems
         this.activeInputController?.update(deltaTime);
 
-        // 2. Update all GameObject components (minimal TypeScript coordination)
+        // 2. Pre-physics: update all GameObject components once (rotators, input-driven
+        //    forces, kinematic bodies pushing their transform into WASM, etc.)
         for (const gameObject of this.entities.values()) {
             // Update GameObject (which already calls update on all components)
             gameObject.update(deltaTime);
@@ -187,10 +188,11 @@ export class Scene {
         // 3. Run WASM physics simulation (master data updated automatically in WASM)
         this.physicsBridge.update(deltaTime);
 
-        // 4. Update GameObject components (so RigidBody can sync from WASM physics results)
+        // 4. Post-physics: pull WASM simulation results back into dynamic RigidBody
+        //    transforms. This is a targeted sync, NOT a second full component update -
+        //    re-running update() here would double per-frame logic (e.g. rotators).
         for (const gameObject of this.entities.values()) {
-            // Update GameObject (which calls update on all components)
-            gameObject.update(deltaTime);
+            gameObject.getComponent(RigidBody)?.syncFromPhysics();
         }
 
         // 5. Sync camera state to WASM for view matrix calculation

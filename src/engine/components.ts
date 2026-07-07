@@ -217,12 +217,19 @@ export class RigidBody extends Component {
     }
 
     override update(_deltaTime: number): void {
-        // Physics updates handled by WASM, but we can override for custom behavior
+        // Pre-physics phase (runs once, before the WASM physics step).
+        // Kinematic bodies push their (manually-updated) transform into WASM so the
+        // simulation sees it. Dynamic bodies are driven by WASM and pull their results
+        // in the post-physics phase (syncFromPhysics), not here.
         if (this.isKinematic) {
-            // Kinematic bodies: manual transform updates
             this.syncFromTransform();
-        } else {
-            // Dynamic bodies: sync from WASM physics simulation
+        }
+    }
+
+    // Post-physics phase (runs once, after the WASM physics step): dynamic bodies pull
+    // the simulation results from WASM back into the GameObject transform for rendering.
+    syncFromPhysics(): void {
+        if (!this.isKinematic) {
             this.syncFromWasm();
         }
     }
