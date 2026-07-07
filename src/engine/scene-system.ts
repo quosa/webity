@@ -185,10 +185,9 @@ export class Scene {
             gameObject.update(deltaTime);
         }
 
-        // 3. Run WASM physics simulation. The bridge's update() also syncs results
-        //    (position + velocity) from WASM back into each dynamic GameObject's
-        //    transform via syncPhysicsResults(), so no separate post-physics loop is
-        //    needed here (avoids double per-frame updates and redundant WASM reads).
+        // 3. Run WASM physics simulation. bridge.update() also syncs results back into
+        //    each dynamic GameObject's transform via syncPhysicsResults(), so no
+        //    separate post-physics component pass is needed here.
         this.physicsBridge.update(deltaTime);
 
         // 4. Sync camera state to WASM for view matrix calculation
