@@ -183,7 +183,9 @@ describe('RigidBody Component', () => {
             rigidBody.setWasmEntityId(789);
             rigidBody.setPhysicsBridge(mockBridge);
 
-            // syncFromWasm is private, but we can test the update method which calls it for non-kinematic bodies
+            // Dynamic bodies are synced from WASM by the physics bridge
+            // (WasmPhysicsBridge.syncPhysicsResults()), not by update(); update() should
+            // be a safe no-op for a non-kinematic body.
             rigidBody.setKinematic(false);
 
             expect(() => {

@@ -217,20 +217,12 @@ export class RigidBody extends Component {
     }
 
     override update(_deltaTime: number): void {
-        // Pre-physics phase (runs once, before the WASM physics step).
-        // Kinematic bodies push their (manually-updated) transform into WASM so the
-        // simulation sees it. Dynamic bodies are driven by WASM and pull their results
-        // in the post-physics phase (syncFromPhysics), not here.
+        // Pre-physics phase (runs once, before the WASM physics step). Kinematic bodies
+        // push their (manually-updated) transform into WASM so the simulation sees it.
+        // Dynamic bodies are driven by WASM; their simulation results are synced back
+        // into the transform by WasmPhysicsBridge.syncPhysicsResults() after the step.
         if (this.isKinematic) {
             this.syncFromTransform();
-        }
-    }
-
-    // Post-physics phase (runs once, after the WASM physics step): dynamic bodies pull
-    // the simulation results from WASM back into the GameObject transform for rendering.
-    syncFromPhysics(): void {
-        if (!this.isKinematic) {
-            this.syncFromWasm();
         }
     }
 
@@ -258,19 +250,6 @@ export class RigidBody extends Component {
         this.physicsBridge.updateEntity(this.wasmEntityId, transform.position, this.velocity);
         this.physicsBridge.updateEntityRotation(this.wasmEntityId, transform.rotation);
         this.physicsBridge.updateEntityScale(this.wasmEntityId, transform.scale);
-    }
-
-    // Sync physics simulation results from WASM
-    private syncFromWasm(): void {
-        if (!this.gameObject || !this.physicsBridge || this.isKinematic || this.wasmEntityId === undefined) return;
-
-        // Get updated position/rotation from WASM physics simulation
-        const wasmData = this.physicsBridge.getEntityData(this.wasmEntityId);
-        if (wasmData) {
-            this.gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
-        } else {
-            console.log(`❌ syncFromWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: No WASM data received`);
-        }
     }
 
     // Sync from transform for kinematic bodies

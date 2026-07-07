@@ -178,27 +178,23 @@ export class Scene {
         // 1. Update input controller BEFORE other systems
         this.activeInputController?.update(deltaTime);
 
-        // 2. Pre-physics: update all GameObject components once (rotators, input-driven
-        //    forces, kinematic bodies pushing their transform into WASM, etc.)
+        // 2. Update all GameObject components once (rotators, input-driven forces,
+        //    kinematic bodies pushing their transform into WASM, etc.)
         for (const gameObject of this.entities.values()) {
             // Update GameObject (which already calls update on all components)
             gameObject.update(deltaTime);
         }
 
-        // 3. Run WASM physics simulation (master data updated automatically in WASM)
+        // 3. Run WASM physics simulation. The bridge's update() also syncs results
+        //    (position + velocity) from WASM back into each dynamic GameObject's
+        //    transform via syncPhysicsResults(), so no separate post-physics loop is
+        //    needed here (avoids double per-frame updates and redundant WASM reads).
         this.physicsBridge.update(deltaTime);
 
-        // 4. Post-physics: pull WASM simulation results back into dynamic RigidBody
-        //    transforms. This is a targeted sync, NOT a second full component update -
-        //    re-running update() here would double per-frame logic (e.g. rotators).
-        for (const gameObject of this.entities.values()) {
-            gameObject.getComponent(RigidBody)?.syncFromPhysics();
-        }
-
-        // 5. Sync camera state to WASM for view matrix calculation
+        // 4. Sync camera state to WASM for view matrix calculation
         this.syncCameraToWasm();
 
-        // 6. Render with zero-copy buffer access (WASM buffers → GPU directly)
+        // 5. Render with WASM buffer access (WASM buffers → GPU)
         this.render();
     }
 
