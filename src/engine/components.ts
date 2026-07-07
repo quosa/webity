@@ -7,6 +7,8 @@ import {
     createOrthographicMatrix,
     multiplyMat4,
 } from '../utils/math-utils';
+import type { Mesh } from './mesh';
+import { Material } from './material';
 
 export abstract class Component {
     public gameObject: any; // Will be GameObject, but avoiding circular import
@@ -121,18 +123,40 @@ export class MeshRenderer extends Component {
     public color: Vector3 & { w: number }; // RGBA color
     public renderMode: 'triangles' | 'lines';
 
+    // Object mode (A3): the actual asset objects. Set when constructed with a Mesh/Material;
+    // the engine uploads/registers `mesh` at mount. Legacy string mode leaves these undefined.
+    public mesh?: Mesh;
+    public material?: Material;
+
+    // Object form — reference asset objects directly (material optional → Material.default).
+    constructor(mesh: Mesh, material?: Material, renderMode?: 'triangles' | 'lines');
+    // Legacy form — reference by string id + inline color.
+    constructor(meshId: string, materialId?: string, renderMode?: 'triangles' | 'lines', color?: { x: number; y: number; z: number; w: number });
     constructor(
-        meshId: string,
-        materialId: string = 'default',
+        meshOrId: Mesh | string,
+        materialOrId: Material | string = 'default',
         renderMode: 'triangles' | 'lines' = 'triangles',
         color: { x: number; y: number; z: number; w: number } = { x: 1, y: 1, z: 1, w: 1 }
     ) {
         super();
-        this.meshId = meshId;
-        this.meshIndex = undefined; // Will be set when added to scene
-        this.materialId = materialId;
+        this.meshIndex = undefined; // resolved at mount
         this.renderMode = renderMode;
-        this.color = color;
+
+        if (typeof meshOrId === 'string') {
+            // Legacy string mode
+            this.meshId = meshOrId;
+            this.materialId = typeof materialOrId === 'string' ? materialOrId : 'default';
+            this.color = color;
+        } else {
+            // Object mode
+            this.mesh = meshOrId;
+            this.meshId = meshOrId.id;
+            const material = materialOrId instanceof Material ? materialOrId : Material.default;
+            this.material = material;
+            this.materialId = material.id;
+            const c = material.color;
+            this.color = { x: c.r, y: c.g, z: c.b, w: c.a };
+        }
     }
 
     setColor(r: number, g: number, b: number, a: number = 1): void {
