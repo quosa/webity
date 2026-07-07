@@ -24,6 +24,7 @@ for FILE in "${TEST_FILES[@]}"; do
     mkdir -p "$OUT_DIR"
     # -fllvm: work around a Zig 0.16 self-hosted x86_64 backend bug that miscompiles
     # C-callconv (export fn) calls with >8 float params (see scripts/zig_tests.sh).
+    # Upstream: https://codeberg.org/ziglang/zig/issues/36079
     zig test -fllvm --test-no-exec -femit-bin="$BIN_NAME" "$FILE"
     kcov --include-pattern=src/core "${OUT_DIR}" "./${BIN_NAME}"
     KCOV_RESULT=$?

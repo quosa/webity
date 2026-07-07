@@ -28,7 +28,7 @@ for FILE in "${TEST_FILES[@]}"; do
   # C-callconv (export fn) calls with >8 float params (stack-spilled floats are
   # misplaced), corrupting native test calls into game_engine.zig on linux/x86_64.
   # The LLVM backend is correct; the shipping wasm32 build is unaffected. Remove
-  # once the upstream self-hosted backend bug is fixed.
+  # once fixed upstream: https://codeberg.org/ziglang/zig/issues/36079
   zig test -fllvm "$FILE"
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
