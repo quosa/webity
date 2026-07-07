@@ -19,10 +19,13 @@ export interface RGBA {
  * doubles as the "asset failed to load" fallback later).
  */
 export class Material {
-    constructor(
-        public readonly id: string,
-        public color: RGBA,
-    ) {}
+    public readonly id: string;
+    public color: RGBA;
+
+    constructor(id: string, color: RGBA) {
+        this.id = id;
+        this.color = color;
+    }
 
     static readonly default = new Material('__default', { r: 1, g: 0, b: 1, a: 1 });
 }

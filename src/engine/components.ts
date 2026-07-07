@@ -128,10 +128,9 @@ export class MeshRenderer extends Component {
     public mesh?: Mesh;
     public material?: Material;
 
-    // Object form — reference asset objects directly (material optional → Material.default).
-    constructor(mesh: Mesh, material?: Material, renderMode?: 'triangles' | 'lines');
-    // Legacy form — reference by string id + inline color.
-    constructor(meshId: string, materialId?: string, renderMode?: 'triangles' | 'lines', color?: { x: number; y: number; z: number; w: number });
+    // Two forms (single union-typed ctor, matching the repo's overload style):
+    //  - object: new MeshRenderer(mesh: Mesh, material?: Material, renderMode?)
+    //  - legacy: new MeshRenderer(meshId: string, materialId?: string, renderMode?, color?)
     constructor(
         meshOrId: Mesh | string,
         materialOrId: Material | string = 'default',

@@ -20,10 +20,13 @@ import {
  *  - `DynamicMesh` — CPU-mutable geometry that re-uploads dirty ranges (rare, opt-in).
  */
 export class Mesh {
-    constructor(
-        public readonly id: string,
-        public readonly data: MeshData,
-    ) {}
+    public readonly id: string;
+    public readonly data: MeshData;
+
+    constructor(id: string, data: MeshData) {
+        this.id = id;
+        this.data = data;
+    }
 
     static createCube(id: string, size = 1): Mesh {
         return new Mesh(id, createCubeMesh(size));
