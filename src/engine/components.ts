@@ -217,13 +217,10 @@ export class RigidBody extends Component {
     }
 
     override update(_deltaTime: number): void {
-        // Physics updates handled by WASM, but we can override for custom behavior
+        // Pre-physics: kinematic bodies push their manual transform into WASM so the
+        // physics step sees it. Dynamic bodies are synced back by the physics bridge.
         if (this.isKinematic) {
-            // Kinematic bodies: manual transform updates
-            this.syncFromTransform();
-        } else {
-            // Dynamic bodies: sync from WASM physics simulation
-            this.syncFromWasm();
+            this.syncToWasm();
         }
     }
 
@@ -251,27 +248,6 @@ export class RigidBody extends Component {
         this.physicsBridge.updateEntity(this.wasmEntityId, transform.position, this.velocity);
         this.physicsBridge.updateEntityRotation(this.wasmEntityId, transform.rotation);
         this.physicsBridge.updateEntityScale(this.wasmEntityId, transform.scale);
-    }
-
-    // Sync physics simulation results from WASM
-    private syncFromWasm(): void {
-        if (!this.gameObject || !this.physicsBridge || this.isKinematic || this.wasmEntityId === undefined) return;
-
-        // Get updated position/rotation from WASM physics simulation
-        const wasmData = this.physicsBridge.getEntityData(this.wasmEntityId);
-        if (wasmData) {
-            this.gameObject.transform.setPosition(wasmData.position.x, wasmData.position.y, wasmData.position.z);
-        } else {
-            console.log(`❌ syncFromWasm() for "${this.gameObject.name}" entity ${this.wasmEntityId}: No WASM data received`);
-        }
-    }
-
-    // Sync from transform for kinematic bodies
-    private syncFromTransform(): void {
-        if (!this.gameObject || !this.physicsBridge || !this.isKinematic) return;
-
-        // Kinematic bodies follow transform changes
-        this.syncToWasm();
     }
 
     // Clean up physics entity

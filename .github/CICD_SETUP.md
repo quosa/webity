@@ -19,7 +19,7 @@ The CI/CD pipeline provides:
 **Triggers**: On pull request open/update
 
 **What it does**:
-- Installs Node.js 22 (LTS) and Zig 0.15.1
+- Installs Node.js 22 (LTS) and Zig 0.16.0
 - Runs `npm run verify` (typecheck + lint + test + test:wasm)
 - Builds WASM and TypeScript
 - Uploads build artifacts
@@ -77,7 +77,7 @@ The CI/CD pipeline provides:
      - Build command: Leave as default (configured in `netlify.toml`)
      - Publish directory: `dist`
    - Click "Deploy site"
-   - **Note**: Zig 0.15.1 is automatically installed during builds via `scripts/install-zig-netlify.sh`
+   - **Note**: Zig 0.16.0 is automatically installed during builds via `scripts/install-zig-netlify.sh`
 
 3. **Get Netlify Credentials**:
    - **Site ID**: Found in Site settings → General → Site details → Site ID
@@ -202,15 +202,15 @@ The AI review workflow is **completely optional** and automatically skips if not
 ### Build Failures
 
 **Zig Not Found (GitHub Actions)**:
-- Check Zig version in workflow files (should be 0.15.1)
+- Check Zig version in workflow files (should be 0.16.0)
 - Verify `goto-bus-stop/setup-zig@v2` action in `.github/workflows/*.yml`
 - Update version if needed
 
 **Zig Not Found (Netlify)**:
-- Zig 0.15.1 is automatically installed via `scripts/install-zig-netlify.sh`
+- Zig 0.16.0 is automatically installed via `scripts/install-zig-netlify.sh`
 - Check Netlify build logs for install script errors
 - Verify script has executable permissions (`chmod +x scripts/install-zig-netlify.sh`)
-- Check download URL is accessible: `https://ziglang.org/download/0.15.1/`
+- Check download URL is accessible: `https://ziglang.org/download/0.16.0/`
 
 **Tests Failing**:
 - Run `npm run verify` locally
@@ -294,7 +294,7 @@ For **private** projects:
 2. **Test Preview URLs**: Verify changes in preview before merging
 3. **Monitor Build Times**: Optimize if builds exceed free tier limits
 4. **Review AI Suggestions**: AI helps but doesn't replace human review
-5. **Keep Dependencies Updated**: Currently using Node.js 22 (LTS) and Zig 0.15.1 - update as needed
+5. **Keep Dependencies Updated**: Currently using Node.js 22 (LTS) and Zig 0.16.0 - update as needed
 6. **Monitor Production**: Check production site after each deployment
 
 ## File Structure

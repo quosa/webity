@@ -113,7 +113,7 @@ Canvas Output
 ## Prerequisites
 
 - **Node.js 18+** for TypeScript build system
-- **Zig 0.15.1+** for WASM physics engine compilation
+- **Zig 0.16.0+** for WASM physics engine compilation
 - **Modern Browser** with WebGPU support (Chrome, Edge, Firefox)
 - **HTTPS Required** for WebGPU (development server provides self-signed cert)
 

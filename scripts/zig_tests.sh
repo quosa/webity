@@ -24,7 +24,12 @@ fi
 
 for FILE in "${TEST_FILES[@]}"; do
   ALL_FILES+=("$FILE")
-  zig test "$FILE"
+  # -fllvm: work around a Zig 0.16 self-hosted x86_64 backend bug that miscompiles
+  # C-callconv (export fn) calls with >8 float params (stack-spilled floats are
+  # misplaced), corrupting native test calls into game_engine.zig on linux/x86_64.
+  # The LLVM backend is correct; the shipping wasm32 build is unaffected. Remove
+  # once fixed upstream: https://codeberg.org/ziglang/zig/issues/36079
+  zig test -fllvm "$FILE"
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
     FILE_RESULTS+=("\033[32m✓\033[0m $FILE")
