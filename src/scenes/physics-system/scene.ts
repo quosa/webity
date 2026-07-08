@@ -1,150 +1,103 @@
-// src/v2/test-physics-system.ts
-// Test scene demonstrating the Phase 3 physics integration
+// Physics integration scene — migrated to the scene-first engine API (A3).
+// Build the Scene as pure data (Mesh/Material + RigidBody), then let the Engine mount + run it.
 
+import { Engine } from '../../engine/engine';
 import { Scene } from '../../engine/scene-system';
 import { GameObject } from '../../engine/gameobject';
 import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
+import { Mesh } from '../../engine/mesh';
+import { Material } from '../../engine/material';
 
-async function createPhysicsTestScene(scene: Scene): Promise<Scene> {
-    console.log('🧪 Creating Physics Test Scene (Phase 3)...');
+function buildScene(): Scene {
+    const scene = new Scene();
 
-    // Create static floor grid (no RigidBody = static)
-    const floor = GameObject.createGrid('PhysicsFloor', { x: 0, y: -3, z: 0 });
-    scene.addGameObject(floor);
-    console.log('📐 Added static floor grid');
+    // Static floor grid (yellow, wireframe) — no RigidBody = static geometry.
+    const floor = new GameObject(undefined, 'PhysicsFloor');
+    floor.transform.setPosition(0, -3, 0);
+    floor.addComponent(
+        new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('yellow', { r: 1, g: 1, b: 0, a: 1 }), 'lines'),
+    );
+    scene.add(floor);
 
-    // Create dynamic falling cube (with RigidBody = physics simulation)
+    // Dynamic falling cube (green) — mass 2kg, affected by gravity.
     const fallingCube = new GameObject('falling-cube', 'FallingCube');
     fallingCube.transform.setPosition(0, 5, -5);
-    fallingCube.transform.setScale(1, 1, 1);
-
-    const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
-    fallingCube.addComponent(cubeMeshRenderer);
-
-    // Add RigidBody for physics simulation
-    const cubeRigidBody = new RigidBody(
-        2.0,        // mass: 2kg
-        true,       // useGravity: affected by gravity
-        CollisionShape.BOX,      // collisionShape: box collider
-        { x: 1, y: 1, z: 1 } // extents: 1x1x1 unit cube
+    fallingCube.addComponent(
+        new MeshRenderer(Mesh.createCube('cube', 1), new Material('green', { r: 0, g: 1, b: 0, a: 1 }), 'triangles'),
     );
-    fallingCube.addComponent(cubeRigidBody);
+    fallingCube.addComponent(new RigidBody(2.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 }));
+    scene.add(fallingCube);
 
-    scene.addGameObject(fallingCube);
-    console.log('📦 Added falling cube with RigidBody (mass: 2kg, gravity: true)');
-
-    // Create floating kinematic cube (kinematic = manually controlled)
+    // Kinematic cube (red) — manually controlled, ignores physics forces.
     const kinematicCube = new GameObject('kinematic-cube', 'KinematicCube');
     kinematicCube.transform.setPosition(3, 2, -5);
-
-    const kinematicMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
-    kinematicCube.addComponent(kinematicMeshRenderer);
-
-    const kinematicRigidBody = new RigidBody(
-        1.0,        // mass: 1kg (ignored for kinematic)
-        false,      // useGravity: false
-        CollisionShape.BOX,      // collisionShape: box collider
-        { x: 1, y: 1, z: 1 }
+    kinematicCube.addComponent(
+        new MeshRenderer(Mesh.createCube('cube', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }), 'triangles'),
     );
-    kinematicRigidBody.setKinematic(true); // Kinematic: not affected by physics forces
+    const kinematicRigidBody = new RigidBody(1.0, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
+    kinematicRigidBody.setKinematic(true);
     kinematicCube.addComponent(kinematicRigidBody);
+    scene.add(kinematicCube);
 
-    scene.addGameObject(kinematicCube);
-    console.log('🎮 Added kinematic cube (kinematic: true, manually controlled)');
-
-    // Create physics sphere with initial velocity
+    // Physics sphere (blue) — mass 0.5kg, gravity, initial velocity (2, 0, 0).
     const physicsSphere = new GameObject('physics-sphere', 'PhysicsSphere');
     physicsSphere.transform.setPosition(-3, 4, -5);
-
-    const sphereMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 }); // Blue
-    physicsSphere.addComponent(sphereMeshRenderer);
-
-    const sphereRigidBody = new RigidBody(
-        0.5,        // mass: 0.5kg (lighter)
-        true,       // useGravity: true
-        CollisionShape.SPHERE,   // collisionShape: sphere collider
-        { x: 1, y: 1, z: 1 }
+    physicsSphere.addComponent(
+        new MeshRenderer(Mesh.createSphere('sphere', 1, 16), new Material('blue', { r: 0, g: 0, b: 1, a: 1 }), 'triangles'),
     );
-    sphereRigidBody.setVelocity(2, 0, 0); // Initial velocity: 2 units/sec to the right
+    const sphereRigidBody = new RigidBody(0.5, true, CollisionShape.SPHERE, { x: 1, y: 1, z: 1 });
+    sphereRigidBody.setVelocity(2, 0, 0);
     physicsSphere.addComponent(sphereRigidBody);
+    scene.add(physicsSphere);
 
-    scene.addGameObject(physicsSphere);
-    console.log('⚽ Added physics sphere with initial velocity (2, 0, 0)');
-
-    console.log(`🧪 Physics test scene created with ${scene.getEntityCount()} entities`);
     return scene;
 }
 
-async function main() {
-    console.log('🚀 Physics System Test starting (Phase 3)...');
-    const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
-
+async function main(): Promise<void> {
+    const errorDiv = document.getElementById('error-message');
     try {
         if (!navigator.gpu) {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        const engine = new Engine('webgpu-canvas');
+        await engine.init();
+        const scene = buildScene();
+        await engine.loadScene(scene);
+        engine.start(scene);
 
-        // Register all required meshes
-        renderer.registerMesh('triangle', createTriangleMesh());
-        renderer.registerMesh('cube', createCubeMesh(1));
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-        renderer.registerMesh('grid', createGridMesh(20, 20));
-
-        // Create physics test scene
-        const scene = new Scene();
-        await scene.init(renderer);
-
-        await createPhysicsTestScene(scene);
-        scene.start();
-
-        // Export scene to window for HTML access
+        // Expose for console debugging + the index.html panel.
+        (window as any).engine = engine;
         (window as any).scene = scene;
         (window as any).physicsTestScene = scene;
 
-        console.log('✅ Physics test scene initialized successfully');
-
-        // Log physics bridge statistics
-        const stats = scene.physicsBridge.getStats();
-        console.log('📊 Physics Bridge Stats:', stats);
-
-        // Animation loop
-        let lastTime = performance.now();
-        const gameLoop = (currentTime: number) => {
-            const rawDeltaTime = (currentTime - lastTime) / 1000;
-            const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
-            lastTime = currentTime;
-
-            // Only update scene if animation is running
-            if ((window as any).animationRunning !== false && deltaTime > 0) {
-                scene.update(deltaTime);
+        // Pause/resume: the index.html toggle button flips window.animationRunning; mirror that
+        // onto the engine loop (stop/start) so the legacy pause behavior is preserved.
+        let paused = false;
+        setInterval(() => {
+            const shouldRun = (window as any).animationRunning !== false;
+            if (!shouldRun && !paused) {
+                engine.stop();
+                paused = true;
+            } else if (shouldRun && paused) {
+                engine.start(scene);
+                paused = false;
             }
+        }, 100);
 
-            requestAnimationFrame(gameLoop);
-        };
-
-        // Start the game loop
-        requestAnimationFrame(gameLoop);
-
+        console.log('✅ physics-system scene running');
     } catch (error) {
-        console.error('❌ Error in physics system test:', error);
-        const errorDiv = document.getElementById('error-message');
+        console.error('❌ physics-system scene failed:', error);
         if (errorDiv) {
             errorDiv.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-            errorDiv.style.display = 'block';
+            (errorDiv as HTMLElement).style.display = 'block';
         }
     }
 }
 
-
-// Helper functions for testing physics
-(window as any).testPhysicsForce = function(fx: number, fy: number, fz: number) {
-    const scene = (window as any).physicsTestScene;
+// Helper functions for testing physics (wired to console / future UI).
+(window as any).testPhysicsForce = function (fx: number, fy: number, fz: number) {
+    const scene = (window as any).physicsTestScene as Scene | undefined;
     if (scene) {
         const fallingCube = scene.getGameObject('falling-cube');
         const rigidBody = fallingCube?.getComponent(RigidBody);
@@ -155,8 +108,8 @@ async function main() {
     }
 };
 
-(window as any).testSetVelocity = function(vx: number, vy: number, vz: number) {
-    const scene = (window as any).physicsTestScene;
+(window as any).testSetVelocity = function (vx: number, vy: number, vz: number) {
+    const scene = (window as any).physicsTestScene as Scene | undefined;
     if (scene) {
         const sphere = scene.getGameObject('physics-sphere');
         const rigidBody = sphere?.getComponent(RigidBody);
@@ -166,9 +119,5 @@ async function main() {
         }
     }
 };
-
-// Export for browser testing
-(window as any).createPhysicsTestScene = createPhysicsTestScene;
-(window as any).runPhysicsSystemTest = main;
 
 main();

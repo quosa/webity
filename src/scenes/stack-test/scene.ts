@@ -1,17 +1,24 @@
 // src/scenes/stack-test/scene.ts
-// Systematic stack test - 2 perfectly aligned spheres
+// Systematic stack test - 2 perfectly aligned spheres (scene-first engine API).
 
 import { Scene } from '../../engine/scene-system.js';
+import { Engine } from '../../engine/engine.js';
 import { GameObject } from '../../engine/gameobject.js';
 import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components.js';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
-import { createSphereMesh, createGridMesh, createCubeMesh } from '../../renderer/mesh-utils.js';
+import { Mesh } from '../../engine/mesh.js';
+import { Material } from '../../engine/material.js';
 
+let engine: Engine | undefined;
 let scene: Scene | undefined;
 let ballCount = 0;
 let isMonitoringCollisions = false;
 let lastLoggedCollisionCounter = 0;
 let isPlaying = true;
+
+// Shared meshes reused across all objects/spawns (dedup by id). The 2x2x2 cube matches the
+// original registerMesh(createCubeMesh(2.0)); the sphere matches createSphereMesh(1.0, 16).
+const CUBE_MESH = Mesh.createCube('cube', 2.0);
+const SPHERE_MESH = Mesh.createSphere('sphere', 1.0, 16);
 
 function createInitialStackScene(scene: Scene): void {
     console.log('🏗️ Creating 3-box stack test scene...');
@@ -22,7 +29,7 @@ function createInitialStackScene(scene: Scene): void {
     bottomBox.transform.setPosition(0, -7.0, 0);
     bottomBox.transform.setScale(1, 1, 1); // Unity scale
 
-    const bottomMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
+    const bottomMeshRenderer = new MeshRenderer(CUBE_MESH, new Material('box-orange', { r: 1, g: 0.5, b: 0, a: 1 }), 'triangles'); // Orange
     bottomBox.addComponent(bottomMeshRenderer);
 
     // BOX COLLISION: Use half-extents for box collision (cube mesh is 2x2x2, so half-extents are 1x1x1)
@@ -41,7 +48,7 @@ function createInitialStackScene(scene: Scene): void {
     const middleBox = new GameObject('middle-box', 'MiddleBox');
     middleBox.transform.setPosition(0, -4.5, 0);
     middleBox.transform.setScale(1, 1, 1);
-    middleBox.addComponent(new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 })); // Green
+    middleBox.addComponent(new MeshRenderer(CUBE_MESH, new Material('box-green', { r: 0, g: 1, b: 0, a: 1 }), 'triangles')); // Green
     middleBox.addComponent(new RigidBody(1.0, true, CollisionShape.BOX, { x: 1.0, y: 1.0, z: 1.0 }));
     scene.addGameObject(middleBox);
 
@@ -49,7 +56,7 @@ function createInitialStackScene(scene: Scene): void {
     const topBox = new GameObject('top-box', 'TopBox');
     topBox.transform.setPosition(0, -2.2, 0);
     topBox.transform.setScale(1, 1, 1);
-    topBox.addComponent(new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 })); // Blue
+    topBox.addComponent(new MeshRenderer(CUBE_MESH, new Material('box-blue', { r: 0, g: 0, b: 1, a: 1 }), 'triangles')); // Blue
     topBox.addComponent(new RigidBody(1.0, true, CollisionShape.BOX, { x: 1.0, y: 1.0, z: 1.0 }));
     scene.addGameObject(topBox);
 
@@ -75,6 +82,15 @@ function createInitialStackScene(scene: Scene): void {
             button.textContent = '▶️ Play';
             console.log('⏸️ Physics simulation PAUSED');
         }
+    }
+
+    // Drive the engine loop: resume restarts input→physics→update→render, pause halts it.
+    if (isPlaying) {
+        if (engine && scene) {
+            engine.start(scene);
+        }
+    } else {
+        engine?.stop();
     }
 
     updateStatus();
@@ -115,13 +131,13 @@ function createInitialStackScene(scene: Scene): void {
 
     // Random color for variety
     const color = {
-        x: Math.random() * 0.8 + 0.2,
-        y: Math.random() * 0.8 + 0.2,
-        z: Math.random() * 0.8 + 0.2,
-        w: 1
+        r: Math.random() * 0.8 + 0.2,
+        g: Math.random() * 0.8 + 0.2,
+        b: Math.random() * 0.8 + 0.2,
+        a: 1
     };
 
-    const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles', color);
+    const meshRenderer = new MeshRenderer(SPHERE_MESH, new Material(`ball-${ballCount}`, color), 'triangles');
     newBall.addComponent(meshRenderer);
 
     const rigidBody = new RigidBody(
@@ -149,7 +165,7 @@ function createInitialStackScene(scene: Scene): void {
     testBall.transform.setPosition(5, -7.0, 0); // Same Y as our original bottom sphere
     testBall.transform.setScale(1, 1, 1);
 
-    const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 1, y: 0, z: 1, w: 1 }); // Magenta
+    const meshRenderer = new MeshRenderer(SPHERE_MESH, new Material('floor-test-magenta', { r: 1, g: 0, b: 1, a: 1 }), 'triangles'); // Magenta
     testBall.addComponent(meshRenderer);
 
     const rigidBody = new RigidBody(
@@ -399,31 +415,33 @@ function showError(message: string) {
 
 async function main() {
     console.log('🚀 Stack Test Scene starting...');
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 
     try {
         if (!navigator.gpu) {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        // Scene-first engine API: build the scene as pure data, then let the Engine mount + run it.
+        engine = new Engine('canvas');
+        await engine.init();
 
-        // Register required meshes
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-        renderer.registerMesh('cube', createCubeMesh(2.0)); // 2x2x2 cube mesh
-        renderer.registerMesh('grid', createGridMesh(20, 20));
+        // The runtime "add ball" spawns use the sphere mesh, which isn't present in the
+        // initial (all-cube) scene tree, so register it eagerly for late adds.
+        const renderer = engine.getRenderer();
+        if (!renderer) {
+            throw new Error('Renderer not initialized');
+        }
+        renderer.registerMesh(SPHERE_MESH.id, SPHERE_MESH.data);
 
-        // Create and initialize scene
+        // Create scene (pure data) with the initial 3-box stack
         scene = new Scene();
-        await scene.init(renderer);
-
-        // Create initial 3-box stack
         createInitialStackScene(scene);
 
-        // Start the scene
-        scene.start();
+        // Mount: upload meshes referenced by the scene + register entities with WASM.
+        await engine.loadScene(scene);
+
+        // Start the frame loop (input → physics → update → render)
+        engine.start(scene);
 
         console.log('✅ Stack test scene initialized successfully');
 
@@ -442,22 +460,15 @@ async function main() {
         console.log('   GPT-5 stabilization techniques should reduce jitter significantly');
         console.log('');
 
-        // Animation loop with FPS counter and play/pause support
-        let lastTime = performance.now();
+        // The Engine owns the physics/render loop (start/stop via play/pause). This lightweight
+        // loop only drives the scene-specific UI: collision monitoring, the FPS counter, and
+        // the status panel — it does NOT step the scene.
         let frameCount = 0;
         let lastFpsTime = 0;
 
-        const gameLoop = (currentTime: number) => {
-            const rawDeltaTime = (currentTime - lastTime) / 1000;
-            const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
-            lastTime = currentTime;
-
-            // Only update physics when playing
+        const uiLoop = (currentTime: number) => {
+            // Check for new collision events (real-time monitoring) while playing
             if (isPlaying) {
-                // Update scene
-                scene?.update(deltaTime);
-
-                // Check for new collision events (real-time monitoring)
                 checkForNewCollisions();
             }
 
@@ -475,12 +486,16 @@ async function main() {
                 lastFpsTime = currentTime;
             }
 
-            // Always continue the game loop for UI updates and play/pause functionality
-            requestAnimationFrame(gameLoop);
+            // Always continue the UI loop for status updates and play/pause functionality
+            requestAnimationFrame(uiLoop);
         };
 
-        // Start the game loop
-        requestAnimationFrame(gameLoop);
+        // Start the UI loop
+        requestAnimationFrame(uiLoop);
+
+        // Expose for console debugging
+        (window as any).engine = engine;
+        (window as any).scene = scene;
 
         // Initial status update
         updateStatus();

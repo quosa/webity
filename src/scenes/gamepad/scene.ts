@@ -1,9 +1,10 @@
-// Gamepad API Demo Scene - Enhanced with unified input system
+// Gamepad API Demo Scene - Enhanced with unified input system (scene-first engine API).
 import { Scene } from '../../engine/scene-system.js';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
+import { Engine } from '../../engine/engine.js';
 import { GameObject } from '../../engine/gameobject.js';
 import { CollisionShape, MeshRenderer, RigidBody } from '../../engine/components.js';
-import { createGridMesh, createCubeMesh, createSphereMesh } from '../../renderer/mesh-utils.js';
+import { Mesh } from '../../engine/mesh.js';
+import { Material } from '../../engine/material.js';
 import { GAMEPAD_PRESETS } from '../../engine/gamepad-input.js';
 
 // UI manager for gamepad demo - uses Scene's integrated gamepad system
@@ -234,13 +235,15 @@ function createBallStack(scene: Scene, x: number, y: number) {
     console.log('🎾 Creating ball stack...');
 
     const ballRadius = 1.0;
+    // One shared sphere mesh reused across every ball in the stack (dedup by id).
+    const ballMesh = Mesh.createSphere('sphere', 1.0, 16);
     const colors = [
-        { x: 1, y: 0, z: 0, w: 1 }, // Red
-        { x: 0, y: 0, z: 1, w: 1 }, // Blue
-        { x: 1, y: 1, z: 0, w: 1 }, // Yellow
-        { x: 1, y: 0.5, z: 0, w: 1 }, // Orange
-        { x: 0.5, y: 0, z: 1, w: 1 }, // Purple
-        { x: 0, y: 1, z: 1, w: 1 }, // Cyan
+        { r: 1, g: 0, b: 0, a: 1 }, // Red
+        { r: 0, g: 0, b: 1, a: 1 }, // Blue
+        { r: 1, g: 1, b: 0, a: 1 }, // Yellow
+        { r: 1, g: 0.5, b: 0, a: 1 }, // Orange
+        { r: 0.5, g: 0, b: 1, a: 1 }, // Purple
+        { r: 0, g: 1, b: 1, a: 1 }, // Cyan
     ];
 
     let ballCounter = 0;
@@ -251,7 +254,7 @@ function createBallStack(scene: Scene, x: number, y: number) {
         const ball = new GameObject(`ball-bottom-${i}`, `BallBottom${i}`);
         ball.transform.setPosition(x + (i - 1) * ballRadius * 2, y + ballRadius, 0);
 
-        const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles', colors[ballCounter % colors.length]);
+        const meshRenderer = new MeshRenderer(ballMesh, new Material(`ball-${ballCounter}`, colors[ballCounter % colors.length]!), 'triangles');
         ball.addComponent(meshRenderer);
 
         const rigidBody = new RigidBody(
@@ -271,7 +274,7 @@ function createBallStack(scene: Scene, x: number, y: number) {
         const ball = new GameObject(`ball-middle-${i}`, `BallMiddle${i}`);
         ball.transform.setPosition(x + (i - 0.5) * ballRadius * 2, y + ballRadius * 3, 0);
 
-        const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles', colors[ballCounter % colors.length]);
+        const meshRenderer = new MeshRenderer(ballMesh, new Material(`ball-${ballCounter}`, colors[ballCounter % colors.length]!), 'triangles');
         ball.addComponent(meshRenderer);
 
         const rigidBody = new RigidBody(
@@ -290,7 +293,7 @@ function createBallStack(scene: Scene, x: number, y: number) {
     const topBall = new GameObject('ball-top', 'BallTop');
     topBall.transform.setPosition(x, y + ballRadius * 5, 0);
 
-    const topMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', colors[ballCounter % colors.length]);
+    const topMeshRenderer = new MeshRenderer(ballMesh, new Material(`ball-${ballCounter}`, colors[ballCounter % colors.length]!), 'triangles');
     topBall.addComponent(topMeshRenderer);
 
     const topRigidBody = new RigidBody(
@@ -313,7 +316,7 @@ export async function createGamepadScene(scene: Scene): Promise<void> {
     ground.transform.setPosition(0, -8, 0);
     ground.transform.setScale(1, 1, 1);
 
-    const groundMesh = new MeshRenderer('grid', 'default', 'lines', { x: 0.5, y: 0.5, z: 0.5, w: 1 }); // Gray
+    const groundMesh = new MeshRenderer(Mesh.createGrid('grid', 16, 16), new Material('ground-gray', { r: 0.5, g: 0.5, b: 0.5, a: 1 }), 'lines'); // Gray
     ground.addComponent(groundMesh);
     scene.addGameObject(ground);
 
@@ -323,7 +326,7 @@ export async function createGamepadScene(scene: Scene): Promise<void> {
     controlCube.transform.setScale(1, 1, 1); // Make it visible
 
     // Add MeshRenderer with cube mesh and green color (like basic-shapes pattern)
-    const meshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
+    const meshRenderer = new MeshRenderer(Mesh.createCube('cube'), new Material('cube-green', { r: 0, g: 1, b: 0, a: 1 }), 'triangles'); // Green
     controlCube.addComponent(meshRenderer);
 
     // Add RigidBody for physics controls (needed for gamepad movement)
@@ -357,33 +360,22 @@ async function main() {
             throw new Error('Gamepad API not supported in this browser');
         }
 
-        // Initialize the 3D scene
-        const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-        if (!canvas) {
-            throw new Error('Canvas element not found');
-        }
+        // Scene-first engine API: build the scene as pure data, then let the Engine mount + run it.
+        const engine = new Engine('canvas');
+        await engine.init();
 
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
-
-        // Register required meshes
-        renderer.registerMesh('grid', createGridMesh(16, 16));
-        renderer.registerMesh('cube', createCubeMesh());
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-        console.log('📦 Registered meshes: cube, sphere, grid');
-
-        // Create scene and init with renderer
+        // Create the scene content (pure data: GameObjects, meshes/materials, camera)
         const scene = new Scene();
-        await scene.init(renderer);
-
-        // Create the scene content
         await createGamepadScene(scene);
+
+        // Mount: upload meshes referenced by the scene + register entities with WASM.
+        await engine.loadScene(scene);
 
         // Set initial input target to control the cube
         scene.setInputTarget(controlCube);
 
-        // Start the scene
-        scene.start();
+        // Start the frame loop (input → physics → update → render)
+        engine.start(scene);
 
         // Initialize gamepad UI manager
         const gamepadUIManager = new GamepadUIManager(scene);
@@ -401,26 +393,12 @@ async function main() {
         };
 
         // Export scene to window for debugging
+        (window as any).engine = engine;
+        (window as any).scene = scene;
         (window as any).gamepadScene = scene;
         (window as any).gamepadUIManager = gamepadUIManager;
 
         console.log('✅ Gamepad demo scene initialized successfully');
-
-        // Animation loop (copied from physics-system scene)
-        let lastTime = performance.now();
-        const gameLoop = (currentTime: number) => {
-            const rawDeltaTime = (currentTime - lastTime) / 1000;
-            const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
-            lastTime = currentTime;
-
-            // Update scene - this renders the frame
-            scene.update(deltaTime);
-
-            requestAnimationFrame(gameLoop);
-        };
-
-        // Start the game loop
-        requestAnimationFrame(gameLoop);
 
         console.log('🎮 Connect a gamepad and press any button to see it appear in the list');
         console.log('🎮 Use left stick to move the cube, LB/RB to bounce!');
