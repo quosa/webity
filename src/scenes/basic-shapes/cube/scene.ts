@@ -41,6 +41,28 @@ async function main(): Promise<void> {
 
         (window as unknown as { engine: Engine; scene: Scene }).engine = engine;
         (window as unknown as { engine: Engine; scene: Scene }).scene = scene;
+
+        // Debug buttons in index.html call these.
+        (window as unknown as { renderCube: () => void }).renderCube = () => {
+            scene.render();
+            console.log('🔄 Re-rendered cube');
+        };
+        (window as unknown as { debugCube: () => void }).debugCube = () => {
+            console.log('📊 WASM Stats:', scene.physicsBridge.getStats());
+            console.log('📦 Scene Entities:', scene.getAllGameObjects().map((e) => ({
+                name: e.name,
+                meshId: e.getComponent(MeshRenderer)?.meshId,
+                position: e.transform.position,
+                scale: e.transform.scale,
+            })));
+        };
+
+        // Vite HMR: stop the old engine loop + release its GPU device before the reloaded
+        // module starts a new one, else the leaked loop submits to a stale device every frame.
+        (import.meta as unknown as { hot?: { dispose: (_cb: () => void) => void } }).hot?.dispose(() => {
+            void engine.deinit();
+        });
+
         console.log('✅ cube scene running');
     } catch (error) {
         console.error('❌ cube scene failed:', error);
