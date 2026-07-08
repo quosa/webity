@@ -33,7 +33,10 @@ function buildScene(): Scene {
     const pyramid = new GameObject('pyramid', 'Pyramid');
     pyramid.transform.setPosition(0, -7, 0);
     pyramid.addComponent(new MeshRenderer(Mesh.createPyramid('pyramid', 2, 2), new Material('blue', { r: 0, g: 0, b: 1, a: 1 })));
-    const base = new RigidBody(0, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
+    // Kinematic landing surface. NOTE: the mass must be NON-ZERO — the WASM engine currently
+    // gates collision on `physics_enabled = mass != 0` (game_engine.zig add_entity), so a
+    // mass-0 collider is skipped by the collision loop entirely. isKinematic keeps it fixed.
+    const base = new RigidBody(5, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 });
     base.isKinematic = true;
     pyramid.addComponent(base);
     scene.add(pyramid);
