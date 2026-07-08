@@ -1,9 +1,13 @@
 import { Engine } from '../src/engine/engine';
 import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
-import { MeshRenderer } from '../src/engine/components';
+import { MeshRenderer, RigidBody, CollisionShape } from '../src/engine/components';
 import { Mesh } from '../src/engine/mesh';
 import { Material } from '../src/engine/material';
+import type { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
+
+// Minimal renderer stub: mount() only needs getMeshIndex to resolve a mesh index.
+const stubRenderer = { getMeshIndex: () => 0 } as unknown as WebGPURendererV2;
 
 describe('Scene is pure data before mount (A3)', () => {
     it('builds a full scene with object-mode assets and no renderer/WASM — no throw', () => {
@@ -48,5 +52,34 @@ describe('Engine constructor', () => {
 
     it('throws for a missing canvas id', () => {
         expect(() => new Engine('does-not-exist')).toThrow(/not found/);
+    });
+});
+
+describe('mount-time inert-collider warning (A3)', () => {
+    it('warns for a RigidBody with mass 0 (silently disabled physics)', async () => {
+        const scene = new Scene();
+        const platform = new GameObject('platform', 'Platform');
+        platform.addComponent(new MeshRenderer(Mesh.createCube('cube'), new Material('m', { r: 1, g: 1, b: 1, a: 1 })));
+        platform.addComponent(new RigidBody(0, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 })); // mass 0!
+        scene.add(platform);
+
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        await scene.mount(stubRenderer);
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('mass 0'));
+        warn.mockRestore();
+    });
+
+    it('does not warn for a mesh-only static entity (no RigidBody)', async () => {
+        const scene = new Scene();
+        const floor = new GameObject('floor', 'Floor');
+        floor.addComponent(new MeshRenderer(Mesh.createGrid('grid'), Material.default, 'lines'));
+        scene.add(floor);
+
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        await scene.mount(stubRenderer);
+
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('mass 0'));
+        warn.mockRestore();
     });
 });

@@ -101,10 +101,25 @@ export class Scene {
         this.addGameObject(gameObject);
     }
 
+    // Warn about a RigidBody that will be inert: the engine gates simulation/collision on
+    // `physics_enabled = mass != 0`, so a mass-0 RigidBody is silently skipped by physics and
+    // never collides. (Mesh-only entities with no RigidBody are intentionally static — no warning.)
+    private warnIfInertRigidBody(gameObject: GameObject): void {
+        const rigidBody = gameObject.getComponent(RigidBody);
+        if (rigidBody && rigidBody.mass === 0) {
+            console.warn(
+                `⚠️ "${gameObject.name}": RigidBody has mass 0 — physics & collision are DISABLED for it ` +
+                '(the engine only simulates entities with mass != 0). For a fixed, collidable surface use a ' +
+                'non-zero mass together with isKinematic (which keeps it from moving).',
+            );
+        }
+    }
+
     // Register a single GameObject with the renderer (mesh index) + WASM. Used for eager
     // late adds; errors are logged (matches legacy addGameObject behavior). The mount() path
     // registers strictly (fail-loud) instead.
     private registerEntity(gameObject: GameObject): void {
+        this.warnIfInertRigidBody(gameObject);
         try {
             this._addMeshIndex(gameObject);
             const wasmEntityId = this.physicsBridge.addEntity(gameObject);
@@ -173,6 +188,7 @@ export class Scene {
 
         const failures: string[] = [];
         for (const gameObject of this.entities.values()) {
+            this.warnIfInertRigidBody(gameObject);
             try {
                 this._addMeshIndex(gameObject);
                 this.physicsBridge.addEntity(gameObject);
