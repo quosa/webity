@@ -18,6 +18,13 @@ export class Scene {
     private renderer?: WebGPURendererV2;
     public physicsBridge: WasmPhysicsBridge;
 
+    // A3: the scene is pure data until an Engine mounts it. `mounted` gates whether
+    // addGameObject registers eagerly (late add / runtime spawn) or defers to mount().
+    private mounted = false;
+    // What render() asks for the view-projection matrix: the legacy `camera` by default,
+    // or a camera GameObject set via setCamera().
+    private viewProvider!: { getViewProjectionMatrix(_aspect: number): Float32Array };
+
     // Input Management
     private inputManager?: InputManager;
     private gamepadInputManager?: GamepadInputManager;
@@ -33,6 +40,7 @@ export class Scene {
             0.1,         // near
             100          // far
         );
+        this.viewProvider = this.camera;
 
         // Initialize physics bridge
         this.physicsBridge = new WasmPhysicsBridge();
@@ -77,16 +85,30 @@ export class Scene {
     }
 
     // Entity Management
+    // A3: adding a GameObject is a pure data insert. Registration with the renderer/WASM
+    // happens at mount() (Engine.loadScene). If the scene is already mounted (a legacy scene
+    // adding objects after init, or a runtime spawn), register the new object immediately.
     addGameObject(gameObject: GameObject): void {
         this.entities.set(gameObject.id, gameObject);
         gameObject.setScene(this);
+        if (this.mounted) {
+            this.registerEntity(gameObject);
+        }
+    }
 
+    // Preferred short alias for addGameObject.
+    add(gameObject: GameObject): void {
+        this.addGameObject(gameObject);
+    }
+
+    // Register a single GameObject with the renderer (mesh index) + WASM. Used for eager
+    // late adds; errors are logged (matches legacy addGameObject behavior). The mount() path
+    // registers strictly (fail-loud) instead.
+    private registerEntity(gameObject: GameObject): void {
         try {
-            // Add ALL GameObjects to WASM for zero-copy rendering (physics and static entities)
             this._addMeshIndex(gameObject);
             const wasmEntityId = this.physicsBridge.addEntity(gameObject);
-            const rigidBody = gameObject.getComponent(RigidBody);
-            const entityType = rigidBody ? 'physics' : 'static';
+            const entityType = gameObject.getComponent(RigidBody) ? 'physics' : 'static';
             console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity (wasmId: ${wasmEntityId})`);
         } catch (error) {
             console.error(`❌ Failed to add GameObject "${gameObject.name}" to WASM:`, error);
@@ -135,17 +157,35 @@ export class Scene {
     }
 
     // Lifecycle Methods
+    // Legacy alias: existing scenes call scene.init(renderer). New code goes through
+    // Engine.loadScene(scene) which registers tree meshes and then calls mount().
     async init(renderer: WebGPURendererV2): Promise<void> {
+        return this.mount(renderer);
+    }
+
+    // A3: the single deterministic mount. Meshes must already be registered on the renderer
+    // (Engine.loadScene does this from the scene tree, or a legacy caller registered them).
+    // Resolves each entity's mesh index and registers it with WASM in one pass, failing loud
+    // with an aggregated error listing every unresolved GameObject.
+    async mount(renderer: WebGPURendererV2): Promise<void> {
         this.renderer = renderer;
-
-        // Initialize physics bridge for Phase 5 zero-copy integration
         await this.physicsBridge.init();
-        console.log('🌉 Physics bridge initialized for Phase 5');
 
-        // Register all entities with WASM physics system
-        this.registerEntitiesWithWasm();
+        const failures: string[] = [];
+        for (const gameObject of this.entities.values()) {
+            try {
+                this._addMeshIndex(gameObject);
+                this.physicsBridge.addEntity(gameObject);
+            } catch (error) {
+                failures.push(`  - "${gameObject.name}": ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+        this.mounted = true;
 
-        // Initialize all GameObjects and their components
+        if (failures.length > 0) {
+            throw new Error(`Scene.mount(): failed to register ${failures.length} GameObject(s):\n${failures.join('\n')}`);
+        }
+
         this.awake();
     }
 
@@ -226,7 +266,7 @@ export class Scene {
         const aspect = this.renderer.getAspectRatio();
         // TODO: camera view-projection goes directly to renderer still (ts->webgpu uniform)
         //       not sure if this makes sense to move to WASM (only 1/frame update cost)
-        const viewProjectionMatrix = this.camera.getViewProjectionMatrix(aspect);
+        const viewProjectionMatrix = this.viewProvider.getViewProjectionMatrix(aspect);
         this.renderer.updateCamera(viewProjectionMatrix);
 
         // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
@@ -236,23 +276,11 @@ export class Scene {
 
     // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
 
-    // Phase 5: Register all entities with WASM (now that WASM is initialized)
-    private registerEntitiesWithWasm(): void {
-        console.log('🔗 Registering ALL entities with WASM (now that WASM is initialized)...');
-
-        let registeredCount = 0;
-        for (const gameObject of this.entities.values()) {
-            // Re-register ALL GameObjects with WASM now that it's initialized
-            // addGameObject() tried to register before WASM was ready
-            const wasmEntityId = this.physicsBridge.addEntity(gameObject);
-            if (wasmEntityId !== null) {
-                registeredCount++;
-                const entityType = gameObject.getComponent(RigidBody) ? 'physics' : 'static';
-                console.log(`🔗 Registered ${entityType} entity "${gameObject.name}" with WASM ID ${wasmEntityId}`);
-            }
-        }
-
-        console.log(`✅ Registered ${registeredCount} entities with WASM system (after initialization)`);
+    // Set the camera used for rendering. Accepts a camera GameObject (PerspectiveCamera /
+    // OrthographicCamera) or the legacy Camera — anything that can produce a view-projection
+    // matrix. Does not affect the legacy `camera` field used by input controllers.
+    setCamera(camera: { getViewProjectionMatrix(_aspect: number): Float32Array }): void {
+        this.viewProvider = camera;
     }
 
     // Phase 5: Sync camera state to WASM for view matrix calculation
