@@ -38,6 +38,20 @@ State: 286 Jest tests + Zig 8/8 + typecheck green. Everything additive — legac
 - **3a camera**: `lookAt` lives on the camera object/`CameraComponent` (sets target/up), NOT on `Transform` — Transform stays Euler; quaternion-on-Transform + `Transform.lookAt` is a later upgrade. So target `main()` is `cam.transform.setPosition(...)` + `cam.lookAt(...)`.
 - **MeshRenderer**: single **union-typed** ctor (no TS overload signatures) — repo's base `no-unused-vars` rejects overload signatures + parameter properties (declare fields explicitly). Object mode maps `Material.color` RGBA → renderer color `{x,y,z,w}`.
 
+**Known footgun — zero-mass colliders are inert (discovered during Inc 7):**
+The WASM engine gates simulation/collision on `physics_enabled = mass != 0`
+(`game_engine.zig` add_entity), and the collision loop skips `physics_enabled == false`
+entities. So a `RigidBody` with `mass = 0` is **silently non-colliding** (the ball fell
+through the pyramid). Current mitigation: `Scene.mount()` warns for any mass-0 RigidBody.
+Two proper follow-ups (do NOT rely on non-zero mass long-term):
+- **Engine fix (Phase-8/WASM, out of A3 scope):** change to
+  `physics_enabled = (mass != 0) || isKinematic` (or a real `physics_enabled` flag). Needs
+  care — mesh-only static entities currently get `mass=0, isKinematic=true` from the bridge,
+  so they'd start entering the collision loop; verify that doesn't regress grid/floor scenes,
+  and rebuild the WASM.
+- **A3 ergonomics (Inc 9):** a `RigidBody({ kinematic: true })` opt / `StaticBody` helper that
+  defaults to a non-zero mass, so authors never have to know about the `mass != 0` gate.
+
 ---
 
 ## Target `main()` (DX goal)
