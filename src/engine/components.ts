@@ -225,15 +225,22 @@ export class RigidBody extends Component {
         mass: number = 1.0,
         useGravity: boolean = true,
         collisionShape: CollisionShape = CollisionShape.SPHERE,
-        extents: Vector3 = { x: 0.5, y: 0.5, z: 0.5 } // Default sphere radius 0.5
+        extents: Vector3 = { x: 0.5, y: 0.5, z: 0.5 }, // Default sphere radius 0.5
+        opts: { kinematic?: boolean } = {}
     ) {
         super();
         this.mass = mass;
         this.velocity = { x: 0, y: 0, z: 0 };
-        this.isKinematic = false; // Default: affected by physics forces
+        this.isKinematic = opts.kinematic ?? false; // Default: affected by physics forces
         this.useGravity = useGravity;
         this.collisionShape = collisionShape;
         this.extents = extents;
+    }
+
+    // A fixed, collidable surface: kinematic (won't move) with a non-zero mass so it actually
+    // participates in collision, and no gravity. Avoids the mass-0 inert-collider footgun.
+    static staticBody(collisionShape: CollisionShape, extents: Vector3): RigidBody {
+        return new RigidBody(1.0, false, collisionShape, extents, { kinematic: true });
     }
 
     override awake(): void {
