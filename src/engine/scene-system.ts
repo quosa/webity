@@ -172,8 +172,11 @@ export class Scene {
     }
 
     // Lifecycle Methods
-    // Legacy alias: existing scenes call scene.init(renderer). New code goes through
-    // Engine.loadScene(scene) which registers tree meshes and then calls mount().
+    /**
+     * @deprecated Use `Engine.loadScene(scene)` instead — it registers the scene's meshes and
+     * then calls `mount()`. This alias remains only for un-migrated callers (some tests + the
+     * stack-test support scenes) and will be removed once those are converted (see Inc 8 task).
+     */
     async init(renderer: WebGPURendererV2): Promise<void> {
         return this.mount(renderer);
     }
