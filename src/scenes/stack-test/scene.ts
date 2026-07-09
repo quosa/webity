@@ -427,11 +427,7 @@ async function main() {
 
         // The runtime "add ball" spawns use the sphere mesh, which isn't present in the
         // initial (all-cube) scene tree, so register it eagerly for late adds.
-        const renderer = engine.getRenderer();
-        if (!renderer) {
-            throw new Error('Renderer not initialized');
-        }
-        renderer.registerMesh(SPHERE_MESH.id, SPHERE_MESH.data);
+        engine.registerMesh(SPHERE_MESH);
 
         // Create scene (pure data) with the initial 3-box stack
         scene = new Scene();

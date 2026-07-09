@@ -5,6 +5,8 @@ import { jest } from '@jest/globals';
 import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 import { GameObject } from '../src/engine/gameobject';
 import { RigidBody, MeshRenderer, CollisionShape } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 
 describe('WasmPhysicsBridge', () => {
     let physicsBridge: WasmPhysicsBridge;
@@ -12,8 +14,11 @@ describe('WasmPhysicsBridge', () => {
     // Helper function to create a complete GameObject with MeshRenderer
     const createTestGameObject = (name: string, type?: string, meshId?: string): GameObject => {
         const gameObject = new GameObject(name, type || 'TestObject');
-        // Add MeshRenderer required for WASM integration
-        const meshRenderer = new MeshRenderer(meshId || 'cube', 'default', 'triangles', { x: 1, y: 1, z: 1, w: 1 });
+        // Add MeshRenderer required for WASM integration (object mode; meshIndex is forced
+        // below so the concrete geometry is irrelevant — only the mesh id label matters).
+        const id = meshId || 'cube';
+        const mesh = id === 'sphere' ? Mesh.createSphere(id, 1) : Mesh.createCube(id, 1);
+        const meshRenderer = new MeshRenderer(mesh, new Material('white', { r: 1, g: 1, b: 1, a: 1 }));
         // this is normally done by Scene when adding GameObject
         meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         gameObject.addComponent(meshRenderer);

@@ -10,7 +10,7 @@
 import { GameObject } from './gameobject';
 import { CameraComponent } from './components';
 
-abstract class CameraObject extends GameObject {
+export abstract class CameraObject extends GameObject {
     readonly cameraComponent: CameraComponent;
 
     protected constructor(id: string, cameraComponent: CameraComponent) {

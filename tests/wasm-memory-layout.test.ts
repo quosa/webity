@@ -4,6 +4,8 @@
 import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 
 describe('WASM Memory Layout Debug', () => {
     let physicsBridge: WasmPhysicsBridge;
@@ -20,7 +22,7 @@ describe('WASM Memory Layout Debug', () => {
         const entity1 = new GameObject('entity1', 'Entity1');
         entity1.transform.setPosition(-2, 0, 0);
         entity1.transform.setScale(1, 1, 1);
-        const meshRenderer1 = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
+        const meshRenderer1 = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }));
         // this is normally done by Scene when adding GameObject
         meshRenderer1.meshIndex = 0; // Simulate assigned mesh index
         entity1.addComponent(meshRenderer1);
@@ -29,7 +31,7 @@ describe('WASM Memory Layout Debug', () => {
         const entity2 = new GameObject('entity2', 'Entity2');
         entity2.transform.setPosition(2, 0, 0);
         entity2.transform.setScale(1, 1, 1);
-        const meshRenderer2 = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 });
+        const meshRenderer2 = new MeshRenderer(Mesh.createCube('cube', 1), new Material('blue', { r: 0, g: 0, b: 1, a: 1 }));
         // this is normally done by Scene when adding GameObject
         meshRenderer2.meshIndex = 1; // Simulate assigned mesh index
         entity2.addComponent(meshRenderer2);
@@ -78,7 +80,7 @@ describe('WASM Memory Layout Debug', () => {
                 if (actualOffset + 80 <= wasmMemory.byteLength) { // 80 bytes = 20 floats
                     const entityData = new Float32Array(wasmMemory, actualOffset, 20);
 
-                    console.log(`  Entity ${i} (stride-based):`)
+                    console.log(`  Entity ${i} (stride-based):`);
                     console.log('    Transform:', Array.from(entityData.slice(0, 16)));
                     console.log('    Color:', Array.from(entityData.slice(16, 20)));
                     console.log('    Position:', [entityData[12], entityData[13], entityData[14]]);

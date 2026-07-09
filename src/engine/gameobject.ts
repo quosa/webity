@@ -2,6 +2,8 @@
 // GameObject class - main entity in the scene system
 
 import { Component, Transform, MeshRenderer } from './components';
+import { Mesh } from './mesh';
+import { Material } from './material';
 
 export class GameObject {
     public readonly id: string;
@@ -190,9 +192,9 @@ export class GameObject {
             cube.transform.setPosition(position.x, position.y, position.z);
         }
         
-        const meshRenderer = new MeshRenderer('cube', 'default', 'triangles');
+        const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), Material.default, 'triangles');
         cube.addComponent(meshRenderer);
-        
+
         return cube;
     }
     
@@ -203,9 +205,9 @@ export class GameObject {
             sphere.transform.setPosition(position.x, position.y, position.z);
         }
         
-        const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles');
+        const meshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1), Material.default, 'triangles');
         sphere.addComponent(meshRenderer);
-        
+
         return sphere;
     }
     
@@ -216,9 +218,9 @@ export class GameObject {
             grid.transform.setPosition(position.x, position.y, position.z);
         }
         
-        const meshRenderer = new MeshRenderer('grid', 'default', 'lines', { x: 1, y: 1, z: 0, w: 1 }); // Yellow
+        const meshRenderer = new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('grid-yellow', { r: 1, g: 1, b: 0, a: 1 }), 'lines');
         grid.addComponent(meshRenderer);
-        
+
         return grid;
     }
 }

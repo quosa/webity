@@ -4,6 +4,8 @@
 import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 
 describe('Direct WASM Buffer Tests', () => {
     let physicsBridge: WasmPhysicsBridge;
@@ -21,7 +23,7 @@ describe('Direct WASM Buffer Tests', () => {
         triangle.transform.setPosition(-2, 1, 0);
         triangle.transform.setScale(1.5, 1.5, 1.5);
 
-        const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+        const meshRenderer = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 })); // Red
         meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(meshRenderer);
 
@@ -84,7 +86,7 @@ describe('Direct WASM Buffer Tests', () => {
         const triangle = new GameObject('test-triangle', 'Triangle');
         triangle.transform.setPosition(-2, 0, 0);
         triangle.transform.setScale(1, 1, 1);
-        const triangleMeshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
+        const triangleMeshRenderer = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }));
         triangleMeshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(triangleMeshRenderer);
 
@@ -92,7 +94,7 @@ describe('Direct WASM Buffer Tests', () => {
         const cube = new GameObject('test-cube', 'Cube');
         cube.transform.setPosition(2, 0, 0);
         cube.transform.setScale(1, 1, 1);
-        const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 });
+        const cubeMeshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), new Material('blue', { r: 0, g: 0, b: 1, a: 1 }));
         cubeMeshRenderer.meshIndex = 1; // Simulate assigned mesh index
         cube.addComponent(cubeMeshRenderer);
 
@@ -174,10 +176,8 @@ describe('Direct WASM Buffer Tests', () => {
             entity.transform.setScale(1 + i * 0.1, 1 + i * 0.1, 1); // Different scales
 
             const meshRenderer = new MeshRenderer(
-                i % 2 === 0 ? 'triangle' : 'cube',
-                'default',
-                'triangles',
-                { x: i * 0.2, y: (4 - i) * 0.25, z: 0.5, w: 1 } // Different colors
+                i % 2 === 0 ? Mesh.createTriangle('triangle', 1) : Mesh.createCube('cube', 1),
+                new Material(`c-${i}`, { r: i * 0.2, g: (4 - i) * 0.25, b: 0.5, a: 1 }), // Different colors
             );
             meshRenderer.meshIndex = 0; // Simulate assigned mesh index
             entity.addComponent(meshRenderer);

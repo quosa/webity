@@ -4,6 +4,8 @@
 import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
 import { RigidBody, MeshRenderer } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 import { CameraController, GameObjectController, OrbitCameraController } from '../src/engine/input-controller';
 
 // Mock WebGPU renderer for testing
@@ -43,7 +45,7 @@ describe('Scene Input Integration', () => {
         (scene as any).physicsBridge = new MockWasmPhysicsBridge();
 
         // Initialize scene with mock renderer
-        await scene.init(mockRenderer as any);
+        await scene.mount(mockRenderer as any);
 
         jest.clearAllMocks();
     });
@@ -222,7 +224,7 @@ describe('Scene Input Integration', () => {
             const gameObject = new GameObject('physics-object');
 
             // Add required components
-            const meshRenderer = new MeshRenderer('cube', 'default', 'triangles');
+            const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), Material.default, 'triangles');
             const rigidBody = new RigidBody(1.0, false);
 
             gameObject.addComponent(meshRenderer);
@@ -238,7 +240,7 @@ describe('Scene Input Integration', () => {
 
         test('should handle GameObjects without physics components', () => {
             const staticObject = new GameObject('static-object');
-            const meshRenderer = new MeshRenderer('cube', 'default', 'triangles');
+            const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), Material.default, 'triangles');
             staticObject.addComponent(meshRenderer);
 
             scene.addGameObject(staticObject);

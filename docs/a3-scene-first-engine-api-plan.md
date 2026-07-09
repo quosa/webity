@@ -148,10 +148,11 @@ Verified against `main`; the migration did not cause these:
 ## Tracked follow-up tasks (engine/cleanup)
 1. Engine `physics_enabled = mass != 0` gate fix (Phase 8).
 2. Engine restart safety (idempotent `start()`) — supersedes per-scene HMR stopgap.
-3. Inc 8: full legacy removal (string MeshRenderer ctor + scene.init + docs; ~10 tests + factories + box-sphere).
+3. ✅ Inc 8: full legacy removal (string MeshRenderer ctor + scene.init + docs + factories + box-sphere) — done on branch `a3-cleanups`.
 4. Shared `runScene()` bootstrap helper + adopt across ~15 scenes (/simplify #1).
-5. Engine owns runtime mesh registration (drop `getRenderer()` leak) (/simplify).
-6. Camera unification (CameraComponent reuse BaseCamera; retire viewProvider/scene.camera split) (/simplify).
+5. ✅ Engine owns runtime mesh registration (drop `getRenderer()` leak; added `Engine.registerMesh`) — done on branch `a3-cleanups`.
+6. ✅ Camera unification (retired legacy `camera.ts`/viewProvider/scene.camera split; `CameraComponent` is the single source, `Scene.camera` is a getter) — done on branch `a3-cleanups`. Also fixed the `renderer/scene.ts` "perspective off" TODO.
+7. **Coverage refinement (TS + Zig):** the cleanup net-removed ~9 tests and left new code under-covered. From `npm run test:coverage`: `engine.ts` ~24% (unit-test `init`/`loadScene`/`registerMesh`/`start`/`stop`/`deinit` with a mock renderer, cf. the `MockRenderer` in `scene-input-integration.test.ts`); `scene-system.ts` `setCamera` rebind + the `camera` getter (~L302-304); `camera-object.ts` `OrthographicCamera` ctor branch (L41-43); `components.ts` RigidBody lifecycle branches (L246-252, L334-361). Zig: run `npm run test:wasm:coverage` and top up any core physics/collision paths that regressed.
 
 ## Resume pointer
 Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green

@@ -6,7 +6,8 @@
 import { Engine } from '../../engine/engine';
 import { Scene } from '../../engine/scene-system';
 import { GameObject } from '../../engine/gameobject';
-import { CameraComponent, MeshRenderer } from '../../engine/components';
+import { MeshRenderer } from '../../engine/components';
+import { PerspectiveCamera } from '../../engine/camera-object';
 import { Mesh } from '../../engine/mesh';
 import { Material } from '../../engine/material';
 
@@ -35,7 +36,6 @@ window.runRenderingTest = async function (testName: string) {
     // Initialize the engine (owns the WebGPU renderer + WASM)
     const engine = new Engine('test-canvas');
     await engine.init();
-    const renderer = engine.getRenderer()!;
 
     // Camera controls test builds its own scene + camera GameObject
     if (testName === 'camera-controls') {
@@ -79,23 +79,21 @@ window.runRenderingTest = async function (testName: string) {
     floor.addComponent(floorMeshRenderer);
     scene.addGameObject(floor);
 
+    // Create the camera GameObject and make it the scene's active camera (render + input)
+    // We use the 45° FOV to keep the perspective correct with the original snapshots
+    // (which were also taken with a 45° PI/4 FOV camera).
+    const camera = new PerspectiveCamera('test-camera', { fov: Math.PI / 4 });
+    camera.transform.setPosition(0, 0, -10);
+    camera.lookAt(0, 0, 0);
+    scene.setCamera(camera);
+
     // Mount: register meshes + entities
     await engine.loadScene(scene);
-
-    // Set camera position and target to match previous behavior
-    // TODO: the perspective is still off, something is hardcoded
-    //       and I haven't figured out what yet
-    //       The browser tests fail because of this!
-    scene.camera.setPosition([0, 0, -10]);
-    scene.camera.lookAt([0, 0, 0]);
-    const aspect = canvas.width / canvas.height;
-    const viewProjectionMatrix = scene.camera.getViewProjectionMatrix(aspect);
-    renderer.updateCamera(viewProjectionMatrix);
 
     // Start the scene
     scene.start();
 
-    // Render using WASM zero-copy
+    // Render
     scene.render();
 };
 
@@ -137,13 +135,10 @@ async function setupCameraControlsTest(engine: Engine, _canvas: HTMLCanvasElemen
     centerCube.addComponent(centerMeshRenderer);
     scene.addGameObject(centerCube);
 
-    // Create camera GameObject with CameraComponent
-    const cameraGameObject = new GameObject('test-camera', 'TestCamera');
-    cameraGameObject.transform.setPosition(-8, 3, -8);
-
-    const cameraComponent = new CameraComponent(true, Math.PI / 3, 0.1, 100);
-    cameraGameObject.addComponent(cameraComponent);
-    scene.addGameObject(cameraGameObject);
+    // Create the camera GameObject and make it the scene's active camera (render + input)
+    const camera = new PerspectiveCamera('test-camera', { fov: Math.PI / 3 });
+    camera.transform.setPosition(-8, 3, -8);
+    scene.setCamera(camera);
 
     // Mount: register meshes + entities
     await engine.loadScene(scene);
@@ -170,6 +165,6 @@ async function setupCameraControlsTest(engine: Engine, _canvas: HTMLCanvasElemen
     // Export for debugging (if needed)
     if (typeof window !== 'undefined') {
         (window as any).cameraControlsScene = scene;
-        (window as any).cameraComponent = cameraComponent;
+        (window as any).cameraComponent = camera.cameraComponent;
     }
 }

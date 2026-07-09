@@ -1,17 +1,27 @@
 // tests/camera-movement.test.ts
-// Unit tests for BaseCamera movement methods
+// Unit tests for CameraComponent movement methods (transform-backed camera model)
 
-import { Camera } from '../src/engine/camera';
+import { GameObject } from '../src/engine/gameobject';
+import { CameraComponent } from '../src/engine/components';
 
-describe('BaseCamera Movement', () => {
-    let camera: Camera;
+// A CameraComponent on a host GameObject — the unified camera model that carries the
+// movement/orbit surface ported from the retired BaseCamera.
+function makeCamera(): CameraComponent {
+    const go = new GameObject('test-camera', 'Camera');
+    const cc = new CameraComponent();
+    go.addComponent(cc);
+    return cc;
+}
+
+describe('CameraComponent Movement', () => {
+    let camera: CameraComponent;
 
     beforeEach(() => {
-        camera = new Camera();
+        camera = makeCamera();
         // Set known initial state
         camera.setPosition([0, 0, -10]);
         camera.setTarget([0, 0, 0]);
-        camera.setUp([0, 1, 0]);
+        camera.up = [0, 1, 0];
     });
 
     describe('Basic Movement', () => {
@@ -312,22 +322,22 @@ describe('BaseCamera Movement', () => {
 
     describe('Camera State Consistency', () => {
         test('should maintain up vector after movement', () => {
-            const initialUp = camera.getUp();
-            
+            const initialUp: [number, number, number] = [camera.up[0], camera.up[1], camera.up[2]];
+
             camera.move(5, -3, 2);
-            
-            const newUp = camera.getUp();
+
+            const newUp = camera.up;
             expect(newUp[0]).toBeCloseTo(initialUp[0]);
             expect(newUp[1]).toBeCloseTo(initialUp[1]);
             expect(newUp[2]).toBeCloseTo(initialUp[2]);
         });
 
         test('should maintain up vector after orbit', () => {
-            const initialUp = camera.getUp();
-            
+            const initialUp: [number, number, number] = [camera.up[0], camera.up[1], camera.up[2]];
+
             camera.orbitAroundTarget(45, 30);
-            
-            const newUp = camera.getUp();
+
+            const newUp = camera.up;
             expect(newUp[0]).toBeCloseTo(initialUp[0]);
             expect(newUp[1]).toBeCloseTo(initialUp[1]);
             expect(newUp[2]).toBeCloseTo(initialUp[2]);

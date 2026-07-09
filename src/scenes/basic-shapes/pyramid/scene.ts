@@ -75,7 +75,6 @@ async function main(): Promise<void> {
         (window as any).engine = engine;
         (window as any).scene = scene;
         (window as any).pyramidScene = scene;
-        (window as any).pyramidRenderer = engine.getRenderer();
 
         (window as any).renderPyramidScene = () => {
             console.log('🔺 Re-rendering pyramid scene with WASM...');

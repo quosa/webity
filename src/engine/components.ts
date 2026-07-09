@@ -123,39 +123,25 @@ export class MeshRenderer extends Component {
     public color: Vector3 & { w: number }; // RGBA color
     public renderMode: 'triangles' | 'lines';
 
-    // Object mode (A3): the actual asset objects. Set when constructed with a Mesh/Material;
-    // the engine uploads/registers `mesh` at mount. Legacy string mode leaves these undefined.
-    public mesh?: Mesh;
-    public material?: Material;
+    // The actual asset objects. The engine uploads/registers `mesh` at mount and resolves
+    // its mesh index; `color` is derived from the material's RGBA.
+    public mesh: Mesh;
+    public material: Material;
 
-    // Two forms (single union-typed ctor, matching the repo's overload style):
-    //  - object: new MeshRenderer(mesh: Mesh, material?: Material, renderMode?)
-    //  - legacy: new MeshRenderer(meshId: string, materialId?: string, renderMode?, color?)
     constructor(
-        meshOrId: Mesh | string,
-        materialOrId: Material | string = 'default',
+        mesh: Mesh,
+        material: Material = Material.default,
         renderMode: 'triangles' | 'lines' = 'triangles',
-        color: { x: number; y: number; z: number; w: number } = { x: 1, y: 1, z: 1, w: 1 }
     ) {
         super();
         this.meshIndex = undefined; // resolved at mount
         this.renderMode = renderMode;
-
-        if (typeof meshOrId === 'string') {
-            // Legacy string mode
-            this.meshId = meshOrId;
-            this.materialId = typeof materialOrId === 'string' ? materialOrId : 'default';
-            this.color = color;
-        } else {
-            // Object mode
-            this.mesh = meshOrId;
-            this.meshId = meshOrId.id;
-            const material = materialOrId instanceof Material ? materialOrId : Material.default;
-            this.material = material;
-            this.materialId = material.id;
-            const c = material.color;
-            this.color = { x: c.r, y: c.g, z: c.b, w: c.a };
-        }
+        this.mesh = mesh;
+        this.meshId = mesh.id;
+        this.material = material;
+        this.materialId = material.id;
+        const c = material.color;
+        this.color = { x: c.r, y: c.g, z: c.b, w: c.a };
     }
 
     setColor(r: number, g: number, b: number, a: number = 1): void {
@@ -392,9 +378,6 @@ export class CameraComponent extends Component {
     public top: number;
     public bottom: number;
 
-    // Camera control settings
-    public isActiveCamera: boolean; // Whether this camera is currently active
-
     // Orientation (3a: look-direction, not Euler). An explicit target is set via lookAt();
     // when null the forward direction is derived from the GameObject's Euler rotation (legacy).
     public target: [number, number, number] | null = null;
@@ -416,47 +399,6 @@ export class CameraComponent extends Component {
         this.right = orthoBounds.right;
         this.top = orthoBounds.top;
         this.bottom = orthoBounds.bottom;
-        this.isActiveCamera = false;
-    }
-
-    // Set this camera as the active scene camera
-    setAsActiveCamera(): void {
-        this.isActiveCamera = true;
-
-        // Update scene camera if this GameObject is in a scene
-        if (this.gameObject?.scene) {
-            this.updateSceneCamera();
-        }
-    }
-
-    // Update the scene's camera with this component's settings
-    private updateSceneCamera(): void {
-        if (!this.gameObject?.scene) return;
-
-        const sceneCamera = this.gameObject.scene.camera;
-        const transform = this.gameObject.transform;
-
-        // Update camera position based on GameObject transform
-        sceneCamera.setPosition([transform.position.x, transform.position.y, transform.position.z]);
-
-        // Calculate target based on GameObject's forward direction
-        // For now, assume looking down negative Z axis (standard forward direction)
-        const forward = this.getForwardDirection();
-        const target: [number, number, number] = [
-            transform.position.x + forward[0],
-            transform.position.y + forward[1],
-            transform.position.z + forward[2]
-        ];
-        sceneCamera.setTarget(target);
-
-        // Update projection settings
-        sceneCamera.setClipPlanes(this.near, this.far);
-
-        if (this.isPerspective && 'setFov' in sceneCamera) {
-            (sceneCamera as any).setFov(this.fov);
-        }
-
-        console.log(`📷 Updated scene camera from GameObject "${this.gameObject.name}"`);
     }
 
     // Calculate forward direction based on GameObject rotation
@@ -482,13 +424,6 @@ export class CameraComponent extends Component {
         return forward;
     }
 
-    override update(_deltaTime: number): void {
-        // Update scene camera if this is the active camera
-        if (this.isActiveCamera) {
-            this.updateSceneCamera();
-        }
-    }
-
     // Set perspective projection settings
     setPerspective(fov: number, near: number = this.near, far: number = this.far): void {
         this.isPerspective = true;
@@ -512,8 +447,10 @@ export class CameraComponent extends Component {
     // 3a: the camera's position IS its GameObject's transform.position (unified); orientation
     // is a look-direction (target/up). View matrix reuses the proven eye/target/up look-at math.
 
-    lookAt(x: number, y: number, z: number): void {
-        this.target = [x, y, z];
+    // Aim at a world-space point. Accepts scalar (x, y, z) or array [x, y, z] form — the
+    // array form matches the retired legacy Camera API still used by scenes and HTML controls.
+    lookAt(x: number | [number, number, number], y?: number, z?: number): void {
+        this.target = typeof x === 'number' ? [x, y!, z!] : [...x];
     }
 
     private resolveTarget(): [number, number, number] {
@@ -537,5 +474,83 @@ export class CameraComponent extends Component {
 
     getViewProjectionMatrix(aspect: number): Float32Array {
         return multiplyMat4(this.getProjectionMatrix(aspect), this.getViewMatrix());
+    }
+
+    // ── Position / target (array-shaped, transform-backed) ─────────────────────────────
+    // The camera's position IS its GameObject's transform.position; these array-shaped
+    // accessors + movement methods give the camera GameObject the surface the input
+    // controllers (free-fly / orbit) rely on, replacing the retired legacy Camera.
+
+    getPosition(): [number, number, number] {
+        const p = this.gameObject.transform.position;
+        return [p.x, p.y, p.z];
+    }
+
+    setPosition(position: [number, number, number]): void {
+        this.gameObject.transform.setPosition(position[0], position[1], position[2]);
+    }
+
+    getTarget(): [number, number, number] {
+        return [...this.resolveTarget()];
+    }
+
+    setTarget(target: [number, number, number]): void {
+        this.target = [...target];
+    }
+
+    // Free-fly translation along the camera's local axes (ported from the retired BaseCamera).
+    move(forward: number, right: number, up: number): void {
+        // Pin a concrete heading first so a target-less free-fly camera doesn't produce NaNs.
+        this.target ??= this.resolveTarget();
+        const dir = this.getForwardVector();
+        const rightVec = this.getRightVector();
+        const dx = dir[0] * forward + rightVec[0] * right + this.up[0] * up;
+        const dy = dir[1] * forward + rightVec[1] * right + this.up[1] * up;
+        const dz = dir[2] * forward + rightVec[2] * right + this.up[2] * up;
+        const p = this.gameObject.transform.position;
+        this.gameObject.transform.setPosition(p.x + dx, p.y + dy, p.z + dz);
+        this.target = [this.target[0] + dx, this.target[1] + dy, this.target[2] + dz];
+    }
+
+    // Orbit the position around the current target (ported from the retired BaseCamera).
+    orbitAroundTarget(yaw: number, pitch: number): void {
+        const target = this.resolveTarget();
+        const p = this.gameObject.transform.position;
+        const dx = p.x - target[0];
+        const dy = p.y - target[1];
+        const dz = p.z - target[2];
+        const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        const currentYaw = Math.atan2(dx, dz);
+        const currentPitch = Math.asin(dy / radius);
+        const newYaw = currentYaw + yaw;
+        const newPitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, currentPitch + pitch));
+
+        this.gameObject.transform.setPosition(
+            target[0] + radius * Math.sin(newYaw) * Math.cos(newPitch),
+            target[1] + radius * Math.sin(newPitch),
+            target[2] + radius * Math.cos(newYaw) * Math.cos(newPitch),
+        );
+        this.target = [...target];
+    }
+
+    // Local axes derived from eye → target, for movement.
+    private getForwardVector(): [number, number, number] {
+        const p = this.gameObject.transform.position;
+        const t = this.resolveTarget();
+        const dx = t[0] - p.x;
+        const dy = t[1] - p.y;
+        const dz = t[2] - p.z;
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        return [dx / len, dy / len, dz / len];
+    }
+
+    private getRightVector(): [number, number, number] {
+        const f = this.getForwardVector();
+        const rx = f[1] * this.up[2] - f[2] * this.up[1];
+        const ry = f[2] * this.up[0] - f[0] * this.up[2];
+        const rz = f[0] * this.up[1] - f[1] * this.up[0];
+        const len = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1;
+        return [rx / len, ry / len, rz / len];
     }
 }

@@ -115,12 +115,8 @@ class EnhancedRainDemo {
             // Register meshes used by runtime-spawned rain entities. They aren't present in
             // the initial scene tree, so loadScene won't auto-register them. The floor's grid
             // mesh IS in the tree and gets registered by loadScene below.
-            const renderer = this.engine.getRenderer();
-            if (!renderer) {
-                throw new Error('Renderer not initialized');
-            }
-            renderer.registerMesh('sphere', Mesh.createSphere('sphere', 0.5, 8).data); // Low-poly for performance
-            renderer.registerMesh('cube', Mesh.createCube('cube', 1.0).data);
+            this.engine.registerMesh(Mesh.createSphere('sphere', 0.5, 8)); // Low-poly for performance
+            this.engine.registerMesh(Mesh.createCube('cube', 1.0));
             console.log('✅ Meshes registered');
 
             // Mount the scene (uploads the floor grid mesh + registers entities with WASM)

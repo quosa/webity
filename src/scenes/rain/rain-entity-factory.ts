@@ -3,6 +3,8 @@
 
 import { GameObject } from '../../engine/gameobject';
 import { Vector3, MeshRenderer, RigidBody } from '../../engine/components';
+import { Mesh } from '../../engine/mesh';
+import { Material } from '../../engine/material';
 
 export enum RainEntityType {
     /* eslint-disable no-unused-vars */
@@ -117,10 +119,16 @@ export class RainEntityFactory {
         gameObject.transform.position = config.position;
         gameObject.transform.scale = spec.scale;
 
-        // Add MeshRenderer component
+        // Add MeshRenderer component (object mode). The mesh id matches a mesh registered at
+        // startup by the rain scene (engine.registerMesh) for these runtime-spawned entities.
         const colorArray = config.color || this.getRandomColor(spec.colors);
-        const color = { x: colorArray[0], y: colorArray[1], z: colorArray[2], w: colorArray[3] };
-        const meshRenderer = new MeshRenderer(spec.meshId, 'default', 'triangles', color);
+        const mesh = spec.meshId === 'cube'
+            ? Mesh.createCube('cube', 1.0)
+            : Mesh.createSphere('sphere', 0.5, 8);
+        const material = new Material(`rain-${entityId}`, {
+            r: colorArray[0], g: colorArray[1], b: colorArray[2], a: colorArray[3],
+        });
+        const meshRenderer = new MeshRenderer(mesh, material, 'triangles');
         gameObject.addComponent(meshRenderer);
 
         // Add RigidBody component for physics

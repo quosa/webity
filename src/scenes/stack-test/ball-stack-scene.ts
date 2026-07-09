@@ -1,11 +1,12 @@
 // src/scenes/stack-test/scene.ts
 // Systematic stack test - 2 perfectly aligned spheres
 
+import { Engine } from '../../engine/engine.js';
 import { Scene } from '../../engine/scene-system.js';
 import { GameObject } from '../../engine/gameobject.js';
 import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components.js';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
-import { createSphereMesh, createGridMesh, createCubeMesh } from '../../renderer/mesh-utils.js';
+import { Mesh } from '../../engine/mesh.js';
+import { Material } from '../../engine/material.js';
 
 let scene: Scene | undefined;
 let ballCount = 0;
@@ -21,7 +22,7 @@ const createBall = (id: string, name: string) => {
     ball.transform.setScale(1, 1, 1);
 
     const ballMeshRenderer = new MeshRenderer(
-        'sphere', 'default', 'triangles', { x: 1, y: 1, z: 1, w: 1 }
+        Mesh.createSphere('sphere', 1), new Material('ball-white', { r: 1, g: 1, b: 1, a: 1 }), 'triangles',
     ); // White
     ball.addComponent(ballMeshRenderer);
 
@@ -120,13 +121,13 @@ function createInitialStackScene(scene: Scene): void {
 
     // Random color for variety
     const color = {
-        x: Math.random() * 0.8 + 0.2,
-        y: Math.random() * 0.8 + 0.2,
-        z: Math.random() * 0.8 + 0.2,
-        w: 1
+        r: Math.random() * 0.8 + 0.2,
+        g: Math.random() * 0.8 + 0.2,
+        b: Math.random() * 0.8 + 0.2,
+        a: 1,
     };
 
-    const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles', color);
+    const meshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1), new Material(`ball-${ballCount}`, color), 'triangles');
     newBall.addComponent(meshRenderer);
 
     const rigidBody = new RigidBody(
@@ -391,21 +392,16 @@ async function main() {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        // Scene-first engine API: the Engine owns the renderer + WASM. Build the scene as
+        // pure data, then loadScene() uploads its meshes (sphere + grid from the tree) and
+        // mounts it. The custom game loop below drives scene.update() (pause/resume + FPS +
+        // collision monitoring), so we don't use engine.start().
+        const engine = new Engine(canvas);
+        await engine.init();
 
-        // Register required meshes
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-        renderer.registerMesh('cube', createCubeMesh(2.0)); // 2x2x2 cube mesh
-        renderer.registerMesh('grid', createGridMesh(20, 20));
-
-        // Create and initialize scene
         scene = new Scene();
-        await scene.init(renderer);
-
-        // Create initial 3-ball stack
         createInitialStackScene(scene);
+        await engine.loadScene(scene);
 
         // Start the scene
         scene.start();

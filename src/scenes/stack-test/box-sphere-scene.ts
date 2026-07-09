@@ -1,14 +1,13 @@
 // src/scenes/stack-test/box-sphere-scene.ts
 // Isolated box-sphere collision test
 
+import { Engine } from '../../engine/engine.js';
 import { Scene } from '../../engine/scene-system.js';
 import { GameObject } from '../../engine/gameobject.js';
 import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components.js';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
-import { createSphereMesh, createGridMesh, createCubeMesh } from '../../renderer/mesh-utils.js';
 
 let scene: Scene | undefined;
-let renderer: WebGPURendererV2 | undefined;
+let engine: Engine | undefined;
 let sphere: GameObject | undefined;
 let box: GameObject | undefined;
 let isPaused = false;
@@ -87,19 +86,15 @@ function createFloorGrid(scene: Scene): void {
 }
 
 async function initializeScene(): Promise<void> {
-    if (!renderer) {
-        console.error('Renderer not initialized');
+    if (!engine) {
+        console.error('Engine not initialized');
         return;
     }
 
-    // Register required meshes with renderer
-    renderer.registerMesh('cube', createCubeMesh(1));
-    renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-    renderer.registerMesh('grid', createGridMesh(20, 20));
-
-    // Create new scene
+    // Build the scene as pure data, then let the Engine mount it: loadScene() registers the
+    // meshes referenced by the tree (cube/sphere/grid, embedded via the GameObject factories)
+    // and calls the scene's mount() (WASM registration + awake).
     scene = new Scene();
-    await scene.init(renderer);
 
     // Configure camera for box-sphere test view
     scene.camera.setPosition([0, -4, -10]);
@@ -109,8 +104,7 @@ async function initializeScene(): Promise<void> {
     createFloorGrid(scene);
     createBoxSphereTestScene(scene);
 
-    // Initialize scene systems
-    await scene.awake();
+    await engine.loadScene(scene);
 
     console.log('✅ Box-sphere test scene initialized');
 }
@@ -186,9 +180,11 @@ async function main(): Promise<void> {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        // Scene-first engine API: the Engine owns the renderer + WASM (initializeScene builds
+        // the scene and calls engine.loadScene). The custom game loop below drives
+        // scene.update() for pause/resume + FPS, so we don't use engine.start().
+        engine = new Engine(canvas);
+        await engine.init();
 
         // Setup UI controls
         const resetBtn = document.getElementById('resetBtn') as HTMLButtonElement;

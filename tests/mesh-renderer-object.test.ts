@@ -28,14 +28,4 @@ describe('MeshRenderer object mode (A3)', () => {
         expect(mr.renderMode).toBe('lines');
         expect(mr.meshId).toBe('grid');
     });
-
-    it('still supports the legacy string form (mesh/material objects undefined)', () => {
-        const mr = new MeshRenderer('grid', 'default', 'lines', { x: .5, y: .5, z: .5, w: 1 });
-        expect(mr.meshId).toBe('grid');
-        expect(mr.materialId).toBe('default');
-        expect(mr.renderMode).toBe('lines');
-        expect(mr.color).toEqual({ x: .5, y: .5, z: .5, w: 1 });
-        expect(mr.mesh).toBeUndefined();
-        expect(mr.material).toBeUndefined();
-    });
 });

@@ -1,11 +1,11 @@
 // src/v2/scene-system.ts
 // Scene system for managing GameObjects and coordinating updates/rendering
 
-import { Camera } from './camera';
+import { CameraObject, PerspectiveCamera } from './camera-object';
 import { GameObject } from './gameobject';
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { WasmPhysicsBridge } from './wasm-physics-bridge';
-import { MeshRenderer, RigidBody } from './components';
+import { MeshRenderer, RigidBody, CameraComponent } from './components';
 import { InputManager } from './input';
 import { InputController, CameraController, GameObjectController, OrbitCameraController } from './input-controller';
 import { GamepadInputManager, GamepadConfiguration, GAMEPAD_PRESETS } from './gamepad-input';
@@ -14,16 +14,19 @@ export class Scene {
     private entities = new Map<string, GameObject>();
     private nextEntityId = 0;
 
-    public camera: Camera;
+    // The single camera source of truth: a camera GameObject. Both rendering (view-projection)
+    // and input controllers operate on its CameraComponent. `camera` exposes that component so
+    // scenes/HTML can drive it (setPosition/lookAt/move/orbit) with no legacy Camera class.
+    private activeCamera: CameraObject;
+    get camera(): CameraComponent {
+        return this.activeCamera.cameraComponent;
+    }
     private renderer?: WebGPURendererV2;
     public physicsBridge: WasmPhysicsBridge;
 
     // A3: the scene is pure data until an Engine mounts it. `mounted` gates whether
     // addGameObject registers eagerly (late add / runtime spawn) or defers to mount().
     private mounted = false;
-    // What render() asks for the view-projection matrix: the legacy `camera` by default,
-    // or a camera GameObject set via setCamera().
-    private viewProvider!: { getViewProjectionMatrix(_aspect: number): Float32Array };
 
     // Input Management
     private inputManager?: InputManager;
@@ -32,15 +35,12 @@ export class Scene {
     private inputTarget: 'camera' | 'orbit' | GameObject | null = null;
 
     constructor() {
-        // Default camera setup
-        this.camera = new Camera(
-            [0, 5, -10], // position
-            [0, 0, 0],   // target
-            Math.PI / 3, // fov (60 degrees in radians)
-            0.1,         // near
-            100          // far
-        );
-        this.viewProvider = this.camera;
+        // Default camera: a PerspectiveCamera GameObject (not added to the entity map, so it
+        // never registers with WASM). Scenes replace it via setCamera(); until then this is
+        // both the render source and the input controllers' target.
+        this.activeCamera = new PerspectiveCamera('scene-default-camera', { fov: Math.PI / 3 });
+        this.activeCamera.transform.setPosition(0, 5, -10);
+        this.activeCamera.lookAt(0, 0, 0);
 
         // Initialize physics bridge
         this.physicsBridge = new WasmPhysicsBridge();
@@ -184,15 +184,6 @@ export class Scene {
     }
 
     // Lifecycle Methods
-    /**
-     * @deprecated Use `Engine.loadScene(scene)` instead — it registers the scene's meshes and
-     * then calls `mount()`. This alias remains only for un-migrated callers (some tests + the
-     * stack-test support scenes) and will be removed once those are converted (see Inc 8 task).
-     */
-    async init(renderer: WebGPURendererV2): Promise<void> {
-        return this.mount(renderer);
-    }
-
     // A3: the single deterministic mount. Meshes must already be registered on the renderer
     // (Engine.loadScene does this from the scene tree, or a legacy caller registered them).
     // Resolves each entity's mesh index and registers it with WASM in one pass, failing loud
@@ -294,7 +285,7 @@ export class Scene {
         const aspect = this.renderer.getAspectRatio();
         // TODO: camera view-projection goes directly to renderer still (ts->webgpu uniform)
         //       not sure if this makes sense to move to WASM (only 1/frame update cost)
-        const viewProjectionMatrix = this.viewProvider.getViewProjectionMatrix(aspect);
+        const viewProjectionMatrix = this.activeCamera.getViewProjectionMatrix(aspect);
         this.renderer.updateCamera(viewProjectionMatrix);
 
         // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
@@ -304,11 +295,14 @@ export class Scene {
 
     // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
 
-    // Set the camera used for rendering. Accepts a camera GameObject (PerspectiveCamera /
-    // OrthographicCamera) or the legacy Camera — anything that can produce a view-projection
-    // matrix. Does not affect the legacy `camera` field used by input controllers.
-    setCamera(camera: { getViewProjectionMatrix(_aspect: number): Float32Array }): void {
-        this.viewProvider = camera;
+    // Set the camera GameObject used for both rendering and input (PerspectiveCamera /
+    // OrthographicCamera). Rebinds the active camera/orbit input controller onto the new
+    // camera so a setCamera() call after construction takes effect for free-fly/orbit input.
+    setCamera(camera: CameraObject): void {
+        this.activeCamera = camera;
+        if (this.inputTarget === 'camera' || this.inputTarget === 'orbit') {
+            this.setInputTarget(this.inputTarget);
+        }
     }
 
     // Phase 5: Sync camera state to WASM for view matrix calculation
@@ -327,9 +321,9 @@ export class Scene {
         this.inputTarget = target;
 
         if (target === 'camera') {
-            this.activeInputController = new CameraController(this.camera);
+            this.activeInputController = new CameraController(this.activeCamera.cameraComponent);
         } else if (target === 'orbit') {
-            this.activeInputController = new OrbitCameraController(this.camera);
+            this.activeInputController = new OrbitCameraController(this.activeCamera.cameraComponent);
         } else if (target instanceof GameObject) {
             this.activeInputController = new GameObjectController(target);
         } else {

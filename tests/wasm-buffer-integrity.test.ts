@@ -4,6 +4,8 @@
 import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 import { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
 import { createTriangleMesh, createCubeMesh } from '../src/renderer/mesh-utils';
 import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
@@ -38,13 +40,13 @@ describe('WASM Buffer Integrity Tests', () => {
         triangle.transform.setPosition(-2, 1, 0);
         triangle.transform.setScale(1.5, 1.5, 1.5);
 
-        const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+        const meshRenderer = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 })); // Red
         // this is normally done by Scene when adding GameObject
         meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(meshRenderer);
 
         scene.addGameObject(triangle);
-        await scene.init(renderer);
+        await scene.mount(renderer);
 
         // Get WASM buffer data
         const stats = scene.physicsBridge.getStats();
@@ -101,7 +103,7 @@ describe('WASM Buffer Integrity Tests', () => {
         triangle.transform.setPosition(-2, 0, 0);
         triangle.transform.setScale(1, 1, 1);
 
-        const triangleMeshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
+        const triangleMeshRenderer = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 })); // Red
         // this is normally done by Scene when adding GameObject
         triangleMeshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(triangleMeshRenderer);
@@ -112,14 +114,14 @@ describe('WASM Buffer Integrity Tests', () => {
         cube.transform.setPosition(2, 0, 0);
         cube.transform.setScale(1, 1, 1);
 
-        const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 }); // Blue
+        const cubeMeshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), new Material('blue', { r: 0, g: 0, b: 1, a: 1 })); // Blue
         // this is normally done by Scene when adding GameObject
         cubeMeshRenderer.meshIndex = 1; // Simulate assigned mesh index
         cube.addComponent(cubeMeshRenderer);
         scene.addGameObject(cube);
 
         // Initialize scene
-        await scene.init(renderer);
+        await scene.mount(renderer);
 
         // Validate WASM stats
         const stats = scene.physicsBridge.getStats();
@@ -195,10 +197,8 @@ describe('WASM Buffer Integrity Tests', () => {
             entity.transform.setScale(1, 1, 1);
 
             const meshRenderer = new MeshRenderer(
-                i % 2 === 0 ? 'triangle' : 'cube',
-                'default',
-                'triangles',
-                { x: i * 0.2, y: (5 - i) * 0.2, z: 0.5, w: 1 }
+                i % 2 === 0 ? Mesh.createTriangle('triangle', 1) : Mesh.createCube('cube', 1),
+                new Material(`c-${i}`, { r: i * 0.2, g: (5 - i) * 0.2, b: 0.5, a: 1 }),
             );
             // this is normally done by Scene when adding GameObject
             meshRenderer.meshIndex = 0; // Simulate assigned mesh index
@@ -206,7 +206,7 @@ describe('WASM Buffer Integrity Tests', () => {
             scene.addGameObject(entity);
         }
 
-        await scene.init(renderer);
+        await scene.mount(renderer);
 
         const stats = scene.physicsBridge.getStats();
         expect(stats.entityCount).toBe(5);
