@@ -124,3 +124,36 @@ hanging off the seams here (`upload`, async `load`, `dynamic` flag, per-instance
 ## Delivery
 Commit(s) per increment on this branch → single PR **#8** (not a PR per increment). Each
 increment keeps `npm run verify` green so history stays bisectable.
+
+## Manual verification results (Inc 7, done with the user)
+
+Scenes rendered correctly: physics, fancy, stack-test, camera-controls, pyramid, triangle,
+root static scene (cube-above-grid is **pre-existing** — verified identical on `main`),
+input-demo (aside from the control swap below).
+Real regressions found + fixed: cube debug button + HMR device-mismatch spam (commit 027c951).
+
+## Backlog — pre-existing issues, NOT A3 regressions (not yet ticketed)
+
+Verified against `main`; the migration did not cause these:
+- **input-demo**: forward/back movement controls are swapped.
+- **box-sphere** scene (stack-test/box-sphere-scene.ts, still on legacy): ball sinks slightly
+  into the box; "drop sphere" button and sphere-position buttons do nothing. (User: leave for last.)
+- **physics scene**: up/down/left/right force controls log but have no visible effect
+  (applyForce → wasm.apply_force path / force magnitude).
+- **pyramid** scene: split into a simple scene + a separate all-mesh-types validation scene.
+- **Decorative floors** (rain, physics-system, canonical basic-physics): grids have no collider,
+  so objects fall to the WASM world-bounds floor at y=-8. User chose to LEAVE them decorative
+  (declined adding `RigidBody.staticBody` floors).
+
+## Tracked follow-up tasks (engine/cleanup)
+1. Engine `physics_enabled = mass != 0` gate fix (Phase 8).
+2. Engine restart safety (idempotent `start()`) — supersedes per-scene HMR stopgap.
+3. Inc 8: full legacy removal (string MeshRenderer ctor + scene.init + docs; ~10 tests + factories + box-sphere).
+4. Shared `runScene()` bootstrap helper + adopt across ~15 scenes (/simplify #1).
+5. Engine owns runtime mesh registration (drop `getRenderer()` leak) (/simplify).
+6. Camera unification (CameraComponent reuse BaseCamera; retire viewProvider/scene.camera split) (/simplify).
+
+## Resume pointer
+Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green
+(typecheck / 296 Jest / Zig 8/8 / lint / builds). To resume in a fresh worktree: `npm install`
+→ `npm run build:wasm` → baseline. Next actionable: address PR review, then tasks above.
