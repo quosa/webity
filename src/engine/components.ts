@@ -1,6 +1,15 @@
 // src/v2/components.ts
 // Base Component system and built-in components
 
+import {
+    createLookAtMatrix,
+    createPerspectiveMatrix,
+    createOrthographicMatrix,
+    multiplyMat4,
+} from '../utils/math-utils';
+import type { Mesh } from './mesh';
+import { Material } from './material';
+
 export abstract class Component {
     public gameObject: any; // Will be GameObject, but avoiding circular import
 
@@ -114,18 +123,39 @@ export class MeshRenderer extends Component {
     public color: Vector3 & { w: number }; // RGBA color
     public renderMode: 'triangles' | 'lines';
 
+    // Object mode (A3): the actual asset objects. Set when constructed with a Mesh/Material;
+    // the engine uploads/registers `mesh` at mount. Legacy string mode leaves these undefined.
+    public mesh?: Mesh;
+    public material?: Material;
+
+    // Two forms (single union-typed ctor, matching the repo's overload style):
+    //  - object: new MeshRenderer(mesh: Mesh, material?: Material, renderMode?)
+    //  - legacy: new MeshRenderer(meshId: string, materialId?: string, renderMode?, color?)
     constructor(
-        meshId: string,
-        materialId: string = 'default',
+        meshOrId: Mesh | string,
+        materialOrId: Material | string = 'default',
         renderMode: 'triangles' | 'lines' = 'triangles',
         color: { x: number; y: number; z: number; w: number } = { x: 1, y: 1, z: 1, w: 1 }
     ) {
         super();
-        this.meshId = meshId;
-        this.meshIndex = undefined; // Will be set when added to scene
-        this.materialId = materialId;
+        this.meshIndex = undefined; // resolved at mount
         this.renderMode = renderMode;
-        this.color = color;
+
+        if (typeof meshOrId === 'string') {
+            // Legacy string mode
+            this.meshId = meshOrId;
+            this.materialId = typeof materialOrId === 'string' ? materialOrId : 'default';
+            this.color = color;
+        } else {
+            // Object mode
+            this.mesh = meshOrId;
+            this.meshId = meshOrId.id;
+            const material = materialOrId instanceof Material ? materialOrId : Material.default;
+            this.material = material;
+            this.materialId = material.id;
+            const c = material.color;
+            this.color = { x: c.r, y: c.g, z: c.b, w: c.a };
+        }
     }
 
     setColor(r: number, g: number, b: number, a: number = 1): void {
@@ -195,15 +225,22 @@ export class RigidBody extends Component {
         mass: number = 1.0,
         useGravity: boolean = true,
         collisionShape: CollisionShape = CollisionShape.SPHERE,
-        extents: Vector3 = { x: 0.5, y: 0.5, z: 0.5 } // Default sphere radius 0.5
+        extents: Vector3 = { x: 0.5, y: 0.5, z: 0.5 }, // Default sphere radius 0.5
+        opts: { kinematic?: boolean } = {}
     ) {
         super();
         this.mass = mass;
         this.velocity = { x: 0, y: 0, z: 0 };
-        this.isKinematic = false; // Default: affected by physics forces
+        this.isKinematic = opts.kinematic ?? false; // Default: affected by physics forces
         this.useGravity = useGravity;
         this.collisionShape = collisionShape;
         this.extents = extents;
+    }
+
+    // A fixed, collidable surface: kinematic (won't move) with a non-zero mass so it actually
+    // participates in collision, and no gravity. Avoids the mass-0 inert-collider footgun.
+    static staticBody(collisionShape: CollisionShape, extents: Vector3): RigidBody {
+        return new RigidBody(1.0, false, collisionShape, extents, { kinematic: true });
     }
 
     override awake(): void {
@@ -358,6 +395,11 @@ export class CameraComponent extends Component {
     // Camera control settings
     public isActiveCamera: boolean; // Whether this camera is currently active
 
+    // Orientation (3a: look-direction, not Euler). An explicit target is set via lookAt();
+    // when null the forward direction is derived from the GameObject's Euler rotation (legacy).
+    public target: [number, number, number] | null = null;
+    public up: [number, number, number] = [0, 1, 0];
+
     constructor(
         isPerspective: boolean = true,
         fov: number = Math.PI / 4, // 45 degrees
@@ -464,5 +506,36 @@ export class CameraComponent extends Component {
         this.bottom = bottom;
         this.near = near;
         this.far = far;
+    }
+
+    // ── View / projection ────────────────────────────────────────────────────────────
+    // 3a: the camera's position IS its GameObject's transform.position (unified); orientation
+    // is a look-direction (target/up). View matrix reuses the proven eye/target/up look-at math.
+
+    lookAt(x: number, y: number, z: number): void {
+        this.target = [x, y, z];
+    }
+
+    private resolveTarget(): [number, number, number] {
+        const p = this.gameObject.transform.position;
+        if (this.target) return this.target;
+        // No explicit target: look along the GameObject's Euler forward direction (legacy).
+        const forward = this.getForwardDirection();
+        return [p.x + forward[0], p.y + forward[1], p.z + forward[2]];
+    }
+
+    getViewMatrix(): Float32Array {
+        const p = this.gameObject.transform.position;
+        return createLookAtMatrix([p.x, p.y, p.z], this.resolveTarget(), this.up);
+    }
+
+    getProjectionMatrix(aspect: number): Float32Array {
+        return this.isPerspective
+            ? createPerspectiveMatrix(this.fov, aspect, this.near, this.far)
+            : createOrthographicMatrix(this.left, this.right, this.top, this.bottom, this.near, this.far);
+    }
+
+    getViewProjectionMatrix(aspect: number): Float32Array {
+        return multiplyMat4(this.getProjectionMatrix(aspect), this.getViewMatrix());
     }
 }

@@ -1,22 +1,24 @@
-// src/v2/test-zero-copy-physics.ts
-// Test scene for validating zero-copy rendering with real physics entities
+// src/scenes/physics/scene.ts
+// Zero-copy physics test scene — migrated to the scene-first engine API (A3).
+// buildScene() is PURE DATA (Mesh/Material objects); the Engine mounts + runs it.
 
+import { Engine } from '../../engine/engine';
 import { Scene } from '../../engine/scene-system';
 import { GameObject } from '../../engine/gameobject';
 import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh, createSphereMesh } from '../../renderer/mesh-utils';
+import { Mesh } from '../../engine/mesh';
+import { Material } from '../../engine/material';
 
 async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene> {
 
     // Create static floor grid (no RigidBody = static)
     // Position grid slightly behind physics objects to avoid Z-fighting
-    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0.1 });
     // Make the grid gray instead of bright yellow for better visibility
-    const floorMeshRenderer = floor.getComponent(MeshRenderer);
-    if (floorMeshRenderer) {
-        floorMeshRenderer.color = { x: 0.3, y: 0.3, z: 0.3, w: 1.0 }; // Gray
-    }
+    const floor = new GameObject(undefined, 'ZeroCopyFloor');
+    floor.transform.setPosition(0, -8, 0.1);
+    floor.addComponent(
+        new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('gray', { r: 0.3, g: 0.3, b: 0.3, a: 1.0 }), 'lines'),
+    );
     scene.addGameObject(floor);
 
     // Create physics cube with RigidBody (should add to WASM and enable zero-copy)
@@ -24,7 +26,7 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
     physicsCube.transform.setPosition(-2, 2, 0);
     physicsCube.transform.setScale(2, 2, 2);
 
-    const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
+    const cubeMeshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), new Material('orange', { r: 1, g: 0.5, b: 0, a: 1 })); // Orange
     physicsCube.addComponent(cubeMeshRenderer);
 
     // Add RigidBody - this should register with WASM physics and enable zero-copy rendering!
@@ -34,7 +36,6 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
         CollisionShape.BOX,      // collisionShape: box collider
         { x: 2, y: 2, z: 2 } // extents: 2x2x2 unit cube
     );
-    // cubeRigidBody.isKinematic = true; // Uncomment to test kinematic behavior
     physicsCube.addComponent(cubeRigidBody);
 
     scene.addGameObject(physicsCube);
@@ -44,7 +45,7 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
     physicsSphere.transform.setPosition(2, 3, 0);
     physicsSphere.transform.setScale(0.5, 0.5, 0.5); // Match physics radius of 0.5
 
-    const sphereMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 1, w: 1 }); // Cyan
+    const sphereMeshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1.0, 16), new Material('cyan', { r: 0, g: 1, b: 1, a: 1 })); // Cyan
     physicsSphere.addComponent(sphereMeshRenderer);
 
     const sphereRigidBody = new RigidBody(
@@ -53,7 +54,6 @@ async function createTwoParallelEntityPhysicsScene(scene: Scene): Promise<Scene>
         CollisionShape.SPHERE,   // collisionShape: sphere collider
         { x: 1.0, y: 1.0, z: 1.0 } // extents: 1 unit sphere
     );
-    // sphereRigidBody.isKinematic = true;
     physicsSphere.addComponent(sphereRigidBody);
 
     scene.addGameObject(physicsSphere);
@@ -64,12 +64,12 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
 
     // Create static floor grid (no RigidBody = static)
     // Position grid slightly behind physics objects to avoid Z-fighting
-    const floor = GameObject.createGrid('ZeroCopyFloor', { x: 0, y: -8, z: 0.1 });
     // Make the grid gray instead of bright yellow for better visibility
-    const floorMeshRenderer = floor.getComponent(MeshRenderer);
-    if (floorMeshRenderer) {
-        floorMeshRenderer.color = { x: 0.3, y: 0.3, z: 0.3, w: 1.0 }; // Gray
-    }
+    const floor = new GameObject(undefined, 'ZeroCopyFloor');
+    floor.transform.setPosition(0, -8, 0.1);
+    floor.addComponent(
+        new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('gray', { r: 0.3, g: 0.3, b: 0.3, a: 1.0 }), 'lines'),
+    );
     scene.addGameObject(floor);
 
     // Create physics cube with RigidBody (should add to WASM and enable zero-copy)
@@ -77,7 +77,7 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
     sphere1.transform.setPosition(3, 4, 0);
     sphere1.transform.setScale(1, 1, 1); // Will match colliderSize below
 
-    const sphereMeshRenderer1 = new MeshRenderer('sphere', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
+    const sphereMeshRenderer1 = new MeshRenderer(Mesh.createSphere('sphere', 1.0, 16), new Material('orange', { r: 1, g: 0.5, b: 0, a: 1 })); // Orange
     sphere1.addComponent(sphereMeshRenderer1);
 
     // Add RigidBody - this should register with WASM physics and enable zero-copy rendering!
@@ -96,7 +96,7 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
     sphere2.transform.setPosition(3, 7, 0);
     sphere2.transform.setScale(2, 2, 2); // Will match colliderSize below
 
-    const sphereMeshRenderer2 = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 1, w: 1 }); // Cyan
+    const sphereMeshRenderer2 = new MeshRenderer(Mesh.createSphere('sphere', 1.0, 16), new Material('cyan', { r: 0, g: 1, b: 1, a: 1 })); // Cyan
     sphere2.addComponent(sphereMeshRenderer2);
 
     const sphereRigidBody2 = new RigidBody(
@@ -111,37 +111,36 @@ async function createTwoStackedBallsPhysicsScene(scene: Scene): Promise<Scene> {
     return scene;
 }
 
+async function buildScene(): Promise<Scene> {
+    const scene = new Scene();
+
+    // await createTwoParallelEntityPhysicsScene(scene);
+    await createTwoStackedBallsPhysicsScene(scene);
+
+    // Fix camera position for better viewing
+    scene.camera.setPosition([0, 0, -15]); // floor is +/-8 on z axis
+    scene.camera.lookAt([0, -4, 0]); // floor is at y = -8
+
+    return scene;
+}
+
 async function main() {
-    const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
+    const errorDiv = document.getElementById('error-message');
 
     try {
         if (!navigator.gpu) {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        const engine = new Engine('webgpu-canvas');
+        await engine.init();               // WebGPU + WASM
+        const scene = await buildScene();  // pure data
+        await engine.loadScene(scene);     // mount: upload meshes, register entities (fail-loud)
+        engine.start(scene);               // input > physics > update > render
 
-        // Register all required meshes
-        renderer.registerMesh('triangle', createTriangleMesh());
-        renderer.registerMesh('cube', createCubeMesh(1));
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-        renderer.registerMesh('grid', createGridMesh(20, 20));
-
-        // Create zero-copy physics test scene
-        const scene = new Scene();
-        await scene.init(renderer);
-
-        // await createTwoParallelEntityPhysicsScene(scene);
-        await createTwoStackedBallsPhysicsScene(scene);
-
-        // Fix camera position for better viewing
-        scene.camera.setPosition([0, 0, -15]); // floor is +/-8 on z axis
-        scene.camera.lookAt([0, -4, 0]); // floor is at y = -8
-
-        // await scene.init(renderer);
-        scene.start();
+        // Expose for console debugging.
+        (window as unknown as { engine: Engine; scene: Scene }).engine = engine;
+        (window as unknown as { engine: Engine; scene: Scene }).scene = scene;
 
         // Log scene and physics stats
         const sceneInfo = scene.getSceneInfo();
@@ -209,58 +208,24 @@ async function main() {
             console.log('📊 Current Scene Info:', info);
         };
 
-        // Animation loop control
-        let isRunning = true;
-        let animationId: number;
-        let lastTime = performance.now();
-
-        let oneshotRenderDone = false;
-        const gameLoop = (currentTime: number) => {
-            if (!isRunning) {
-                return; // Paused
-            }
-            if (!oneshotRenderDone) {
-                isRunning = false; // Stop after one render for testing
-                oneshotRenderDone = true;
-            }
-
-            const rawDeltaTime = (currentTime - lastTime) / 1000;
-            const deltaTime = Math.min(rawDeltaTime, 1/30);
-            lastTime = currentTime;
-
-            // Update scene (this should use zero-copy rendering if WASM entities exist)
-            scene.update(deltaTime);
-
-            animationId = requestAnimationFrame(gameLoop);
-        };
-
         // Engine control functions
         (window as any).pauseEngine = () => {
             console.log('⏸️ Engine paused');
-            isRunning = false;
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-            }
+            engine.stop();
         };
 
         (window as any).resumeEngine = () => {
             console.log('▶️ Engine resumed');
-            if (!isRunning) {
-                isRunning = true;
-                lastTime = performance.now(); // Reset time to avoid large delta
-                animationId = requestAnimationFrame(gameLoop);
-            }
+            engine.start(scene);
         };
 
-        // Start the game loop
-        animationId = requestAnimationFrame(gameLoop);
+        console.log('✅ physics scene running (two stacked balls → floor grid)');
 
     } catch (error) {
         console.error('❌ Error in zero-copy physics test:', error);
-        const errorDiv = document.getElementById('error-message');
         if (errorDiv) {
             errorDiv.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-            errorDiv.style.display = 'block';
+            (errorDiv as HTMLElement).style.display = 'block';
         }
     }
 }

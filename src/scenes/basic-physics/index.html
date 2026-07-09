@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A3 — Basic Physics (scene-first API)</title>
+    <style>
+        body { margin: 0; background: #222; font-family: Arial, sans-serif; color: white; }
+        canvas { display: block; margin: 20px auto; border: 2px solid #444; }
+        .info { text-align: center; margin: 20px; }
+        #error-message {
+            display: none;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 12px 16px;
+            background: #5a1a1a;
+            border: 1px solid #a33;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🔴 Basic Physics — scene-first engine API (A3)</h1>
+        <p>A red ball falls onto a blue pyramid resting on a floor grid.</p>
+    </div>
+
+    <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+
+    <div id="error-message"></div>
+
+    <div class="info">
+        <p><strong>Built with:</strong> <code>new Engine(canvas)</code> → <code>buildScene()</code> (pure data) → <code>engine.loadScene(scene)</code> → <code>engine.start(scene)</code></p>
+        <p><strong>Console:</strong> open devtools (F12) — <code>window.engine</code> / <code>window.scene</code> are exposed.</p>
+    </div>
+
+    <script type="module" src="./scene.ts"></script>
+</body>
+</html>

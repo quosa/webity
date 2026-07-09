@@ -281,4 +281,24 @@ describe('RigidBody Component', () => {
             expect(rigidBody.velocity.z).toBeCloseTo(3.14159);
         });
     });
+
+    describe('Ergonomics (A3)', () => {
+        test('is not kinematic by default', () => {
+            expect(new RigidBody().isKinematic).toBe(false);
+        });
+
+        test('kinematic opt sets isKinematic', () => {
+            const rb = new RigidBody(1.0, true, CollisionShape.BOX, { x: 1, y: 1, z: 1 }, { kinematic: true });
+            expect(rb.isKinematic).toBe(true);
+        });
+
+        test('staticBody() is kinematic, non-zero mass, no gravity (footgun-free surface)', () => {
+            const rb = RigidBody.staticBody(CollisionShape.BOX, { x: 2, y: 1, z: 2 });
+            expect(rb.isKinematic).toBe(true);
+            expect(rb.mass).toBeGreaterThan(0); // non-zero -> physics_enabled, actually collides
+            expect(rb.useGravity).toBe(false);
+            expect(rb.collisionShape).toBe(CollisionShape.BOX);
+            expect(rb.extents).toEqual({ x: 2, y: 1, z: 2 });
+        });
+    });
 });

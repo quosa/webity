@@ -1,76 +1,52 @@
-// src/v2/test-wasm-triangle.ts
-// Simple triangle scene with WASM flow - single render call, no game loop
+// Simple triangle scene — migrated to the scene-first engine API (A3).
+// Build the Scene as pure data (Mesh/Material objects), then let the Engine mount + run it.
 
+import { Engine } from '../../../engine/engine';
 import { Scene } from '../../../engine/scene-system';
 import { GameObject } from '../../../engine/gameobject';
 import { MeshRenderer } from '../../../engine/components';
-import { WebGPURendererV2 } from '../../../renderer/webgpu.renderer';
-import { createTriangleMesh } from '../../../renderer/mesh-utils';
+import { Mesh } from '../../../engine/mesh';
+import { Material } from '../../../engine/material';
 
-async function createSimpleTriangleScene(scene: Scene): Promise<Scene> {
+function buildScene(): Scene {
+    const scene = new Scene();
 
-    console.log('🔺 Creating Simple Triangle WASM Scene...');
-
-    // Create a single triangle GameObject
+    // Single red triangle in front of the camera.
     const triangle = new GameObject('wasm-triangle', 'WasmTriangle');
-    triangle.transform.setPosition(0, 0, -2); // Position in front of camera
-    triangle.transform.setScale(2, 2, 2); // Make it larger and visible
+    triangle.transform.setPosition(0, 0, -2);
+    triangle.transform.setScale(2, 2, 2);
+    triangle.addComponent(
+        new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }), 'triangles'),
+    );
+    scene.add(triangle);
 
-    // Add MeshRenderer with triangle mesh and red color
-    const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
-    triangle.addComponent(meshRenderer);
+    // Keep the legacy camera exactly as before.
+    scene.camera.setPosition([0, 0, -5]);
+    scene.camera.lookAt([0, 0, -2]);
 
-    // Add to scene (this should push to WASM)
-    scene.addGameObject(triangle);
-    console.log('🔺 Added triangle GameObject to WASM');
-
-    console.log(`✅ Simple triangle scene created with ${scene.getEntityCount()} GameObjects`);
     return scene;
 }
 
-async function testWasmTriangleRendering() {
-    console.log('🔺 Testing WASM Triangle Rendering (Single Call)...');
-    const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
-
+async function main(): Promise<void> {
+    const errorDiv = document.getElementById('error-message');
     try {
         if (!navigator.gpu) {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        const engine = new Engine('webgpu-canvas');
+        await engine.init();
+        const scene = buildScene();
+        await engine.loadScene(scene);
+        engine.start(scene);
 
-        // Register triangle mesh only
-        renderer.registerMesh('triangle', createTriangleMesh());
-
-        // Create simple triangle scene
-        const scene = new Scene();
-        await scene.init(renderer);
-
-        await createSimpleTriangleScene(scene);
-
-        // Position camera to see the triangle
-        scene.camera.setPosition([0, 0, -5]); // Further back
-        scene.camera.lookAt([0, 0, -2]);      // Look at triangle
-
-        // // Initialize scene (this registers with WASM)
-        // await scene.init(renderer);
-        scene.start();
-
-        console.log('📊 Scene initialized. WASM Stats:', scene.physicsBridge.getStats());
-
-        // SINGLE RENDER CALL - no game loop
-        console.log('🎯 Performing SINGLE render call with WASM...');
-        scene.render(); // Direct call to WASM rendering
-
-        console.log('✅ Single WASM triangle render complete');
-
-        // Export for debugging and rendering mode toggle
+        // Expose for console debugging + the index.html buttons.
+        (window as any).engine = engine;
+        (window as any).scene = scene;
         (window as any).triangleScene = scene;
-        (window as any).triangleRenderer = renderer;
+        (window as any).testWasmTriangleRendering = main;
 
-        // Debug function to compare buffers
+        // Debug helper wired to the "compareBuffers" button.
         (window as any).compareBuffers = () => {
             console.log('🔍 Buffer Comparison Debug:');
             const stats = scene.physicsBridge.getStats();
@@ -83,7 +59,6 @@ async function testWasmTriangleRendering() {
                 console.log('Transforms Offset:', transformsOffset);
 
                 if (wasmMemory && transformsOffset !== undefined) {
-                    // Read WASM instance data (20 floats per instance)
                     const entityCount = stats.entityCount;
                     const instanceData = new Float32Array(wasmMemory, transformsOffset, entityCount * 20);
                     console.log('WASM Instance Data (20 floats per entity):');
@@ -97,16 +72,14 @@ async function testWasmTriangleRendering() {
             }
         };
 
+        console.log('✅ triangle scene running');
     } catch (error) {
-        console.error('❌ Error in WASM triangle test:', error);
-        const errorDiv = document.getElementById('error-message');
+        console.error('❌ triangle scene failed:', error);
         if (errorDiv) {
             errorDiv.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-            errorDiv.style.display = 'block';
+            (errorDiv as HTMLElement).style.display = 'block';
         }
     }
 }
 
-// Export and run
-(window as any).testWasmTriangleRendering = testWasmTriangleRendering;
-testWasmTriangleRendering();
+main();

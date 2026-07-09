@@ -1,16 +1,24 @@
 // src/scenes/input-demo/scene.ts
-// Comprehensive input system demonstration scene
+// Comprehensive input system demonstration scene (scene-first engine API).
 
 import { Scene } from '../../engine/scene-system.js';
+import { Engine } from '../../engine/engine.js';
 import { GameObject } from '../../engine/gameobject.js';
 import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components.js';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer.js';
-import { createCubeMesh, createSphereMesh, createGridMesh } from '../../renderer/mesh-utils.js';
+import { Mesh } from '../../engine/mesh.js';
+import { Material } from '../../engine/material.js';
 
+let engine: Engine | undefined;
 let scene: Scene | undefined;
 let playerBall: GameObject;
 let controlCube: GameObject;
 let ballCounter = 0;
+
+// Shared meshes reused across the setup objects and runtime spawns (dedup by id).
+// Sizes match the original registerMesh(...) calls.
+const SPHERE_MESH = Mesh.createSphere('sphere', 1.0, 16);
+const CUBE_MESH = Mesh.createCube('cube', 1);
+const GRID_MESH = Mesh.createGrid('grid', 20, 20);
 
 function addGameObjectsToScene(scene: Scene): void {
     console.log('🎮 Adding GameObjects to Input System Demo Scene...');
@@ -19,7 +27,7 @@ function addGameObjectsToScene(scene: Scene): void {
     const floor = new GameObject('floor', 'Floor');
     floor.transform.setPosition(0, -8, 0);
 
-    const floorMeshRenderer = new MeshRenderer('grid', 'default', 'lines', { x: 0.4, y: 0.4, z: 0.4, w: 1 }); // Dark gray
+    const floorMeshRenderer = new MeshRenderer(GRID_MESH, new Material('floor-gray', { r: 0.4, g: 0.4, b: 0.4, a: 1 }), 'lines'); // Dark gray
     floor.addComponent(floorMeshRenderer);
 
     scene.addGameObject(floor);
@@ -30,7 +38,7 @@ function addGameObjectsToScene(scene: Scene): void {
     playerBall.transform.setPosition(0, 2, 0);
     playerBall.transform.setScale(1, 1, 1);
 
-    const playerMeshRenderer = new MeshRenderer('sphere', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
+    const playerMeshRenderer = new MeshRenderer(SPHERE_MESH, new Material('player-green', { r: 0, g: 1, b: 0, a: 1 }), 'triangles'); // Green
     playerBall.addComponent(playerMeshRenderer);
 
     const playerRigidBody = new RigidBody(1.0, false, CollisionShape.SPHERE, { x: 1.0, y: 1.0, z: 1.0 }); // Dynamic physics with 1.0 radius
@@ -44,7 +52,7 @@ function addGameObjectsToScene(scene: Scene): void {
     controlCube.transform.setPosition(3, 1, 0);
     controlCube.transform.setScale(1, 1, 1);
 
-    const cubeMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 1, y: 0.5, z: 0, w: 1 }); // Orange
+    const cubeMeshRenderer = new MeshRenderer(CUBE_MESH, new Material('cube-orange', { r: 1, g: 0.5, b: 0, a: 1 }), 'triangles'); // Orange
     controlCube.addComponent(cubeMeshRenderer);
 
     const cubeRigidBody = new RigidBody(1.5, false, CollisionShape.BOX, { x: 0.5, y: 0.5, z: 0.5 }); // Heavier than ball, BOX collision
@@ -55,10 +63,10 @@ function addGameObjectsToScene(scene: Scene): void {
 
     // Create some static reference objects
     const positions = [
-        { x: -5, y: 1, z: -5, color: { x: 0.5, y: 0.5, z: 1, w: 1 } }, // Light blue
-        { x: 5, y: 1, z: -5, color: { x: 1, y: 0.5, z: 0.5, w: 1 } },  // Light red
-        { x: -5, y: 1, z: 5, color: { x: 0.5, y: 1, z: 0.5, w: 1 } },  // Light green
-        { x: 5, y: 1, z: 5, color: { x: 1, y: 1, z: 0.5, w: 1 } },    // Light yellow
+        { x: -5, y: 1, z: -5, color: { r: 0.5, g: 0.5, b: 1, a: 1 } }, // Light blue
+        { x: 5, y: 1, z: -5, color: { r: 1, g: 0.5, b: 0.5, a: 1 } },  // Light red
+        { x: -5, y: 1, z: 5, color: { r: 0.5, g: 1, b: 0.5, a: 1 } },  // Light green
+        { x: 5, y: 1, z: 5, color: { r: 1, g: 1, b: 0.5, a: 1 } },    // Light yellow
     ];
 
     positions.forEach((pos, index) => {
@@ -66,7 +74,7 @@ function addGameObjectsToScene(scene: Scene): void {
         marker.transform.setPosition(pos.x, pos.y, pos.z);
         marker.transform.setScale(0.5, 0.5, 0.5);
 
-        const markerMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', pos.color);
+        const markerMeshRenderer = new MeshRenderer(CUBE_MESH, new Material(`marker-${index}`, pos.color), 'triangles');
         marker.addComponent(markerMeshRenderer);
 
         // Static markers (no RigidBody)
@@ -178,12 +186,12 @@ function addGameObjectsToScene(scene: Scene): void {
         (Math.random() - 0.5) * 8
     );
 
-    const meshRenderer = new MeshRenderer('sphere', 'default', 'triangles', {
-        x: Math.random(),
-        y: Math.random(),
-        z: Math.random(),
-        w: 1
-    });
+    const meshRenderer = new MeshRenderer(SPHERE_MESH, new Material(`random-ball-${ballCounter}`, {
+        r: Math.random(),
+        g: Math.random(),
+        b: Math.random(),
+        a: 1
+    }), 'triangles');
     randomBall.addComponent(meshRenderer);
 
     const rigidBody = new RigidBody(0.5 + Math.random(), false, CollisionShape.SPHERE, { x: 1.0, y: 1.0, z: 1.0 }); // Sphere collision with 1.0 radius
@@ -269,49 +277,41 @@ function showError(message: string) {
 
 async function main() {
     console.log('🚀 Input System Demo starting...');
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 
     try {
         if (!navigator.gpu) {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        // Scene-first engine API: build the scene as pure data, then let the Engine mount + run it.
+        engine = new Engine('canvas');
+        await engine.init();
 
-        // Register all required meshes
-        renderer.registerMesh('sphere', createSphereMesh(1.0, 16));
-        renderer.registerMesh('cube', createCubeMesh(1));
-        renderer.registerMesh('grid', createGridMesh(20, 20));
-
-        // Create, initialize, and populate scene
+        // Create and populate the scene (pure data: GameObjects, meshes/materials, camera)
         scene = new Scene();
-        await scene.init(renderer);
-
-        // Add GameObjects after scene is initialized with renderer
         addGameObjectsToScene(scene);
 
-        scene.start();
+        // Mount: upload meshes referenced by the scene + register entities with WASM.
+        await engine.loadScene(scene);
+
+        // Start the frame loop (input → physics → update → render)
+        engine.start(scene);
 
         // Set initial input target (after scene is assigned)
         (window as any).setInputTarget('camera');
 
+        // Expose for console debugging
+        (window as any).engine = engine;
+        (window as any).scene = scene;
+
         console.log('✅ Input demo scene initialized successfully');
 
-        // Animation loop with status updates
-        let lastTime = performance.now();
+        // The Engine owns the physics/render loop. This lightweight loop only drives the
+        // scene-specific UI: the FPS counter and status panel — it does NOT step the scene.
         let frameCount = 0;
         let lastFpsTime = 0;
 
-        const gameLoop = (currentTime: number) => {
-            const rawDeltaTime = (currentTime - lastTime) / 1000;
-            const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
-            lastTime = currentTime;
-
-            // Update scene
-            scene?.update(deltaTime);
-
+        const uiLoop = (currentTime: number) => {
             // Update FPS counter and status
             frameCount++;
             if (currentTime - lastFpsTime >= 1000) {
@@ -324,11 +324,11 @@ async function main() {
                 lastFpsTime = currentTime;
             }
 
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(uiLoop);
         };
 
-        // Start the game loop
-        requestAnimationFrame(gameLoop);
+        // Start the UI loop
+        requestAnimationFrame(uiLoop);
 
         // Listen for input target changes
         window.addEventListener('inputTargetChanged', (event: any) => {

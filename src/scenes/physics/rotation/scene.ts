@@ -1,32 +1,11 @@
 // Scene demonstrating rotation with physics and gamepad input
 /* eslint-disable */
+import { Engine } from '../../../engine/engine';
 import { Scene } from '../../../engine/scene-system';
-import { WebGPURendererV2 } from '../../../renderer/webgpu.renderer';
 import { GameObject } from '../../../engine/gameobject';
 import { MeshRenderer, RigidBody, CollisionShape, Component } from '../../../engine/components';
-import { createGridMesh, createCubeMesh } from '../../../renderer/mesh-utils';
-
-async function initializeEngine() {
-    // 1. Get canvas element
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    if (!canvas) {
-        throw new Error('Canvas element not found');
-    }
-
-    // 2. Initialize WebGPU renderer
-    const renderer = new WebGPURendererV2();
-    await renderer.init(canvas);
-
-    // 3. Register meshes (must be done before creating GameObjects)
-    renderer.registerMesh('cube', createCubeMesh());
-    renderer.registerMesh('grid', createGridMesh(16, 16));
-
-    // 4. Create and initialize scene
-    const scene = new Scene();
-    await scene.init(renderer);
-
-    return { scene, renderer };
-}
+import { Mesh } from '../../../engine/mesh';
+import { Material } from '../../../engine/material';
 
 async function createSimpleScene(this: any, scene: Scene): Promise<void> {
     // Create ground plane
@@ -34,8 +13,8 @@ async function createSimpleScene(this: any, scene: Scene): Promise<void> {
     ground.transform.setPosition(0, -8, 0);
 
     // Add visual mesh (wireframe grid)
-    const groundMesh = new MeshRenderer('grid', 'default', 'lines',
-        { x: 0.5, y: 0.5, z: 0.5, w: 1 }); // Gray color
+    const groundMesh = new MeshRenderer(Mesh.createGrid('grid', 16, 16),
+        new Material('gray', { r: 0.5, g: 0.5, b: 0.5, a: 1 }), 'lines'); // Gray color
     ground.addComponent(groundMesh);
     scene.addGameObject(ground);
 
@@ -47,8 +26,8 @@ async function createSimpleScene(this: any, scene: Scene): Promise<void> {
     cube.transform.setScale(4, 4, 4);
 
     // Add visual mesh (solid triangles)
-    const cubeMesh = new MeshRenderer('cube', 'default', 'triangles',
-        { x: 0, y: 1, z: 0, w: 1 }); // Green color
+    const cubeMesh = new MeshRenderer(Mesh.createCube('cube', 1),
+        new Material('green', { r: 0, g: 1, b: 0, a: 1 })); // Green color
     cube.addComponent(cubeMesh);
 
 
@@ -217,13 +196,19 @@ async function createSimpleScene(this: any, scene: Scene): Promise<void> {
     console.log(`✅ Scene created with ${scene.getEntityCount()} GameObjects`);
 }
 
+async function buildScene(): Promise<Scene> {
+    const scene = new Scene();
+    await createSimpleScene(scene);
+    return scene;
+}
+
 async function main() {
     try {
-        // Initialize engine
-        const { scene } = await initializeEngine();
-
-        // Create scene content
-        await createSimpleScene(scene);
+        // Initialize engine + mount scene (pure data)
+        const engine = new Engine('canvas');
+        await engine.init();
+        const scene = await buildScene();
+        await engine.loadScene(scene);
 
         // Set up input (optional)
         const cube = scene.findGameObjectByName('cube');
@@ -231,20 +216,11 @@ async function main() {
             scene.setInputTarget(cube); // WASD/gamepad controls
         }
 
-        // Start scene lifecycle
-        scene.start();
+        // Start scene lifecycle + frame loop
+        engine.start(scene);
 
-        // Game loop
-        let lastTime = performance.now();
-        const gameLoop = (currentTime: number) => {
-            const deltaTime = Math.min((currentTime - lastTime) / 1000, 1/30);
-            lastTime = currentTime;
-
-            scene.update(deltaTime); // Physics + rendering
-            requestAnimationFrame(gameLoop);
-        };
-
-        requestAnimationFrame(gameLoop);
+        (window as any).engine = engine;
+        (window as any).scene = scene;
         console.log('🎮 Engine initialized successfully');
 
     } catch (error) {

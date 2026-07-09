@@ -1,21 +1,44 @@
-// src/v2/test-enhanced-rain.ts
+// src/scenes/rain/scene.ts
 // Demo script for the enhanced rain system with multiple mesh types and colors
+// (scene-first engine API).
 
 import { Scene } from '../../engine/scene-system';
-import { WebGPURendererV2 } from '../../renderer/webgpu.renderer';
+import { Engine } from '../../engine/engine';
 import { RainSystemV2, RainSystemConfig } from './rain-system';
 import { RainEntityType } from './rain-entity-factory';
-import { createSphereMesh, createCubeMesh, createGridMesh } from '../../renderer/mesh-utils';
 import { GameObject } from '../../engine/gameobject';
 import { MeshRenderer } from '../../engine/components';
+import { Mesh } from '../../engine/mesh';
+import { Material } from '../../engine/material';
+
+// Build the rain scene as pure data: a gray grid floor + camera. Rain entities are spawned
+// at runtime by RainSystemV2 (they use the 'sphere'/'cube' meshes registered in init()).
+function buildRainScene(): Scene {
+    const scene = new Scene();
+
+    // Add floor to scene
+    const gridFloor = new GameObject('grid-floor', 'Grid Floor');
+    gridFloor.transform.setPosition(0, -2, 0); // Below other objects
+    gridFloor.transform.setScale(1, 1, 1);
+    gridFloor.addComponent(
+        new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('grid-gray', { r: 0.3, g: 0.3, b: 0.3, a: 1 }), 'lines'), // Gray
+    );
+    scene.addGameObject(gridFloor);
+    console.log('⬜ Added gray grid floor at (0, -2, 0)');
+
+    // Setup camera
+    scene.camera.setPosition([0, 10, -15]);
+    scene.camera.setTarget([0, 0, 0]);
+    console.log('✅ Camera positioned');
+
+    return scene;
+}
 
 class EnhancedRainDemo {
-    private canvas: HTMLCanvasElement;
+    private engine: Engine;
     private scene: Scene;
-    private renderer: WebGPURendererV2;
     private rainSystem?: RainSystemV2;
-    private lastTime = 0;
-    private animationId?: number;
+    private statsAnimationId?: number;
 
     // UI elements
     private startButton!: HTMLButtonElement;
@@ -31,13 +54,9 @@ class EnhancedRainDemo {
     private performanceFPSEl!: HTMLElement;
 
     constructor() {
-        this.canvas = document.getElementById('canvas') as HTMLCanvasElement;
-        if (!this.canvas) {
-            throw new Error('Canvas element not found');
-        }
-
-        this.scene = new Scene();
-        this.renderer = new WebGPURendererV2();
+        // Engine resolves the canvas by id (throws if missing).
+        this.engine = new Engine('canvas');
+        this.scene = buildRainScene();
 
         this.setupUI();
     }
@@ -89,47 +108,37 @@ class EnhancedRainDemo {
 
             console.log('🌧️ Initializing Enhanced Rain Demo...');
 
-            // Initialize renderer
-            await this.renderer.init(this.canvas);
+            // Initialize the engine (WebGPU renderer)
+            await this.engine.init();
             console.log('✅ WebGPU Renderer V2 initialized');
 
-            // Initialize scene with renderer
-            await this.scene.init(this.renderer);
-            console.log('✅ Physics bridge initialized');
-
-            // Register meshes with renderer
-            const sphereMesh = createSphereMesh(0.5, 8); // Low-poly for performance
-            const cubeMesh = createCubeMesh(1.0);
-            const floorMesh = createGridMesh(20, 20);
-            this.renderer.registerMesh('sphere', sphereMesh);
-            this.renderer.registerMesh('cube', cubeMesh);
-            this.renderer.registerMesh('grid', floorMesh);
+            // Register meshes used by runtime-spawned rain entities. They aren't present in
+            // the initial scene tree, so loadScene won't auto-register them. The floor's grid
+            // mesh IS in the tree and gets registered by loadScene below.
+            const renderer = this.engine.getRenderer();
+            if (!renderer) {
+                throw new Error('Renderer not initialized');
+            }
+            renderer.registerMesh('sphere', Mesh.createSphere('sphere', 0.5, 8).data); // Low-poly for performance
+            renderer.registerMesh('cube', Mesh.createCube('cube', 1.0).data);
             console.log('✅ Meshes registered');
 
-            // Add floor to scene
-            const gridFloor = new GameObject('grid-floor', 'Grid Floor');
-            gridFloor.transform.setPosition(0, -2, 0); // Below other objects
-            gridFloor.transform.setScale(1, 1, 1);
+            // Mount the scene (uploads the floor grid mesh + registers entities with WASM)
+            await this.engine.loadScene(this.scene);
+            console.log('✅ Physics bridge initialized');
 
-            const gridMeshRenderer = new MeshRenderer(
-                'grid', 'default', 'lines',
-                { x: 0.3, y: 0.3, z: 0.3, w: 1 } // Gray
-            );
-            gridFloor.addComponent(gridMeshRenderer);
-            this.scene.addGameObject(gridFloor);
-            console.log('⬜ Added gray grid floor at (0, -2, 0)');
+            // Start the frame loop (input → physics → update → render)
+            this.engine.start(this.scene);
 
-
-            // Setup camera
-            this.scene.camera.setPosition([0, 10, -15]);
-            this.scene.camera.setTarget([0, 0, 0]);
-            console.log('✅ Camera positioned');
+            // Expose for console debugging
+            (window as unknown as { engine: Engine; scene: Scene }).engine = this.engine;
+            (window as unknown as { engine: Engine; scene: Scene }).scene = this.scene;
 
             console.log('🎉 Enhanced Rain Demo initialized successfully!');
             this.showLoading(false);
 
-            // Start render loop
-            this.startRenderLoop();
+            // Start stats UI loop
+            this.startStatsLoop();
 
         } catch (error) {
             console.error('❌ Failed to initialize demo:', error);
@@ -204,30 +213,15 @@ class EnhancedRainDemo {
         console.log('🧹 All rain entities cleared');
     }
 
-    private startRenderLoop(): void {
-        this.lastTime = performance.now();
-        this.render();
-    }
-
-    private render = (): void => {
-        const currentTime = performance.now();
-        const deltaTime = (currentTime - this.lastTime) / 1000; // Convert to seconds
-        this.lastTime = currentTime;
-
-        try {
-            // Update scene (includes WASM physics and render)
-            this.scene.update(deltaTime);
-
-            // Update stats
+    // The Engine owns the physics/render loop. This lightweight loop only refreshes the
+    // scene-specific stats UI — it does NOT step the scene.
+    private startStatsLoop(): void {
+        const loop = (): void => {
             this.updateStats();
-
-        } catch (error) {
-            console.error('❌ Render error:', error);
-        }
-
-        // Continue render loop
-        this.animationId = requestAnimationFrame(this.render);
-    };
+            this.statsAnimationId = requestAnimationFrame(loop);
+        };
+        this.statsAnimationId = requestAnimationFrame(loop);
+    }
 
     private updateStats(): void {
         if (!this.rainSystem) {
@@ -277,8 +271,8 @@ class EnhancedRainDemo {
     }
 
     dispose(): void {
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
+        if (this.statsAnimationId !== undefined) {
+            cancelAnimationFrame(this.statsAnimationId);
         }
 
         if (this.rainSystem) {
@@ -287,7 +281,8 @@ class EnhancedRainDemo {
 
         // Note: Scene doesn't have dispose method yet
         // this.scene.dispose();
-        this.renderer.dispose();
+        // Stops the engine frame loop and releases GPU resources.
+        void this.engine.deinit();
     }
 }
 

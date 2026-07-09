@@ -1,134 +1,90 @@
-// src/v2/simple-static-scene.ts
-// Simple static scene test using GameObject/Scene system (no physics)
-// This validates the v2 architecture with basic rendering
+// Simple static scene (no physics) — migrated to the scene-first engine API (A3).
+// Build the Scene as pure data (Mesh/Material objects), then let the Engine mount + run it.
 
+import { Engine } from '../engine/engine';
 import { Scene } from '../engine/scene-system';
 import { GameObject } from '../engine/gameobject';
 import { MeshRenderer } from '../engine/components';
-import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
-import { createCubeMesh, createTriangleMesh, createGridMesh } from '../renderer/mesh-utils';
+import { Mesh } from '../engine/mesh';
+import { Material } from '../engine/material';
 
-async function createSimpleStaticScene(scene: Scene): Promise<Scene> {
+function buildScene(): Scene {
+    const scene = new Scene();
 
-    console.log('🎨 Creating Simple Static Scene (GameObject/Scene validation)...');
+    // Static floor grid (yellow, wireframe) — no RigidBody = static geometry.
+    const floor = new GameObject(undefined, 'StaticFloor');
+    floor.transform.setPosition(0, -2, 0);
+    floor.addComponent(
+        new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('yellow', { r: 1, g: 1, b: 0, a: 1 }), 'lines'),
+    );
+    scene.add(floor);
 
-    // Create static floor grid (no RigidBody = static)
-    const floor = GameObject.createGrid('StaticFloor', { x: 0, y: -2, z: 0 });
-    scene.addGameObject(floor);
-    console.log('📐 Added static floor grid');
-
-    // Create red triangle (center, front)
+    // Red triangle (center, front).
     const triangle = new GameObject('center-triangle', 'StaticTriangle');
     triangle.transform.setPosition(0, 0, -5);
     triangle.transform.setScale(2, 2, 2);
+    triangle.addComponent(
+        new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }), 'triangles'),
+    );
+    scene.add(triangle);
 
-    const triangleMeshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 }); // Red
-    triangle.addComponent(triangleMeshRenderer);
-
-    scene.addGameObject(triangle);
-    console.log('🔺 Added red triangle (center, front)');
-
-    // Create green cube (left side)
+    // Green cube (left side).
     const leftCube = new GameObject('left-cube', 'StaticCube');
     leftCube.transform.setPosition(-2, 0, -5);
-    leftCube.transform.setScale(1, 1, 1);
+    leftCube.addComponent(
+        new MeshRenderer(Mesh.createCube('cube', 1), new Material('green', { r: 0, g: 1, b: 0, a: 1 }), 'triangles'),
+    );
+    scene.add(leftCube);
 
-    const leftMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 1, z: 0, w: 1 }); // Green
-    leftCube.addComponent(leftMeshRenderer);
-
-    scene.addGameObject(leftCube);
-    console.log('📦 Added green cube (left)');
-
-    // Create blue cube (right side)
+    // Blue cube (right side).
     const rightCube = new GameObject('right-cube', 'StaticCube');
     rightCube.transform.setPosition(2, 0, -5);
-    rightCube.transform.setScale(1, 1, 1);
+    rightCube.addComponent(
+        new MeshRenderer(Mesh.createCube('cube', 1), new Material('blue', { r: 0, g: 0, b: 1, a: 1 }), 'triangles'),
+    );
+    scene.add(rightCube);
 
-    const rightMeshRenderer = new MeshRenderer('cube', 'default', 'triangles', { x: 0, y: 0, z: 1, w: 1 }); // Blue
-    rightCube.addComponent(rightMeshRenderer);
+    // Keep the legacy camera exactly as before.
+    scene.camera.setPosition([0, 0, -10]);
+    scene.camera.lookAt([0, 0, 0]);
 
-    scene.addGameObject(rightCube);
-    console.log('📦 Added blue cube (right)');
-
-    console.log(`✅ Simple static scene created with ${scene.getEntityCount()} GameObjects`);
     return scene;
 }
 
-async function main() {
-    console.log('🚀 Simple Static Scene Test starting...');
-    const canvas = document.getElementById('webgpu-canvas') as HTMLCanvasElement;
-
+async function main(): Promise<void> {
+    const errorDiv = document.getElementById('error-message');
     try {
         if (!navigator.gpu) {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Initialize renderer
-        const renderer = new WebGPURendererV2();
-        await renderer.init(canvas);
+        const engine = new Engine('webgpu-canvas');
+        await engine.init();
+        const scene = buildScene();
+        await engine.loadScene(scene);
+        engine.start(scene);
 
-        // Register all required meshes
-        renderer.registerMesh('triangle', createTriangleMesh());
-        renderer.registerMesh('cube', createCubeMesh(1));
-        renderer.registerMesh('grid', createGridMesh(20, 20));
-
-        // Create simple static scene
-
-        const scene = new Scene();
-        await scene.init(renderer);
-
-        await createSimpleStaticScene(scene);
-
-        scene.start();
-
-        // Fix camera position - bring it down to normal viewing angle
-        scene.camera.setPosition([0, 0, -10]); // Eye level, not elevated
-        scene.camera.lookAt([0, 0, 0]); // Look at center
-
-
-        // Export scene to window for browser testing
+        // Expose for console debugging + the index.html buttons.
+        (window as any).engine = engine;
         (window as any).scene = scene;
         (window as any).staticScene = scene;
 
-        console.log('✅ Simple static scene initialized successfully');
-
-        // Log scene info
-        const sceneInfo = scene.getSceneInfo();
-        console.log('📊 Scene Info:', sceneInfo);
-
-        // Single static render (no animation loop needed)
-        scene.update(0); // deltaTime = 0 for static scene
-
-        console.log('🎯 Static scene rendered successfully');
-
-        // Test helper functions for browser console
-        (window as any).renderStaticScene = () => {
-            scene.update(0);
-            console.log('🔄 Re-rendered static scene');
-        };
-
         (window as any).logSceneInfo = () => {
-            const info = scene.getSceneInfo();
-            console.log('📊 Current Scene Info:', info);
+            console.log('📊 Current Scene Info:', scene.getSceneInfo());
         };
 
         (window as any).logWasmInfo = () => {
-            const stats = scene.physicsBridge.getStats();
-            console.log('📊 WASM Stats:', stats);
+            console.log('📊 WASM Stats:', scene.physicsBridge.getStats());
         };
 
+        console.log('✅ static scene running');
     } catch (error) {
-        console.error('❌ Error in simple static scene test:', error);
-        const errorDiv = document.getElementById('error-message');
+        console.error('❌ static scene failed:', error);
         if (errorDiv) {
             errorDiv.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-            errorDiv.style.display = 'block';
+            (errorDiv as HTMLElement).style.display = 'block';
         }
     }
 }
-
-// Export for browser testing
-(window as any).createSimpleStaticScene = createSimpleStaticScene;
-(window as any).runSimpleStaticSceneTest = main;
 
 main();
