@@ -17,6 +17,8 @@ export class Engine {
     private canvas: HTMLCanvasElement;
     private renderer?: WebGPURendererV2;
     private running = false;
+    // Handle of the pending requestAnimationFrame, so stop()/deinit() can cancel the loop
+    // (undefined when not running). Set on every frame; see start().
     private animationId: number | undefined = undefined;
     private lastTime = 0;
 
@@ -67,6 +69,9 @@ export class Engine {
         this.running = true;
         this.lastTime = performance.now();
 
+        // Self-rescheduling rAF loop: each frame computes a clamped delta, updates the scene,
+        // then queues the next frame (recording its handle so stop() can cancel it). The
+        // `running` guard makes a cancelled frame a no-op if one is already in flight.
         const loop = (now: number): void => {
             if (!this.running) return;
             const deltaTime = Math.min((now - this.lastTime) / 1000, 1 / 30); // clamp at 30fps

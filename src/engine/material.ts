@@ -27,5 +27,7 @@ export class Material {
         this.color = color;
     }
 
+    // Loud magenta placeholder used when a MeshRenderer has no material assigned yet
+    // (also the intended "asset failed to load" fallback later). See class doc above.
     static readonly default = new Material('__default', { r: 1, g: 0, b: 1, a: 1 });
 }

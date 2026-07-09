@@ -14,6 +14,7 @@ This folder contains Playwright-powered browser rendering tests for the WebGPU r
 ```sh
 cd browser-tests
 npm install
+npx playwright install
 ```
 
 ## Running Tests
