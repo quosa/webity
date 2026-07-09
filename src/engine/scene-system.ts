@@ -118,15 +118,27 @@ export class Scene {
     // Register a single GameObject with the renderer (mesh index) + WASM. Used for eager
     // late adds; errors are logged (matches legacy addGameObject behavior). The mount() path
     // registers strictly (fail-loud) instead.
-    private registerEntity(gameObject: GameObject): void {
+    // Shared registration core: warn about inert bodies, resolve the mesh index, and register
+    // with WASM. Returns an error message on failure (null on success) so callers choose their
+    // policy — the eager late-add path logs and continues; mount() aggregates and fails loud.
+    private tryRegister(gameObject: GameObject): string | null {
         this.warnIfInertRigidBody(gameObject);
         try {
             this._addMeshIndex(gameObject);
-            const wasmEntityId = this.physicsBridge.addEntity(gameObject);
-            const entityType = gameObject.getComponent(RigidBody) ? 'physics' : 'static';
-            console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity (wasmId: ${wasmEntityId})`);
+            this.physicsBridge.addEntity(gameObject);
+            return null;
         } catch (error) {
-            console.error(`❌ Failed to add GameObject "${gameObject.name}" to WASM:`, error);
+            return error instanceof Error ? error.message : String(error);
+        }
+    }
+
+    private registerEntity(gameObject: GameObject): void {
+        const error = this.tryRegister(gameObject);
+        if (error) {
+            console.error(`❌ Failed to add GameObject "${gameObject.name}" to WASM: ${error}`);
+        } else {
+            const entityType = gameObject.getComponent(RigidBody) ? 'physics' : 'static';
+            console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity`);
         }
     }
 
@@ -191,12 +203,9 @@ export class Scene {
 
         const failures: string[] = [];
         for (const gameObject of this.entities.values()) {
-            this.warnIfInertRigidBody(gameObject);
-            try {
-                this._addMeshIndex(gameObject);
-                this.physicsBridge.addEntity(gameObject);
-            } catch (error) {
-                failures.push(`  - "${gameObject.name}": ${error instanceof Error ? error.message : String(error)}`);
+            const error = this.tryRegister(gameObject);
+            if (error) {
+                failures.push(`  - "${gameObject.name}": ${error}`);
             }
         }
         this.mounted = true;

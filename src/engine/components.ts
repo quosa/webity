@@ -516,19 +516,6 @@ export class CameraComponent extends Component {
         this.target = [x, y, z];
     }
 
-    setTarget(target: [number, number, number]): void {
-        this.target = target;
-    }
-
-    setUp(up: [number, number, number]): void {
-        this.up = up;
-    }
-
-    setClipPlanes(near: number, far: number): void {
-        this.near = near;
-        this.far = far;
-    }
-
     private resolveTarget(): [number, number, number] {
         const p = this.gameObject.transform.position;
         if (this.target) return this.target;

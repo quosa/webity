@@ -10,13 +10,13 @@
 import { GameObject } from './gameobject';
 import { CameraComponent } from './components';
 
-export class PerspectiveCamera extends GameObject {
+abstract class CameraObject extends GameObject {
     readonly cameraComponent: CameraComponent;
 
-    constructor(id: string, opts: { fov?: number; near?: number; far?: number } = {}) {
+    protected constructor(id: string, cameraComponent: CameraComponent) {
         super(id, 'Camera');
-        this.cameraComponent = new CameraComponent(true, opts.fov ?? Math.PI / 4, opts.near ?? 0.1, opts.far ?? 100);
-        this.addComponent(this.cameraComponent);
+        this.cameraComponent = cameraComponent;
+        this.addComponent(cameraComponent);
     }
 
     /** Aim the camera at a world-space point. */
@@ -24,37 +24,23 @@ export class PerspectiveCamera extends GameObject {
         this.cameraComponent.lookAt(x, y, z);
     }
 
-    setFov(fov: number): void {
-        this.cameraComponent.fov = fov;
-    }
-
     getViewProjectionMatrix(aspect: number): Float32Array {
         return this.cameraComponent.getViewProjectionMatrix(aspect);
     }
 }
 
-export class OrthographicCamera extends GameObject {
-    readonly cameraComponent: CameraComponent;
+export class PerspectiveCamera extends CameraObject {
+    constructor(id: string, opts: { fov?: number; near?: number; far?: number } = {}) {
+        super(id, new CameraComponent(true, opts.fov ?? Math.PI / 4, opts.near ?? 0.1, opts.far ?? 100));
+    }
+}
 
+export class OrthographicCamera extends CameraObject {
     constructor(
         id: string,
         opts: { bounds?: { left: number; right: number; top: number; bottom: number }; near?: number; far?: number } = {},
     ) {
-        super(id, 'Camera');
         const bounds = opts.bounds ?? { left: -5, right: 5, top: 5, bottom: -5 };
-        this.cameraComponent = new CameraComponent(false, Math.PI / 4, opts.near ?? 0.1, opts.far ?? 100, bounds);
-        this.addComponent(this.cameraComponent);
-    }
-
-    lookAt(x: number, y: number, z: number): void {
-        this.cameraComponent.lookAt(x, y, z);
-    }
-
-    setBounds(left: number, right: number, top: number, bottom: number): void {
-        this.cameraComponent.setOrthographic(left, right, top, bottom);
-    }
-
-    getViewProjectionMatrix(aspect: number): Float32Array {
-        return this.cameraComponent.getViewProjectionMatrix(aspect);
+        super(id, new CameraComponent(false, Math.PI / 4, opts.near ?? 0.1, opts.far ?? 100, bounds));
     }
 }

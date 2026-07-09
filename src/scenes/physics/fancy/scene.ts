@@ -9,6 +9,12 @@ import { RigidBody, MeshRenderer, CollisionShape } from '../../../engine/compone
 import { Mesh } from '../../../engine/mesh';
 import { Material } from '../../../engine/material';
 
+// Shared geometry — one CPU descriptor per shape, reused across all spawned objects (the
+// engine dedups meshes by id, so regenerating per-spawn just wasted work). Materials stay
+// per-object (unique colors), so only the mesh is shared.
+const SPHERE_MESH = Mesh.createSphere('sphere', 1.0, 16);
+const CUBE_MESH = Mesh.createCube('cube', 1);
+
 // Mesh interference test function removed - was used for debugging
 
 async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
@@ -39,7 +45,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
         ball.transform.setScale(1.0, 1.0, 1.0);
 
         const hue = 0.1 + (i * 0.15); // Orange to red gradient
-        const ballMeshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1.0, 16),
+        const ballMeshRenderer = new MeshRenderer(SPHERE_MESH,
             new Material(`left-ball-${i}`, { r: 1.0, g: hue, b: 0.1, a: 1.0 }));
         ball.addComponent(ballMeshRenderer);
 
@@ -65,7 +71,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
         cube.transform.setScale(1.8, 1.8, 1.8);
 
         const hue = 0.5 + (i * 0.1); // Blue to cyan gradient
-        const cubeMeshRenderer = new MeshRenderer(Mesh.createCube('cube', 1),
+        const cubeMeshRenderer = new MeshRenderer(CUBE_MESH,
             new Material(`right-cube-${i}`, { r: 0.1, g: hue, b: 1.0, a: 1.0 }));
         cube.addComponent(cubeMeshRenderer);
 
@@ -85,7 +91,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
     platform.transform.setPosition(0, -7, 0);
     platform.transform.setScale(2, 2, 2); // cube was created with side=1
 
-    const platformMeshRenderer = new MeshRenderer(Mesh.createCube('cube', 1),
+    const platformMeshRenderer = new MeshRenderer(CUBE_MESH,
         new Material('platform-gray', { r: 0.5, g: 0.5, b: 0.5, a: 1.0 })); // Gray platform
     platform.addComponent(platformMeshRenderer);
 
@@ -113,7 +119,7 @@ async function createFancyPhysicsDemo(scene: Scene): Promise<Scene> {
 
             // Color gradient: purple to pink
             const hue = 0.8 + (row + col) * 0.05;
-            const ballMeshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1.0, 16),
+            const ballMeshRenderer = new MeshRenderer(SPHERE_MESH,
                 new Material(`fall-ball-${row}-${col}`, { r: hue, g: 0.2, b: 1.0, a: 1.0 }));
             ball.addComponent(ballMeshRenderer);
 
@@ -193,7 +199,7 @@ function setupInputControls(scene: Scene): void {
         newBall.transform.setScale(1, 1, 1);
 
         // Random color
-        const ballMeshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1.0, 16), new Material(`dynamic-ball-${ballCounter}`, {
+        const ballMeshRenderer = new MeshRenderer(SPHERE_MESH, new Material(`dynamic-ball-${ballCounter}`, {
             r: Math.random(),
             g: Math.random(),
             b: Math.random(),
