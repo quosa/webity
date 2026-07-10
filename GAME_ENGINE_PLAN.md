@@ -1569,15 +1569,34 @@ test "physics simulation - gravity" {
 ```
 
 # TODO ITEMS
-- sort out camera and perspective to match original v1 snapshots in browser tests
-- determine what to do with wasm rendering part (as we cannot have zero-copy)
-    - Chicken and egg issue:
-      - scene needs wasm bridge to register entities (game objects)
-      - scene init() called early to load wasm bridge and wasm module
-      - BUT it tries to register all entities immediately
-      - AND calls awake() on all game objects, which ARE NOT registered yet
-- check the game object and component life cycle
-- re-enable input manager
-- refactor to engine.ts and use scene/game_object/component/camera etc.
-- BUG: The meshes have to added before scene.init() is called, otherwise the entities can't find their meshes
+
+Most of these were resolved by the **A3 scene-first engine API** effort (`Engine` facade + data-only
+`Scene`) — see `docs/a3-scene-first-engine-api-plan.md` for the full breakdown and remaining follow-ups.
+
+- ✅ **DONE (A3):** `refactor to engine.ts and use scene/game_object/component/camera etc.` — the
+  `Engine(canvas)` facade (`init`/`loadScene`/`start`/`stop`/`deinit`) landed in PR #8; scenes are built
+  as pure data and mounted by the Engine.
+- ✅ **DONE (A3, PR #8):** **Chicken-and-egg entity registration.** Registration is now a single
+  deterministic pass in `Engine.loadScene → Scene.mount`: the scene is data-only until mounted, entities
+  are registered once (fail-loud, no double-registration), and `awake()`/`start()` run *after*
+  registration — not before. The old "register eagerly in `addGameObject` before the bridge is ready +
+  re-register everything in `init()`" trap is gone.
+  - NOTE (wording): this fixed the registration *ordering*. The `Scene` is not yet fully "pure data" —
+    it still owns the `WasmPhysicsBridge` and runs `mount`/`update`/`render`. Moving the runtime to the
+    Engine is the last A3 purity step (tracked as a3 plan follow-up #11).
+- ✅ **DONE (A3 / PR #10):** `BUG: meshes have to be added before scene.init()` — `Engine.loadScene`
+  registers each `MeshRenderer`'s mesh from the scene tree before mounting, so setup is no longer
+  order-fragile; PR #10 also made the draw pass come from the mesh's render mode (not a hard-coded id
+  allowlist), so custom mesh ids render correctly.
+- ✅ **DONE:** `re-enable input manager` — input system (keyboard/gamepad + controllers) is live.
+- ✅ **RESOLVED (design decision):** `determine what to do with the wasm rendering part (cannot have
+  zero-copy)` — WebGPU can't map WASM linear memory as a GPU buffer, so the accepted model is
+  **copy-based**: one bulk `writeBuffer` + zero per-frame allocation + one draw call per mesh. See
+  `docs/instanced-rendering-refactor-plan.md`.
+- ◑ **PARTIAL:** `check the game object and component life cycle` — awake/start/update lifecycle is in
+  place and driven by the Engine; the remaining piece is moving `mount`/`update`/`render` ownership from
+  Scene to Engine (a3 plan follow-up #11, characterization net landed in PR #12).
+- ✅ **DONE:** `sort out camera and perspective to match original v1 snapshots in browser tests` —
+  camera unified (`CameraComponent` is the single view/projection source) and the `browser-tests`
+  Playwright snapshots pass against the original v1 references.
 -

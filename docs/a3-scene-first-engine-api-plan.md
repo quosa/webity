@@ -6,7 +6,9 @@ pure declarative tree of GameObjects that reference first-class **asset objects*
 "two id-lists to keep in sync" boilerplate. (Alternative Proposal A — string-id + engine
 registry — was rejected.)
 
-Branch: `worktree-a3-scene-first-engine-api` (off merged `main` `ef156b9`). Draft PR: **#8**.
+Status: **MERGED** — core A3 in PR **#8**, cleanups in **#9**; follow-ups **#10** (render mode),
+**#11** (engine lifecycle), **#12** (runtime-seam characterization). Remaining: follow-up #11
+(move the runtime from Scene to Engine — the last "Scene = pure data" step).
 
 ---
 
@@ -18,15 +20,19 @@ Branch: `worktree-a3-scene-first-engine-api` (off merged `main` `ef156b9`). Draf
 - ✅ **Inc 3** camera-as-GameObject (unified Transform, 3a) — `CameraComponent` view/projection math from `transform.position`; `PerspectiveCamera`/`OrthographicCamera` GameObject subclasses in `src/engine/camera-object.ts`; equivalence test vs legacy camera (`78b5ae0`)
 - ✅ **Inc 4** `MeshRenderer` object mode `(mesh, material?, renderMode?)`, legacy string form kept (`9368c77`, lint fixup `038f60b`)
 
-State: 286 Jest tests + Zig 8/8 + typecheck green. Everything additive — legacy
-`scene.init(renderer)` path and all ~14 scenes still work.
+State (2026-07-11): **312 Jest tests** + Zig 8/8 + typecheck + lint green on `main`. Legacy
+`scene.init(renderer)` path removed (Inc 8); all scenes on the Engine + object model.
 
-**Next (the invasive half):**
-- ⏭ **Inc 5** `Engine` facade — new `src/engine/engine.ts`: `init` / `loadScene`(mount) / `start`(loop) / `deinit` + one canonical clamped rAF loop. Still mostly additive.
-- ⏭ **Inc 6** `Scene` data-only — `add()` pure insert; move ALL registration into `Engine.loadScene` (single pass, fail-loud, no double-registration, no error-swallow, `awake`/`start` at mount). First breaking change to Scene semantics; keep a temporary compat shim for un-migrated scenes.
-- ⏭ **Inc 7** migrate ~14 demo scenes to Engine + object model; add canonical red-ball/blue-pyramid/floor-grid scene + browser test.
-- ⏭ **Inc 8** remove legacy (eager registration, `registerEntitiesWithWasm`, string `MeshRenderer` ctor, compat shim, `scene.init(renderer)`); fix stale `src/scenes/CLAUDE.md` + `README.md`.
-- ⏭ **Inc 9** ergonomics (optional): `GameObject.cube/sphere/grid`, `RigidBody { kinematic }` opts, `scene.add` primary.
+**The invasive half — DONE (merged):**
+- ✅ **Inc 5** `Engine` facade — `src/engine/engine.ts`: `init`/`loadScene`(mount)/`start`(loop)/`deinit` + one canonical clamped rAF loop. (PR #8; lifecycle hardened in #11.)
+- ✅ **Inc 6** `Scene` data-only insert — `add()` is a pure insert; ALL registration moved into `Engine.loadScene`/`Scene.mount` (single fail-loud pass, no double-registration, `awake`/`start` at mount). (PR #8.)
+- ✅ **Inc 7** migrated all demo scenes to Engine + object model; added the canonical red-ball/blue-pyramid/floor-grid scene (`basic-physics`) + browser test. (PR #8.)
+- ✅ **Inc 8** legacy removed (eager registration, `registerEntitiesWithWasm`, string `MeshRenderer` ctor, compat shim, `scene.init(renderer)`); stale docs fixed. (PR #9.)
+- ◑ **Inc 9** ergonomics (partial): `RigidBody { kinematic }` opt + `RigidBody.staticBody()` DONE; `GameObject.cube/sphere/grid` sugar not built (low priority).
+
+**Still open — the one thing left for "Scene = pure data":** follow-up #11 below (move
+`physicsBridge` ownership + `mount`/`update`/`render` from Scene to Engine). Characterization
+net for it landed in PR #12.
 
 **To resume in a fresh worktree** (a3 worktree is git-only; build artifacts + node_modules are gitignored):
 1. `npm install`
@@ -220,6 +226,10 @@ Verified against `main`; the migration did not cause these:
       PR #11's `mount(renderer, wasm)` (Engine supplies the module) is a first nudge in this direction.
 
 ## Resume pointer
-Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green
-(typecheck / 296 Jest / Zig 8/8 / lint / builds). To resume in a fresh worktree: `npm install`
-→ `npm run build:wasm` → baseline. Next actionable: address PR review, then tasks above.
+Core A3 **merged to `main`** (PR #8 + #9), plus follow-ups #10/#11/#12. Green on `main`:
+typecheck / **312 Jest** / Zig 8/8 (CI) / lint / builds. To resume in a fresh worktree:
+`npm install` → `npm run build:wasm` → baseline.
+
+**Next actionable:** follow-up **#11** — the Engine-owns-the-runtime refactor (Scene → pure
+data). PR #12 pinned the update/render/sync seam it moves, so it now has a regression net.
+The WASM-ABI cluster (#1/#8/#9) remains a separate, later effort.

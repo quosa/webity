@@ -23,6 +23,29 @@ animation, GPU culling) is designed-for and left unblocked, not built now.
 **Guiding principle:** each increment below is sized to be a single focused PR — one concern, its own
 `npm run verify` green, and a visual check where rendering is touched. Prefer merging small over batching.
 
+## Current state (updated 2026-07-11)
+
+Most of **Stage A** landed — but via the separate **A3 scene-first engine API** effort
+(`docs/a3-scene-first-engine-api-plan.md`), not as the increments below. (Naming collision warning:
+"A3" *there* is the whole scene-first refactor; "A3" *here* is just the chicken-and-egg increment.)
+
+- ✅ **A1** dead render code removed. ✅ **A2** single per-frame `gameObject.update()`.
+- ✅ **A3 (chicken-and-egg)** + ✅ **A4 (mesh-registration order)** — fixed by the scene-first refactor:
+  registration is one deterministic pass at `Engine.loadScene`/`Scene.mount`, and meshes are registered
+  from the scene tree there, so setup is no longer order-fragile.
+- ✅ **B0 (topology into the registry)** — done in PR #10: draw pass now comes from each mesh's render
+  mode via `MeshRegistry`, killing the hard-coded name lists.
+- ✅ **A6** camera unified (`CameraComponent` single source) **and** v1 browser-snapshot parity
+  confirmed — the Playwright snapshots pass against the original references.
+- ◑ **A5** is the only Stage A item left: bridge TODOs still open (`wasm-physics-bridge.ts:35` vec3
+  getter, `:179` material id, `:318` kinematic-state).
+- Also since this plan was written: the `Engine` gained restart/scene-switch lifecycle (PR #11), and the
+  `Scene`-owns-runtime cleanup (relevant to B8's sync round-trip) is tracked as a3 follow-up #11.
+
+**Not started: Stage B proper (B1–B8)** — the instanced-rendering perf refactor (bind-once atlas,
+bucket-aware removal, per-mesh draw table, storage-buffer instances, widened structs, lighting). This is
+the remaining substance of this plan.
+
 ## Why cleanup before the perf refactor
 
 The stability fixes and the perf refactor touch the **same files** (`scene-system.ts`,
@@ -82,12 +105,13 @@ rest into clearly-scoped, referenced TODOs (kinematic state → its own incremen
 - **Files:** `src/engine/wasm-physics-bridge.ts`.
 - **Done when:** no ambiguous TODOs; each remaining one names its owning phase/increment.
 
-### A6 — Camera/perspective parity with v1 snapshots
+### A6 — Camera/perspective parity with v1 snapshots ✅ DONE
 `GAME_ENGINE_PLAN.md` TODO: "sort out camera and perspective to match original v1 snapshots in browser
 tests." Reconcile the view/projection math so `browser-tests` snapshots match v1.
 - **Files:** camera in `src/engine/scene-system.ts` / camera module, `src/renderer/webgpu.renderer.ts`,
   `browser-tests/`.
-- **Done when:** browser snapshot tests pass against the v1 reference; document any intentional deviation.
+- **Done:** camera unified onto `CameraComponent` (single view/projection source); the `browser-tests`
+  Playwright snapshots pass against the original v1 references.
 
 **Stage A exit criteria:** `npm run verify` green (38+ tests), scene lifecycle has single-update +
 single-registration + order-independent meshes, no dead render code, browser snapshots green.
