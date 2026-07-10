@@ -133,11 +133,20 @@ describe('CameraComponent Movement', () => {
 
         test('should look at different target', () => {
             camera.lookAt([10, -5, 3]);
-            
+
             const target = camera.getTarget();
             expect(target[0]).toBeCloseTo(10);
             expect(target[1]).toBeCloseTo(-5);
             expect(target[2]).toBeCloseTo(3);
+        });
+
+        test('should accept the scalar (x, y, z) form', () => {
+            camera.lookAt(4, 5, 6);
+            expect(camera.getTarget()).toEqual([4, 5, 6]);
+        });
+
+        test('should throw on a partial scalar call (guards against NaN target)', () => {
+            expect(() => (camera.lookAt as (x: number) => void)(5)).toThrow();
         });
 
         test('should handle looking at same position as camera', () => {
@@ -155,6 +164,16 @@ describe('CameraComponent Movement', () => {
     });
 
     describe('Orbit Functionality', () => {
+        test('should no-op (not NaN) when the camera sits on the target', () => {
+            camera.setPosition([0, 0, 0]);
+            camera.setTarget([0, 0, 0]); // radius 0
+
+            expect(() => camera.orbitAroundTarget(Math.PI / 4, Math.PI / 4)).not.toThrow();
+            const p = camera.getPosition();
+            expect(p.every((c) => Number.isFinite(c))).toBe(true);
+            expect(p).toEqual([0, 0, 0]); // unchanged
+        });
+
         test('should orbit around target with yaw only', () => {
             // Position camera to the right of origin
             camera.setPosition([5, 0, 0]);

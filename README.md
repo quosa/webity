@@ -123,7 +123,8 @@ function createSimpleScene(): Scene {
     ));
     scene.addGameObject(cube);
 
-    // Position the camera to see the scene
+    // Position the scene's default camera to see the scene. Every Scene auto-creates a
+    // PerspectiveCamera; call scene.setCamera(...) to replace it with your own.
     scene.camera.setPosition([0, 3, -10]);
     scene.camera.lookAt([0, 0, 0]);
 

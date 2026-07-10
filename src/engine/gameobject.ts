@@ -184,43 +184,39 @@ export class GameObject {
         return this.active;
     }
     
+    // Shared primitive assets for the factory helpers. Meshes/materials are deduped by id at
+    // Engine.loadScene(), so generate the geometry once and reuse it across every instance
+    // instead of rebuilding vertex/index data on each factory call.
+    private static readonly CUBE_MESH = Mesh.createCube('cube', 1);
+    private static readonly SPHERE_MESH = Mesh.createSphere('sphere', 1);
+    private static readonly GRID_MESH = Mesh.createGrid('grid', 20, 20);
+    private static readonly GRID_MATERIAL = new Material('grid-yellow', { r: 1, g: 1, b: 0, a: 1 });
+
     // Create static factory methods for common GameObject types
     static createCube(name?: string, position?: { x: number; y: number; z: number }): GameObject {
         const cube = new GameObject(undefined, name || 'Cube');
-        
         if (position) {
             cube.transform.setPosition(position.x, position.y, position.z);
         }
-        
-        const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1), Material.default, 'triangles');
-        cube.addComponent(meshRenderer);
-
+        cube.addComponent(new MeshRenderer(GameObject.CUBE_MESH, Material.default, 'triangles'));
         return cube;
     }
-    
+
     static createSphere(name?: string, position?: { x: number; y: number; z: number }): GameObject {
         const sphere = new GameObject(undefined, name || 'Sphere');
-        
         if (position) {
             sphere.transform.setPosition(position.x, position.y, position.z);
         }
-        
-        const meshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1), Material.default, 'triangles');
-        sphere.addComponent(meshRenderer);
-
+        sphere.addComponent(new MeshRenderer(GameObject.SPHERE_MESH, Material.default, 'triangles'));
         return sphere;
     }
-    
+
     static createGrid(name?: string, position?: { x: number; y: number; z: number }): GameObject {
         const grid = new GameObject(undefined, name || 'Grid');
-        
         if (position) {
             grid.transform.setPosition(position.x, position.y, position.z);
         }
-        
-        const meshRenderer = new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('grid-yellow', { r: 1, g: 1, b: 0, a: 1 }), 'lines');
-        grid.addComponent(meshRenderer);
-
+        grid.addComponent(new MeshRenderer(GameObject.GRID_MESH, GameObject.GRID_MATERIAL, 'lines'));
         return grid;
     }
 }

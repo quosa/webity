@@ -44,6 +44,12 @@ export const RAIN_COLORS = {
     ]
 } as const;
 
+// Shared geometry for runtime-spawned rain entities. The mesh ids match what the rain scene
+// registers at startup (engine.registerMesh); build the geometry once and reuse it for every
+// spawn instead of regenerating vertex/index data per entity.
+const CUBE_MESH = Mesh.createCube('cube', 1.0);
+const SPHERE_MESH = Mesh.createSphere('sphere', 0.5, 8);
+
 // Entity specifications for different rain types
 const ENTITY_SPECS = {
     [RainEntityType.SMALL_SPHERE]: {
@@ -122,9 +128,7 @@ export class RainEntityFactory {
         // Add MeshRenderer component (object mode). The mesh id matches a mesh registered at
         // startup by the rain scene (engine.registerMesh) for these runtime-spawned entities.
         const colorArray = config.color || this.getRandomColor(spec.colors);
-        const mesh = spec.meshId === 'cube'
-            ? Mesh.createCube('cube', 1.0)
-            : Mesh.createSphere('sphere', 0.5, 8);
+        const mesh = spec.meshId === 'cube' ? CUBE_MESH : SPHERE_MESH;
         const material = new Material(`rain-${entityId}`, {
             r: colorArray[0], g: colorArray[1], b: colorArray[2], a: colorArray[3],
         });

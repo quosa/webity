@@ -449,8 +449,16 @@ export class CameraComponent extends Component {
 
     // Aim at a world-space point. Accepts scalar (x, y, z) or array [x, y, z] form — the
     // array form matches the retired legacy Camera API still used by scenes and HTML controls.
+    // Fails fast on a partial scalar call so a missing y/z can't seed NaNs into the view math.
     lookAt(x: number | [number, number, number], y?: number, z?: number): void {
-        this.target = typeof x === 'number' ? [x, y!, z!] : [...x];
+        if (typeof x === 'number') {
+            if (y === undefined || z === undefined) {
+                throw new Error('CameraComponent.lookAt: pass all three coordinates (x, y, z) or an [x, y, z] array');
+            }
+            this.target = [x, y, z];
+        } else {
+            this.target = [...x];
+        }
     }
 
     private resolveTarget(): [number, number, number] {
@@ -520,6 +528,7 @@ export class CameraComponent extends Component {
         const dy = p.y - target[1];
         const dz = p.z - target[2];
         const radius = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (radius === 0) return; // camera sits on the target — nothing to orbit around (avoids NaN)
 
         const currentYaw = Math.atan2(dx, dz);
         const currentPitch = Math.asin(dy / radius);
