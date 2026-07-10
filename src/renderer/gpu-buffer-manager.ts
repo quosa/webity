@@ -1,7 +1,7 @@
 // src/v2/gpu-buffer-manager.ts
 // Pure buffer management - replacement for MegaBufferManager with shared vertex/index architecture
 
-import { MeshRegistry, MeshData, MeshAllocation } from './mesh-registry';
+import { MeshRegistry, MeshData, MeshAllocation, RenderMode } from './mesh-registry';
 
 export class GPUBufferManager {
     private device: GPUDevice;
@@ -20,9 +20,15 @@ export class GPUBufferManager {
     }
 
     // Register mesh data (calculates allocation, doesn't upload yet)
-    registerMesh(meshId: string, meshData: MeshData): void {
-        this.meshRegistry.allocate(meshId, meshData);
+    registerMesh(meshId: string, meshData: MeshData, renderMode: RenderMode = 'triangles'): void {
+        this.meshRegistry.allocate(meshId, meshData, renderMode);
         this.meshDataCache.set(meshId, meshData);
+    }
+
+    // Draw pass for this mesh's instances, or undefined if the id was never registered
+    // (the render loop treats undefined as "draw in neither pass").
+    getMeshRenderMode(meshId: string): RenderMode | undefined {
+        return this.meshRegistry.get(meshId)?.renderMode;
     }
 
     // Build shared vertex and index buffers with all registered meshes

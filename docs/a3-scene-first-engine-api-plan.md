@@ -185,12 +185,18 @@ Verified against `main`; the migration did not cause these:
     - **Workaround today:** reuse the blessed ids (`'grid'` for lines, `'cube'`/`'sphere'`/etc.
       for triangles). Note `loadScene` dedups meshes by id, so one id == one geometry — you can't
       have two differently-sized `'grid'` meshes.
-    - **Fix (own PR, like #8):** thread the real render mode through registration —
-      `registerMesh(id, data, renderMode = 'triangles')` storing a `Map<id, mode>`;
-      `Engine.loadScene` passes `meshRenderer.renderMode` (and `Engine.registerMesh(mesh, mode?)`
-      for runtime spawns); then filter by `meshRenderMode.get(meshId) === renderMode` instead of
-      the hard-coded arrays. Keys mode per mesh id (matches the TODO); a per-entity mode (same id
-      drawn both ways) would be a larger change. No WASM/ABI change — TS renderer + engine only.
+    - **✅ Done (branch `renderer-render-mode`):** threaded the real render mode through
+      registration — `registerMesh(id, data, renderMode = 'triangles')` stores it on the
+      `MeshRegistry` allocation entry; `Engine.loadScene` passes `meshRenderer.renderMode` (and
+      `Engine.registerMesh(mesh, mode?)` for runtime spawns); the render loop filters by the
+      mesh's registered mode. Extracted a shared `RenderMode` type in `mesh-registry.ts`. No
+      WASM/ABI change — TS renderer + engine only. Per-mesh-id keying (one mode per id).
+    - **Deeper form (deferred, belongs with the ABI cluster #8/#9):** render mode is modeled
+      per-*entity* everywhere else (`MeshRenderer.renderMode`, `EntityData`), so the truly
+      correct seam is a `render_mode` field in the WASM `EntityMetadata` (mirroring `mesh_id`),
+      read per-entity in the render loop. That removes the per-mesh-id "one mode per id"
+      limitation (same mesh drawn both ways) and the registration threading — but it's a WASM
+      ABI change, so it rides with #8/#9 rather than the TS-only pass above.
 
 ## Resume pointer
 Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green

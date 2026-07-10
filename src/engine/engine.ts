@@ -10,6 +10,7 @@
 //   engine.start(scene);          // input > physics > update > render loop
 
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
+import { RenderMode } from '../renderer/mesh-registry';
 import { Scene } from './scene-system';
 import { MeshRenderer } from './components';
 import { Mesh } from './mesh';
@@ -41,11 +42,11 @@ export class Engine {
      * Register a mesh for runtime-spawned objects whose mesh isn't present in the initial
      * scene tree (loadScene only auto-registers meshes it finds on the scene's MeshRenderers).
      */
-    registerMesh(mesh: Mesh): void {
+    registerMesh(mesh: Mesh, renderMode: RenderMode = 'triangles'): void {
         if (!this.renderer) {
             throw new Error('Engine.registerMesh(): call init() first');
         }
-        this.renderer.registerMesh(mesh.id, mesh.data);
+        this.renderer.registerMesh(mesh.id, mesh.data, renderMode);
     }
 
     /**
@@ -61,11 +62,10 @@ export class Engine {
         const registered = new Set<string>();
         for (const gameObject of scene.getAllGameObjects()) {
             const meshRenderer = gameObject.getComponent(MeshRenderer);
-            const mesh = meshRenderer?.mesh;
-            if (mesh && !registered.has(mesh.id)) {
-                this.renderer.registerMesh(mesh.id, mesh.data);
-                registered.add(mesh.id);
-            }
+            if (!meshRenderer?.mesh || registered.has(meshRenderer.mesh.id)) continue;
+            const { mesh } = meshRenderer;
+            this.renderer.registerMesh(mesh.id, mesh.data, meshRenderer.renderMode);
+            registered.add(mesh.id);
         }
 
         await scene.mount(this.renderer);

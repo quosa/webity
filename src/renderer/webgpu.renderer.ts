@@ -14,7 +14,7 @@ interface GPUTexture { createView(_descriptor?: any): any; destroy(): void; }
 
 // import { EntityManager, EntityData } from './entities';
 import { GPUBufferManager } from './gpu-buffer-manager';
-import { MeshData } from './mesh-registry';
+import { MeshData, RenderMode } from './mesh-registry';
 
 // Types
 export type TextureData = {
@@ -298,8 +298,8 @@ export class WebGPURendererV2 {
         this.device.queue.writeBuffer(this.uniformBuffer, 0, matrix.buffer);
     }
 
-    registerMesh(meshId: string, mesh: MeshData): void {
-        this.bufferManager.registerMesh(meshId, mesh);
+    registerMesh(meshId: string, mesh: MeshData, renderMode: RenderMode = 'triangles'): void {
+        this.bufferManager.registerMesh(meshId, mesh, renderMode);
         // Build buffers immediately after registering (for now - can be optimized later)
         this.bufferManager.buildSharedBuffers();
     }
@@ -420,7 +420,7 @@ export class WebGPURendererV2 {
         sharedVertexBuffer: GPUBuffer,
         sharedIndexBuffer: GPUBuffer,
         _instanceBuffer: GPUBuffer,
-        renderMode: 'triangles' | 'lines',
+        renderMode: RenderMode,
         wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number, get_entity_transforms_offset(): number }
     ): void {
         renderPass.setPipeline(pipeline);
@@ -437,11 +437,6 @@ export class WebGPURendererV2 {
 
         const wasmMemory = wasmModule.memory.buffer;
 
-        // TODO: mesh registry should supply render mode per mesh (remove hard-coded lists)
-        const triangleMeshes = ['triangle', 'cube', 'sphere', 'pyramid']; // Triangle meshes
-        const lineMeshes = ['grid']; // Line meshes
-        const targetMeshes = renderMode === 'triangles' ? triangleMeshes : lineMeshes;
-
         // Group entities by mesh type, filtering for this render mode
         const meshGroups = new Map<string, number[]>(); // meshId -> array of entity indices
 
@@ -450,10 +445,9 @@ export class WebGPURendererV2 {
                 const wasmMeshId = this.getEntityMeshId(wasmMemory, metadataOffset, metadataSize, entityIndex);
                 const meshId = this.wasmMeshIdToString(wasmMeshId);
 
-                // TODO: REMOVE - the entity list needs to come from registry
-                // Don't filter based on mesh names, but render mode associated with each mesh!
-                // Filter: only include meshes for this render mode
-                if (!targetMeshes.includes(meshId)) {
+                // Filter by the mesh's registered render mode (from its MeshRenderer.renderMode),
+                // not a hard-coded id allowlist — so any mesh id renders in the correct pass.
+                if (this.bufferManager.getMeshRenderMode(meshId) !== renderMode) {
                     continue; // Skip entities that don't match this render mode
                 }
 
