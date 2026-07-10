@@ -1,10 +1,23 @@
 // tests/input-controller.test.ts
 // Unit tests for input controller system
 
-import { Camera } from '../src/engine/camera';
 import { GameObject } from '../src/engine/gameobject';
-import { RigidBody } from '../src/engine/components';
+import { RigidBody, CameraComponent } from '../src/engine/components';
 import { CameraController, GameObjectController, OrbitCameraController } from '../src/engine/input-controller';
+
+// Build a camera as a CameraComponent on a host GameObject (the unified camera model the
+// input controllers now drive, replacing the retired legacy Camera class).
+function makeCamera(
+    pos: [number, number, number] = [0, 0, 5],
+    target: [number, number, number] = [0, 0, 0],
+): CameraComponent {
+    const go = new GameObject('test-camera', 'Camera');
+    const cc = new CameraComponent(true, Math.PI / 4, 0.1, 100);
+    go.addComponent(cc);
+    go.transform.setPosition(pos[0], pos[1], pos[2]);
+    cc.lookAt(target[0], target[1], target[2]);
+    return cc;
+}
 
 // Mock Scene class for testing
 class MockScene {
@@ -16,11 +29,11 @@ class MockScene {
 }
 
 describe('Input Controller System', () => {
-    let camera: Camera;
+    let camera: CameraComponent;
     let mockScene: MockScene;
 
     beforeEach(() => {
-        camera = new Camera([0, 0, 5], [0, 0, 0]);
+        camera = makeCamera([0, 0, 5], [0, 0, 0]);
         mockScene = new MockScene();
         jest.clearAllMocks();
     });

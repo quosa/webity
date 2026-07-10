@@ -148,10 +148,49 @@ Verified against `main`; the migration did not cause these:
 ## Tracked follow-up tasks (engine/cleanup)
 1. Engine `physics_enabled = mass != 0` gate fix (Phase 8).
 2. Engine restart safety (idempotent `start()`) — supersedes per-scene HMR stopgap.
-3. Inc 8: full legacy removal (string MeshRenderer ctor + scene.init + docs; ~10 tests + factories + box-sphere).
+3. ✅ Inc 8: full legacy removal (string MeshRenderer ctor + scene.init + docs + factories + box-sphere) — done on branch `a3-cleanups`.
 4. Shared `runScene()` bootstrap helper + adopt across ~15 scenes (/simplify #1).
-5. Engine owns runtime mesh registration (drop `getRenderer()` leak) (/simplify).
-6. Camera unification (CameraComponent reuse BaseCamera; retire viewProvider/scene.camera split) (/simplify).
+5. ✅ Engine owns runtime mesh registration (drop `getRenderer()` leak; added `Engine.registerMesh`) — done on branch `a3-cleanups`.
+6. ✅ Camera unification (retired legacy `camera.ts`/viewProvider/scene.camera split; `CameraComponent` is the single source, `Scene.camera` is a getter) — done on branch `a3-cleanups`. Also fixed the `renderer/scene.ts` "perspective off" TODO.
+7. **Coverage refinement (TS + Zig):** the cleanup net-removed ~9 tests and left new code under-covered. From `npm run test:coverage`: `engine.ts` ~24% (unit-test `init`/`loadScene`/`registerMesh`/`start`/`stop`/`deinit` with a mock renderer, cf. the `MockRenderer` in `scene-input-integration.test.ts`); `scene-system.ts` `setCamera` rebind + the `camera` getter (~L302-304); `camera-object.ts` `OrthographicCamera` ctor branch (L41-43); `components.ts` RigidBody lifecycle branches (L246-252, L334-361). Zig: run `npm run test:wasm:coverage` and top up any core physics/collision paths that regressed.
+8. **`RigidBody` flags — `useGravity` is a dead no-op; the flag model is too coarse (needs more research):**
+   - **Data-flow finding (traced 2026-07-10):** `RigidBody.useGravity` (`components.ts:221`) is **write-only** — nothing reads it at runtime, and the WASM ABI `add_entity(…, mass, radius, isKinematic)` (`wasm-physics-bridge.ts:166`) **has no `useGravity` parameter**. Zig `add_entity` derives only `physics_enabled = mass != 0` (`game_engine.zig:1194`) and `is_kinematic = isKinematic` (`:1170`); gravity is a single global `physics_gravity = -9.8` (`:42`) applied to every non-kinematic, physics-enabled body in `updateECSPhysics` (`:293-335`). So `useGravity` currently affects nothing.
+   - **Actual behavior of the 4 combos (mass ≠ 0):** `!kinematic` → falls & collides regardless of `useGravity` (this is why `new RigidBody(10000, false, …)` still fell); `kinematic` → integration skipped, stays put, still a collider (= `staticBody`), `useGravity` moot. `mass == 0` → `physics_enabled=false` → fully inert incl. skipped by the collision loop (see the zero-mass footgun above, item #1).
+   - **Key insight — there IS a legitimate use case for "no gravity but NOT kinematic":** a *dynamic* body that floats in place yet still collides and responds to forces/impacts (floating platform, balloon, space debris). `kinematic` is **not** a substitute — a kinematic body ignores forces/collisions entirely. This "dynamic + no-gravity" state is genuinely unsupported today.
+   - **Decision to research, not yet made:**
+     - *Option A — make `useGravity` real:* add a per-entity `use_gravity` bit to `PhysicsComponent` + an `add_entity` param, plumb via the bridge, and gate the gravity line (`game_engine.zig:301`) on it. Unlocks the floating-dynamic state; pairs naturally with the item #1 `physics_enabled` gate fix (both are "the WASM entity-flags ABI is too coarse"). Needs `build:wasm` + regression check on grid/floor scenes.
+     - *Option B — drop `useGravity` (YAGNI):* removes no working behavior today, but gives up the API slot for floating-dynamic bodies (re-add later if wanted). Breaking change across **62 `new RigidBody(` call sites**; must *remove* the positional arg (never same-position-swap to `kinematic` — that would silently flip every dynamic body to immovable). The existing `useGravity=false` sites (e.g. `input-demo/scene.ts:44,58`, `jku-scene.ts` staticCube) are **latent-intent bugs** — authors expected "no fall" and never got it; each needs a per-site dynamic-vs-kinematic decision.
+   - Best done as its own PR, not folded into the A3 cleanup.
+9. **Static (mesh-only) entities silently drop their initial rotation (found 2026-07-10):**
+   `add_entity` bakes **position + scale** into the render matrix but has **no rotation param**
+   (`game_engine.zig:1176-1188` — always identity rotation). Rotation only reaches WASM later via
+   `set_entity_rotation`, which is called from `RigidBody.syncToWasm()` (`components.ts:271-273`),
+   and that runs only for a **kinematic RigidBody** (or a `RotatorComponent` animates `phys.rotation`
+   directly). So a GameObject with a MeshRenderer but **no RigidBody** never has its
+   `transform.setRotation()` applied — it renders unrotated (position/scale still work).
+   - **Repro:** a `createGrid` wall with `setRotation(0,0,90)` and no RigidBody stays flat.
+   - **Workaround today:** attach a kinematic body (`RigidBody.staticBody(...)`); its per-frame
+     `syncToWasm()` pushes the rotation (also makes it a collider).
+   - **Fix:** add rotation params to the `add_entity` ABI and build the matrix via
+     `updateECSTransformMatrix` at add time, so position/scale/rotation all apply for static
+     entities without needing a RigidBody. WASM ABI change + `build:wasm`; same "entity/transform
+     ABI is too coarse" family as items #1 and #8.
+10. **Renderer picks the draw pass from a hard-coded mesh-id allowlist, not the mesh's render mode (found 2026-07-10):**
+    `renderWasmInstancesByMode` filters entities against literal id lists
+    (`webgpu.renderer.ts:441-442`: `triangleMeshes = ['triangle','cube','sphere','pyramid']`,
+    `lineMeshes = ['grid']`). Any mesh id **not** in the matching list is silently skipped in
+    **both** passes, so a custom-id mesh (e.g. `Mesh.createGrid('floorGrid', …)` /
+    `'wallGrid'`) renders nothing. The `renderMode` on `MeshRenderer` is not consulted. This is
+    the standing `:440`/`:453` TODOs.
+    - **Workaround today:** reuse the blessed ids (`'grid'` for lines, `'cube'`/`'sphere'`/etc.
+      for triangles). Note `loadScene` dedups meshes by id, so one id == one geometry — you can't
+      have two differently-sized `'grid'` meshes.
+    - **Fix (own PR, like #8):** thread the real render mode through registration —
+      `registerMesh(id, data, renderMode = 'triangles')` storing a `Map<id, mode>`;
+      `Engine.loadScene` passes `meshRenderer.renderMode` (and `Engine.registerMesh(mesh, mode?)`
+      for runtime spawns); then filter by `meshRenderMode.get(meshId) === renderMode` instead of
+      the hard-coded arrays. Keys mode per mesh id (matches the TODO); a per-entity mode (same id
+      drawn both ways) would be a larger change. No WASM/ABI change — TS renderer + engine only.
 
 ## Resume pointer
 Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green

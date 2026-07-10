@@ -1,8 +1,7 @@
 import { PerspectiveCamera, OrthographicCamera } from '../src/engine/camera-object';
 import { GameObject } from '../src/engine/gameobject';
 import { CameraComponent } from '../src/engine/components';
-import { Camera } from '../src/engine/camera';
-import { createPerspectiveMatrix, createOrthographicMatrix } from '../src/utils/math-utils';
+import { createPerspectiveMatrix, createOrthographicMatrix, createLookAtMatrix, multiplyMat4 } from '../src/utils/math-utils';
 
 const aspect = 16 / 9;
 
@@ -30,20 +29,20 @@ describe('Camera GameObjects (3a unified Transform)', () => {
         expect(vp2).not.toEqual(vp1);
     });
 
-    it('matches the legacy Camera view-projection for equal position/target/fov', () => {
+    it('produces the expected view-projection for a given position/target/fov', () => {
         const fov = Math.PI / 3;
         const pos: [number, number, number] = [0, 0, -12];
         const tgt: [number, number, number] = [0, -5, 0];
 
-        const legacy = new Camera(pos, tgt, fov, 0.1, 100);
         const cam = new PerspectiveCamera('main', { fov });
         cam.transform.setPosition(pos[0], pos[1], pos[2]);
         cam.lookAt(tgt[0], tgt[1], tgt[2]);
 
-        const a = Array.from(legacy.getViewProjectionMatrix(aspect));
-        const b = Array.from(cam.getViewProjectionMatrix(aspect));
-        expect(b).toHaveLength(a.length);
-        b.forEach((v, i) => expect(v).toBeCloseTo(a[i] as number, 5));
+        const expected = multiplyMat4(
+            createPerspectiveMatrix(fov, aspect, 0.1, 100),
+            createLookAtMatrix(pos, tgt, [0, 1, 0]),
+        );
+        expectMatClose(cam.getViewProjectionMatrix(aspect), expected);
     });
 
     it('orthographic camera produces a 16-float VP matrix', () => {

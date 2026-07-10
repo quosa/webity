@@ -4,6 +4,8 @@
 import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
 import { Transform, MeshRenderer, RotatorComponent } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 
 describe('Component System (v2)', () => {
     describe('Transform Component', () => {
@@ -79,16 +81,16 @@ describe('Component System (v2)', () => {
 
     describe('MeshRenderer Component', () => {
         test('should create mesh renderer with defaults', () => {
-            const meshRenderer = new MeshRenderer('cube');
+            const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1));
 
             expect(meshRenderer.meshId).toBe('cube');
-            expect(meshRenderer.materialId).toBe('default');
+            expect(meshRenderer.materialId).toBe(Material.default.id);
             expect(meshRenderer.renderMode).toBe('triangles');
-            expect(meshRenderer.color).toEqual({ x: 1, y: 1, z: 1, w: 1 });
+            expect(meshRenderer.color).toEqual({ x: 1, y: 0, z: 1, w: 1 }); // Material.default magenta
         });
 
         test('should create mesh renderer with custom values', () => {
-            const meshRenderer = new MeshRenderer('sphere', 'metal', 'lines', { x: 1, y: 0, z: 0, w: 0.5 });
+            const meshRenderer = new MeshRenderer(Mesh.createSphere('sphere', 1), new Material('metal', { r: 1, g: 0, b: 0, a: 0.5 }), 'lines');
 
             expect(meshRenderer.meshId).toBe('sphere');
             expect(meshRenderer.materialId).toBe('metal');
@@ -97,7 +99,7 @@ describe('Component System (v2)', () => {
         });
 
         test('should update color correctly', () => {
-            const meshRenderer = new MeshRenderer('cube');
+            const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1));
             meshRenderer.setColor(0.5, 0.8, 0.2, 0.9);
 
             expect(meshRenderer.color).toEqual({ x: 0.5, y: 0.8, z: 0.2, w: 0.9 });
@@ -161,7 +163,7 @@ describe('GameObject System (v2)', () => {
 
     test('should add and retrieve components', () => {
         const gameObject = new GameObject();
-        const meshRenderer = new MeshRenderer('cube');
+        const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1));
         // this is normally done by Scene when adding GameObject
         meshRenderer.meshIndex = 0; // Simulate assigned mesh index
 
@@ -174,7 +176,7 @@ describe('GameObject System (v2)', () => {
 
     test('should remove components', () => {
         const gameObject = new GameObject();
-        const meshRenderer = new MeshRenderer('cube');
+        const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1));
 
         gameObject.addComponent(meshRenderer);
         const removed = gameObject.removeComponent(MeshRenderer);
@@ -186,10 +188,10 @@ describe('GameObject System (v2)', () => {
 
     test('should replace component of same type', () => {
         const gameObject = new GameObject();
-        const meshRenderer1 = new MeshRenderer('cube');
+        const meshRenderer1 = new MeshRenderer(Mesh.createCube('cube', 1));
         // this is normally done by Scene when adding GameObject
         meshRenderer1.meshIndex = 0; // Simulate assigned mesh index
-        const meshRenderer2 = new MeshRenderer('sphere');
+        const meshRenderer2 = new MeshRenderer(Mesh.createSphere('sphere', 1));
         // this is normally done by Scene when adding GameObject
         meshRenderer2.meshIndex = 0; // Simulate assigned mesh index
 
@@ -202,7 +204,7 @@ describe('GameObject System (v2)', () => {
 
     test('should provide convenience accessor for MeshRenderer', () => {
         const gameObject = new GameObject();
-        const meshRenderer = new MeshRenderer('cube');
+        const meshRenderer = new MeshRenderer(Mesh.createCube('cube', 1));
 
         gameObject.addComponent(meshRenderer);
 
@@ -352,8 +354,7 @@ describe('Scene System (v2)', () => {
         // Neutralize only the physics step, keeping the real (typed) bridge intact so
         // that any additional bridge usage introduced in Scene.update() would surface
         // rather than be masked by a stub.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        jest.spyOn((scene as any).physicsBridge, 'update').mockImplementation(() => {});
+        jest.spyOn(scene.physicsBridge, 'update').mockImplementation(() => {});
         // No renderer is set, so Scene.render() returns early.
 
         scene.update(1.0); // 1 second

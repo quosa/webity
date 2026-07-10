@@ -12,6 +12,7 @@
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { Scene } from './scene-system';
 import { MeshRenderer } from './components';
+import { Mesh } from './mesh';
 
 export class Engine {
     private canvas: HTMLCanvasElement;
@@ -36,8 +37,15 @@ export class Engine {
         await this.renderer.init(this.canvas);
     }
 
-    getRenderer(): WebGPURendererV2 | undefined {
-        return this.renderer;
+    /**
+     * Register a mesh for runtime-spawned objects whose mesh isn't present in the initial
+     * scene tree (loadScene only auto-registers meshes it finds on the scene's MeshRenderers).
+     */
+    registerMesh(mesh: Mesh): void {
+        if (!this.renderer) {
+            throw new Error('Engine.registerMesh(): call init() first');
+        }
+        this.renderer.registerMesh(mesh.id, mesh.data);
     }
 
     /**

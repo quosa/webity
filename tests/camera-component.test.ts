@@ -1,6 +1,5 @@
 // tests/camera-component.test.ts
 // Unit tests for CameraComponent
-import { jest } from '@jest/globals';
 
 import { CameraComponent } from '../src/engine/components';
 import { GameObject } from '../src/engine/gameobject';
@@ -25,7 +24,6 @@ describe('CameraComponent', () => {
             expect(camera.fov).toBeCloseTo(Math.PI / 4); // 45 degrees
             expect(camera.near).toBe(0.1);
             expect(camera.far).toBe(100);
-            expect(camera.isActiveCamera).toBe(false);
         });
 
         test('should create CameraComponent with custom perspective settings', () => {
@@ -56,53 +54,6 @@ describe('CameraComponent', () => {
         test('should be an instance of CameraComponent', () => {
             cameraComponent = new CameraComponent();
             expect(cameraComponent).toBeInstanceOf(CameraComponent);
-        });
-    });
-
-    describe('Active Camera Management', () => {
-        beforeEach(() => {
-            cameraComponent = new CameraComponent();
-            gameObject.addComponent(cameraComponent);
-        });
-
-        test('should set camera as active', () => {
-            expect(cameraComponent.isActiveCamera).toBe(false);
-
-            cameraComponent.setAsActiveCamera();
-
-            expect(cameraComponent.isActiveCamera).toBe(true);
-        });
-
-        test('should handle setAsActiveCamera without scene', () => {
-            const isolatedGameObject = new GameObject('isolated', 'Isolated');
-            const isolatedCamera = new CameraComponent();
-            isolatedGameObject.addComponent(isolatedCamera);
-
-            expect(() => {
-                isolatedCamera.setAsActiveCamera();
-            }).not.toThrow();
-
-            expect(isolatedCamera.isActiveCamera).toBe(true);
-        });
-
-        test('should update scene camera when set as active', () => {
-            // Mock scene camera methods
-            const mockSceneCamera = {
-                setPosition: jest.fn(),
-                setTarget: jest.fn(),
-                setClipPlanes: jest.fn(),
-                setFov: jest.fn()
-            };
-            scene.camera = mockSceneCamera as any;
-
-            // Set initial transform
-            gameObject.transform.setPosition(5, 10, -15);
-
-            cameraComponent.setAsActiveCamera();
-
-            expect(mockSceneCamera.setPosition).toHaveBeenCalledWith([5, 10, -15]);
-            expect(mockSceneCamera.setClipPlanes).toHaveBeenCalledWith(0.1, 100);
-            expect(mockSceneCamera.setFov).toHaveBeenCalledWith(Math.PI / 4);
         });
     });
 
@@ -159,127 +110,42 @@ describe('CameraComponent', () => {
     });
 
     describe('Forward Direction Calculation', () => {
+        // With no explicit lookAt target, getTarget() falls back to position + the Euler
+        // forward direction (getForwardDirection). These assert that fallback.
         beforeEach(() => {
             cameraComponent = new CameraComponent();
             gameObject.addComponent(cameraComponent);
+            gameObject.transform.setPosition(0, 0, 0);
         });
 
-        test('should calculate forward direction with no rotation', () => {
+        test('should derive target from Euler forward with no rotation', () => {
             gameObject.transform.setRotation(0, 0, 0);
 
-            // Call private method through update (which calls updateSceneCamera → getForwardDirection)
-            const mockSceneCamera = {
-                setPosition: jest.fn(),
-                setTarget: jest.fn((target: [number, number, number]) => {
-                    // Forward direction should be (0, 0, -1) with no rotation
-                    // Target = position + forward = (0, 0, 0) + (0, 0, -1) = (0, 0, -1)
-                    expect(target[0]).toBeCloseTo(0);
-                    expect(target[1]).toBeCloseTo(0);
-                    expect(target[2]).toBeCloseTo(-1);
-                }),
-                setClipPlanes: jest.fn(),
-                setFov: jest.fn()
-            };
-            scene.camera = mockSceneCamera as any;
-
-            cameraComponent.setAsActiveCamera();
+            const target = cameraComponent.getTarget();
+            // Forward direction (0, 0, -1) with no rotation → target = position + forward.
+            expect(target[0]).toBeCloseTo(0);
+            expect(target[1]).toBeCloseTo(0);
+            expect(target[2]).toBeCloseTo(-1);
         });
 
-        test('should calculate forward direction with Y rotation', () => {
+        test('should derive target from Euler forward with Y rotation', () => {
             gameObject.transform.setRotation(0, 90, 0); // 90 degree yaw
 
-            const mockSceneCamera = {
-                setPosition: jest.fn(),
-                setTarget: jest.fn((target: [number, number, number]) => {
-                    // 90 degree yaw should point right (positive X)
-                    expect(target[0]).toBeCloseTo(1, 5);  // Should be approximately 1
-                    expect(target[1]).toBeCloseTo(0, 5);  // Should be approximately 0
-                    expect(target[2]).toBeCloseTo(0, 5);  // Should be approximately 0
-                }),
-                setClipPlanes: jest.fn(),
-                setFov: jest.fn()
-            };
-            scene.camera = mockSceneCamera as any;
-
-            cameraComponent.setAsActiveCamera();
+            const target = cameraComponent.getTarget();
+            // 90 degree yaw should point right (positive X).
+            expect(target[0]).toBeCloseTo(1, 5);
+            expect(target[1]).toBeCloseTo(0, 5);
+            expect(target[2]).toBeCloseTo(0, 5);
         });
 
-        test('should calculate forward direction with X rotation (pitch)', () => {
+        test('should derive target from Euler forward with X rotation (pitch)', () => {
             gameObject.transform.setRotation(45, 0, 0); // 45 degree pitch down
 
-            const mockSceneCamera = {
-                setPosition: jest.fn(),
-                setTarget: jest.fn((target: [number, number, number]) => {
-                    // 45 degree pitch should look down and forward
-                    expect(target[0]).toBeCloseTo(0, 5);     // No yaw, so X should be 0
-                    expect(target[1]).toBeCloseTo(-0.707, 2); // -sin(45°) ≈ -0.707 (looking down)
-                    expect(target[2]).toBeCloseTo(-0.707, 2); // -cos(45°) ≈ -0.707 (forward component)
-                }),
-                setClipPlanes: jest.fn(),
-                setFov: jest.fn()
-            };
-            scene.camera = mockSceneCamera as any;
-
-            cameraComponent.setAsActiveCamera();
-        });
-    });
-
-    describe('Update Lifecycle', () => {
-        beforeEach(() => {
-            cameraComponent = new CameraComponent();
-            gameObject.addComponent(cameraComponent);
-        });
-
-        test('should update scene camera when active', () => {
-            const mockSceneCamera = {
-                setPosition: jest.fn(),
-                setTarget: jest.fn(),
-                setClipPlanes: jest.fn(),
-                setFov: jest.fn()
-            };
-            scene.camera = mockSceneCamera as any;
-
-            cameraComponent.setAsActiveCamera();
-
-            // Clear previous calls
-            mockSceneCamera.setPosition.mockClear();
-            mockSceneCamera.setTarget.mockClear();
-
-            // Update should trigger scene camera update
-            cameraComponent.update(0.016);
-
-            expect(mockSceneCamera.setPosition).toHaveBeenCalled();
-            expect(mockSceneCamera.setTarget).toHaveBeenCalled();
-        });
-
-        test('should not update scene camera when inactive', () => {
-            const mockSceneCamera = {
-                setPosition: jest.fn(),
-                setTarget: jest.fn(),
-                setClipPlanes: jest.fn(),
-                setFov: jest.fn()
-            };
-            scene.camera = mockSceneCamera as any;
-
-            // Don't set as active camera
-            expect(cameraComponent.isActiveCamera).toBe(false);
-
-            cameraComponent.update(0.016);
-
-            // Should not call scene camera methods
-            expect(mockSceneCamera.setPosition).not.toHaveBeenCalled();
-            expect(mockSceneCamera.setTarget).not.toHaveBeenCalled();
-        });
-
-        test('should handle update without scene', () => {
-            const isolatedGameObject = new GameObject('isolated', 'Isolated');
-            const isolatedCamera = new CameraComponent();
-            isolatedGameObject.addComponent(isolatedCamera);
-            isolatedCamera.setAsActiveCamera();
-
-            expect(() => {
-                isolatedCamera.update(0.016);
-            }).not.toThrow();
+            const target = cameraComponent.getTarget();
+            // 45 degree pitch should look down and forward.
+            expect(target[0]).toBeCloseTo(0, 5);
+            expect(target[1]).toBeCloseTo(-0.707, 2); // -sin(45°)
+            expect(target[2]).toBeCloseTo(-0.707, 2); // -cos(45°)
         });
     });
 
@@ -349,17 +215,6 @@ describe('CameraComponent', () => {
             expect(cameraComponent.right).toBe(1000);
             expect(cameraComponent.top).toBe(500);
             expect(cameraComponent.bottom).toBe(-500);
-        });
-
-        test('should handle GameObject without scene in updateSceneCamera', () => {
-            const isolatedGameObject = new GameObject('isolated', 'Isolated');
-            const isolatedCamera = new CameraComponent();
-            isolatedGameObject.addComponent(isolatedCamera);
-
-            // This should not throw even though gameObject.scene is undefined
-            expect(() => {
-                isolatedCamera.setAsActiveCamera();
-            }).not.toThrow();
         });
     });
 });

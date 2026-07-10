@@ -57,38 +57,40 @@ Use this template for `index.html`:
 
 ### 3. TypeScript Scene Structure
 
-Structure your `scene.ts` file:
+Structure your `scene.ts` file (scene-first Engine API):
 ```typescript
-// Import from engine and renderer
+// Import from the engine
+import { Engine } from '../../engine/engine.js';
 import { Scene } from '../../engine/scene-system.js';
-import { WebGPURenderer } from '../../renderer/webgpu.renderer.js';
 import { GameObject } from '../../engine/gameobject.js';
-import { Transform, MeshRenderer, RigidBody } from '../../engine/components.js';
+import { MeshRenderer, RigidBody, CollisionShape } from '../../engine/components.js';
+import { Mesh } from '../../engine/mesh.js';
+import { Material } from '../../engine/material.js';
 
-// Create scene with GameObjects
-export async function createMyScene(): Promise<Scene> {
+// Create the scene as PURE DATA — GameObjects reference Mesh/Material objects. No renderer
+// or WASM here; the Engine registers everything at loadScene().
+function createMyScene(): Scene {
     const scene = new Scene();
 
-    // Create GameObject with components
     const entity = new GameObject('EntityName');
-    entity.transform.position.set(0, 0, -5);
-    entity.addComponent(new MeshRenderer('cube', 'triangles'));
-    entity.addComponent(new RigidBody(1.0, false)); // mass, kinematic
+    entity.transform.setPosition(0, 0, -5);
+    entity.addComponent(new MeshRenderer(
+        Mesh.createCube('cube', 1),
+        new Material('green', { r: 0, g: 1, b: 0, a: 1 }),
+    ));
+    // RigidBody(mass, useGravity, collisionShape, extents, { kinematic })
+    entity.addComponent(new RigidBody(1.0, true, CollisionShape.BOX, { x: 0.5, y: 0.5, z: 0.5 }));
 
     scene.addGameObject(entity);
     return scene;
 }
 
-// Main scene initialization
 async function main() {
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    const renderer = new WebGPURenderer();
-
-    await renderer.init(canvas);
-    const scene = await createMyScene();
-    await scene.init();
-
-    scene.start(); // Begin game loop
+    const engine = new Engine('canvas'); // canvas element id
+    await engine.init();                  // WebGPU + renderer
+    const scene = createMyScene();        // pure data
+    await engine.loadScene(scene);        // mount: upload meshes, register entities (fail-loud)
+    engine.start(scene);                  // loop: input → physics → update → render
 }
 
 main().catch(console.error);
@@ -136,31 +138,36 @@ When adding a new scene, you MUST update `src/index.html` to include a link to i
 
 **Transform** (automatic on all GameObjects):
 ```typescript
-entity.transform.position.set(x, y, z);
-entity.transform.rotation.set(rx, ry, rz); // Euler angles in degrees
-entity.transform.scale.set(sx, sy, sz);
+entity.transform.setPosition(x, y, z);
+entity.transform.setRotation(rx, ry, rz); // Euler angles in degrees
+entity.transform.setScale(sx, sy, sz);
 ```
 
-**MeshRenderer** (visual appearance):
+**MeshRenderer** (visual appearance) — object mode (`Mesh` + `Material`):
 ```typescript
-new MeshRenderer(meshId, renderMode)
-// meshId: 'triangle', 'cube', 'sphere', 'pyramid', 'grid'
-// renderMode: 'triangles', 'lines' (wireframe)
+new MeshRenderer(mesh, material?, renderMode?)
+// mesh:       a Mesh — Mesh.createCube/createSphere/createGrid/createPyramid/createTriangle(id, ...)
+// material:   a Material (defaults to Material.default — the magenta placeholder)
+// renderMode: 'triangles' (default) or 'lines' (wireframe)
 ```
 
 **RigidBody** (physics simulation):
 ```typescript
-new RigidBody(mass, kinematic)
-// mass: Physics mass (0 = infinite mass)
-// kinematic: true = no physics forces, false = full physics
+new RigidBody(mass, useGravity, collisionShape?, extents?, opts?)
+// mass:           physics mass — MUST be non-zero to simulate/collide (mass 0 is inert!)
+// useGravity:     true = affected by gravity
+// collisionShape: CollisionShape.SPHERE (default) | BOX | PLANE
+// extents:        half-extents (box) / radius in .x (sphere)
+// opts:           { kinematic?: boolean } — kinematic bodies ignore forces (won't move)
+// For a fixed, collidable surface use RigidBody.staticBody(shape, extents).
 ```
 
 ### Scene Lifecycle
-1. **Scene Creation** - Set up GameObjects and components
-2. **Scene.init()** - Initialize WASM bridge and register entities with physics
-3. **Scene.awake()** - Initialize all GameObjects and their components
-4. **Scene.start()** - Start scene systems and begin game loop
-5. **Scene.update()** - Per-frame updates (physics simulation and rendering)
+1. **Scene creation** — build GameObjects + components as pure data (the Scene holds no renderer/WASM).
+2. **Engine.init()** — create the WebGPU renderer.
+3. **Engine.loadScene(scene)** — MOUNT: upload the scene's meshes and register its entities with
+   WASM in one fail-loud pass, then run `awake()`.
+4. **Engine.start(scene)** — start the scene and run the frame loop (input → physics → update → render).
 
 ## Scene-Specific Systems
 
@@ -173,31 +180,32 @@ For scene-specific systems (like rain-system, custom components):
 
 ### Physics Scene Pattern
 ```typescript
-// Create physics entities that interact
+// Dynamic ball
 const ball = new GameObject('Ball');
-ball.transform.position.set(0, 3, 0);
-ball.addComponent(new MeshRenderer('sphere', 'triangles'));
-ball.addComponent(new RigidBody(1.0, false)); // Dynamic physics
+ball.transform.setPosition(0, 3, 0);
+ball.addComponent(new MeshRenderer(Mesh.createSphere('sphere', 0.5), new Material('red', { r: 1, g: 0, b: 0, a: 1 })));
+ball.addComponent(new RigidBody(1.0, true, CollisionShape.SPHERE, { x: 0.5, y: 0.5, z: 0.5 })); // dynamic
 
-// Static floor
+// Decorative floor grid (no RigidBody = static visual only — not a collider)
 const floor = new GameObject('Floor');
-floor.transform.position.set(0, -2, 0);
-floor.addComponent(new MeshRenderer('grid', 'lines'));
-// No RigidBody = static geometry
+floor.transform.setPosition(0, -2, 0);
+floor.addComponent(new MeshRenderer(Mesh.createGrid('grid', 20, 20), new Material('gray', { r: .5, g: .5, b: .5, a: 1 }), 'lines'));
 ```
 
 ### Performance Testing Pattern
 ```typescript
-// Many entities for performance testing
+// Many entities for performance testing — reuse one Mesh/Material across instances.
+const sphere = Mesh.createSphere('sphere', 0.5);
+const white = new Material('white', { r: 1, g: 1, b: 1, a: 1 });
 for (let i = 0; i < 100; i++) {
     const entity = new GameObject(`Entity${i}`);
-    entity.transform.position.set(
+    entity.transform.setPosition(
         Math.random() * 10 - 5,
         Math.random() * 10,
-        Math.random() * 10 - 5
+        Math.random() * 10 - 5,
     );
-    entity.addComponent(new MeshRenderer('sphere', 'triangles'));
-    entity.addComponent(new RigidBody(0.1, false));
+    entity.addComponent(new MeshRenderer(sphere, white));
+    entity.addComponent(new RigidBody(0.1, true, CollisionShape.SPHERE, { x: 0.5, y: 0.5, z: 0.5 }));
     scene.addGameObject(entity);
 }
 ```
@@ -236,8 +244,11 @@ After creating a scene:
 5. ❌ **Missing .js extensions**: `import from '../../engine/scene-system'`
    ✅ **Correct**: `import from '../../engine/scene-system.js'` (required for ES modules)
 
-6. ❌ **Forgetting scene initialization**: Not calling `await scene.init()` before `scene.start()`
-   ✅ **Correct**: Always initialize WASM bridge before starting
+6. ❌ **Mounting by hand**: calling `scene.start()` without `await engine.loadScene(scene)`
+   ✅ **Correct**: `await engine.loadScene(scene)` (uploads meshes + registers entities) then `engine.start(scene)`
+
+7. ❌ **Inert collider**: a `RigidBody` with `mass = 0` is silently non-colliding
+   ✅ **Correct**: use a non-zero mass, or `RigidBody.staticBody(shape, extents)` for fixed surfaces
 
 ## Current Engine Status
 

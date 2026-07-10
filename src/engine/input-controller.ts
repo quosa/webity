@@ -1,7 +1,6 @@
 // Input controller system for managing different input targets (camera, GameObjects)
-import { Camera } from './camera';
 import { GameObject } from './gameobject';
-import { RigidBody } from './components';
+import { RigidBody, CameraComponent } from './components';
 
 export interface InputController {
     handleInput(_key: number, _pressed: boolean): void;
@@ -15,11 +14,11 @@ export interface InputController {
  * -: Move down
  */
 export class CameraController implements InputController {
-    private camera: Camera;
+    private camera: CameraComponent;
     private moveSpeed: number = 5.0;
     private currentInputState = new Set<number>();
 
-    constructor(camera: Camera, moveSpeed: number = 5.0) {
+    constructor(camera: CameraComponent, moveSpeed: number = 5.0) {
         this.camera = camera;
         this.moveSpeed = moveSpeed;
     }
@@ -155,13 +154,13 @@ export class GameObjectController implements InputController {
  * -: Zoom out
  */
 export class OrbitCameraController implements InputController {
-    private camera: Camera;
+    private camera: CameraComponent;
     private orbitSpeed: number = 2.0;
     private zoomSpeed: number = 5.0;
     private currentInputState = new Set<number>();
     private target: [number, number, number];
 
-    constructor(camera: Camera, target: [number, number, number] = [0, 0, 0], orbitSpeed: number = 2.0, zoomSpeed: number = 5.0) {
+    constructor(camera: CameraComponent, target: [number, number, number] = [0, 0, 0], orbitSpeed: number = 2.0, zoomSpeed: number = 5.0) {
         this.camera = camera;
         this.target = [...target] as [number, number, number];
         this.orbitSpeed = orbitSpeed;

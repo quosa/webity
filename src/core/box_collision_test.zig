@@ -412,6 +412,10 @@ test "collision performance - many box checks" {
 
     // Performance assertion: should complete within reasonable time (< 1ms total)
     try testing.expect(duration_us < 1000.0);
+
+    // Correctness assertion: the offset sweep keeps box2 touching/overlapping box1 for 51 of
+    // every 100 iterations (offset <= 0.5), so 10 cycles yield a deterministic 510 collisions.
+    try testing.expectEqual(@as(u32, 510), collision_count);
 }
 
 test "collision edge cases - zero extents" {

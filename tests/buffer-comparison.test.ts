@@ -5,6 +5,8 @@ import { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
 import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer } from '../src/engine/components';
+import { Mesh } from '../src/engine/mesh';
+import { Material } from '../src/engine/material';
 import { createTriangleMesh } from '../src/renderer/mesh-utils';
 import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
 
@@ -34,13 +36,13 @@ describe('Buffer Comparison: TypeScript vs WASM', () => {
         triangleGameObject.transform.setPosition(0, 0, -2);
         triangleGameObject.transform.setScale(2, 2, 2);
 
-        const meshRenderer = new MeshRenderer('triangle', 'default', 'triangles', { x: 1, y: 0, z: 0, w: 1 });
+        const meshRenderer = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }));
         // this is normally done by Scene when adding GameObject
         meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangleGameObject.addComponent(meshRenderer);
 
         scene.addGameObject(triangleGameObject);
-        await scene.init(renderer);
+        await scene.mount(renderer);
         scene.start();
     });
 

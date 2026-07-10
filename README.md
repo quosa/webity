@@ -71,75 +71,65 @@ and open https://localhost:5173/
 ### Basic Engine Initialization
 
 ```typescript
+import { Engine } from '../engine/engine';
 import { Scene } from '../engine/scene-system';
-import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { GameObject } from '../engine/gameobject';
 import { MeshRenderer, RigidBody, CollisionShape } from '../engine/components';
-import { createGridMesh, createCubeMesh } from '../renderer/mesh-utils';
+import { Mesh } from '../engine/mesh';
+import { Material } from '../engine/material';
 
 async function initializeEngine() {
-    // 1. Get canvas element
-    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    if (!canvas) {
-        throw new Error('Canvas element not found');
-    }
-
-    // 2. Initialize WebGPU renderer
-    const renderer = new WebGPURendererV2();
-    await renderer.init(canvas);
-
-    // 3. Register meshes (must be done before creating GameObjects)
-    renderer.registerMesh('cube', createCubeMesh());
-    renderer.registerMesh('grid', createGridMesh(16, 16));
-
-    // 4. Create and initialize scene
-    const scene = new Scene();
-    await scene.init(renderer);
-
-    return { scene, renderer };
+    // The Engine owns the WebGPU renderer + WASM. Pass a canvas element id (or the element).
+    const engine = new Engine('canvas');
+    await engine.init(); // initialize WebGPU
+    return engine;
 }
 ```
+
+Meshes are no longer pre-registered on a raw renderer — a `Scene` is pure data referencing
+`Mesh`/`Material` objects, and `engine.loadScene(scene)` uploads each mesh and registers the
+entities in one deterministic pass.
 
 ### Creating GameObjects with Physics
 
 ```typescript
-async function createSimpleScene(scene: Scene): Promise<void> {
-    // Create ground plane
+function createSimpleScene(): Scene {
+    const scene = new Scene();
+
+    // Ground plane (wireframe grid) — a Mesh + Material pair
     const ground = new GameObject('ground', 'Ground');
     ground.transform.setPosition(0, -8, 0); // World bounds is Y=-8
-
-    // Add visual mesh (wireframe grid)
-    const groundMesh = new MeshRenderer('grid', 'default', 'lines',
-        { x: 0.5, y: 0.5, z: 0.5, w: 1 }); // Gray color
-    ground.addComponent(groundMesh);
+    ground.addComponent(new MeshRenderer(
+        Mesh.createGrid('grid', 20, 20),
+        new Material('gray', { r: 0.5, g: 0.5, b: 0.5, a: 1 }),
+        'lines',
+    ));
     scene.addGameObject(ground);
 
-    // Create physics cube
+    // Physics cube (solid triangles)
     const cube = new GameObject('cube', 'PhysicsCube');
-    cube.transform.setPosition(0, 2, 0);  // Start above ground
-    cube.transform.setScale(1, 1, 1);
+    cube.transform.setPosition(0, 2, 0); // Start above ground
+    cube.addComponent(new MeshRenderer(
+        Mesh.createCube('cube', 1),
+        new Material('green', { r: 0, g: 1, b: 0, a: 1 }),
+    ));
 
-    // Add visual mesh (solid triangles)
-    const cubeMesh = new MeshRenderer('cube', 'default', 'triangles',
-        { x: 0, y: 1, z: 0, w: 1 }); // Green color
-    cube.addComponent(cubeMesh);
-
-    // Add physics (mass, gravity, collision shape, dimensions)
-    const cubeRigidBody = new RigidBody(
-        1.0,                          // mass
-        true,                         // use gravity
-        CollisionShape.BOX,           // collision shape
-        { x: 0.5, y: 0.5, z: 0.5 }   // half-extents (cube size)
-    );
-    cube.addComponent(cubeRigidBody);
-
+    // Add physics (mass, gravity, collision shape, half-extents)
+    cube.addComponent(new RigidBody(
+        1.0,                        // mass
+        true,                       // use gravity
+        CollisionShape.BOX,         // collision shape
+        { x: 0.5, y: 0.5, z: 0.5 }, // half-extents (cube size)
+    ));
     scene.addGameObject(cube);
 
-    // Position camera to see the scene
+    // Position the scene's default camera to see the scene. Every Scene auto-creates a
+    // PerspectiveCamera; call scene.setCamera(...) to replace it with your own.
     scene.camera.setPosition([0, 3, -10]);
     scene.camera.lookAt([0, 0, 0]);
 
     console.log(`✅ Scene created with ${scene.getEntityCount()} GameObjects`);
+    return scene;
 }
 ```
 
@@ -148,34 +138,24 @@ async function createSimpleScene(scene: Scene): Promise<void> {
 ```typescript
 async function main() {
     try {
-        // Initialize engine
-        const { scene, renderer } = await initializeEngine();
+        // Initialize the Engine (WebGPU + renderer)
+        const engine = await initializeEngine();
 
-        // Create scene content
-        await createSimpleScene(scene);
+        // Build the scene as pure data
+        const scene = createSimpleScene();
 
-        // Set up input (optional)
+        // Set up input (optional): drive a GameObject with WASD/gamepad
         const cube = scene.findGameObjectByName('cube');
         if (cube) {
-            scene.setInputTarget(cube); // WASD/gamepad controls
+            scene.setInputTarget(cube);
         }
 
-        // Start scene lifecycle
-        scene.start();
+        // Mount the scene (uploads meshes, registers entities with WASM), then run the
+        // canonical frame loop (input → physics → update → render).
+        await engine.loadScene(scene);
+        engine.start(scene);
 
-        // Game loop
-        let lastTime = performance.now();
-        const gameLoop = (currentTime: number) => {
-            const deltaTime = Math.min((currentTime - lastTime) / 1000, 1/30);
-            lastTime = currentTime;
-
-            scene.update(deltaTime); // Physics + rendering
-            requestAnimationFrame(gameLoop);
-        };
-
-        requestAnimationFrame(gameLoop);
         console.log('🎮 Engine initialized successfully');
-
     } catch (error) {
         console.error('Failed to initialize engine:', error);
     }
