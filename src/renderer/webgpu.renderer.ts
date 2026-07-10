@@ -308,6 +308,12 @@ export class WebGPURendererV2 {
         return this.bufferManager.getMeshIndex(meshId);
     }
 
+    // Drop all registered meshes + their GPU buffers (used by Engine scene-swap so the next
+    // scene registers its own meshes without leaking the previous scene's buffers/allocations).
+    clearMeshes(): void {
+        this.bufferManager.clearMeshes();
+    }
+
     registerTexture(textureId: string, texture: TextureData): void {
         this.textureRegistry.set(textureId, new Texture(this.device, texture));
     }

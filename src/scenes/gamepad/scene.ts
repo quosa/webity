@@ -375,7 +375,7 @@ async function main() {
         scene.setInputTarget(controlCube);
 
         // Start the frame loop (input → physics → update → render)
-        engine.start(scene);
+        engine.start();
 
         // Initialize gamepad UI manager
         const gamepadUIManager = new GamepadUIManager(scene);

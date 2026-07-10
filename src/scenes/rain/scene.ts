@@ -124,7 +124,7 @@ class EnhancedRainDemo {
             console.log('✅ Physics bridge initialized');
 
             // Start the frame loop (input → physics → update → render)
-            this.engine.start(this.scene);
+            this.engine.start();
 
             // Expose for console debugging
             (window as unknown as { engine: Engine; scene: Scene }).engine = this.engine;

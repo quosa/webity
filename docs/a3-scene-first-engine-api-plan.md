@@ -147,7 +147,12 @@ Verified against `main`; the migration did not cause these:
 
 ## Tracked follow-up tasks (engine/cleanup)
 1. Engine `physics_enabled = mass != 0` gate fix (Phase 8).
-2. Engine restart safety (idempotent `start()`) — supersedes per-scene HMR stopgap.
+2. ✅ Engine restart safety (idempotent `start()`/`stop()`) — done on branch `engine-lifecycle`
+   (PR #11). `start()`/`stop()` are arg-less + idempotent (warn + no-op), `start()` runs the
+   component lifecycle once per mount (`hasStarted` latch) so resume ≠ re-start, and `loadScene`
+   now *replaces* the current scene (reusing the device) so reset/level-switch are one caller-side
+   `loadScene(build()) + start()`. NOTE: this did not remove a per-scene HMR stopgap because no
+   scene actually wires `import.meta.hot.dispose` today — it removes the *need* for one.
 3. ✅ Inc 8: full legacy removal (string MeshRenderer ctor + scene.init + docs + factories + box-sphere) — done on branch `a3-cleanups`.
 4. Shared `runScene()` bootstrap helper + adopt across ~15 scenes (/simplify #1).
 5. ✅ Engine owns runtime mesh registration (drop `getRenderer()` leak; added `Engine.registerMesh`) — done on branch `a3-cleanups`.
@@ -197,6 +202,22 @@ Verified against `main`; the migration did not cause these:
       read per-entity in the render loop. That removes the per-mesh-id "one mode per id"
       limitation (same mesh drawn both ways) and the registration threading — but it's a WASM
       ABI change, so it rides with #8/#9 rather than the TS-only pass above.
+11. **Scene is still the runtime coordinator, not pure data — the core A3 goal is unfinished
+    (found reviewing PR #11, 2026-07-11):** the target footprint says *"Scene … no renderer/WASM
+    held,"* but today the `Scene` **owns** the `WasmPhysicsBridge` (`scene-system.ts:46`, public)
+    and runs the whole runtime: `mount()` registers entities (`:191`), `update()` drives
+    `physicsBridge.update()` then `render()` (`:238`), and `render()` reads WASM memory + calls the
+    renderer (`:262`). The Engine is just device + loop scheduling delegating to the Scene.
+    - **Why it matters:** "Scene = pure data" is the whole point of A3; until the runtime moves to
+      the Engine, `mount()`/`update()`/`render()` living on the Scene is the wrong side.
+    - **Target:** the Engine owns `renderer` **and** `physicsBridge`; the Scene holds only
+      GameObjects + camera + input config + `awake/start/update`(components) hooks. `Engine.loadScene`
+      does registration; the Engine frame loop runs input → components → `bridge.update` → render.
+    - **The real cost — ~60 `scene.physicsBridge.*` call sites** must re-route: scene debug/console
+      hooks (stats, collision counters, wasm memory), `input-controller.ts:129` (`applyForce`), and
+      ~a dozen tests. Expose a read-only `engine.physics`/stats accessor for the debug hooks and give
+      the input controller a bridge handle. Own PR — bigger than #11, touches every scene + tests.
+      PR #11's `mount(renderer, wasm)` (Engine supplies the module) is a first nudge in this direction.
 
 ## Resume pointer
 Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green

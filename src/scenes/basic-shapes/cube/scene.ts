@@ -37,7 +37,7 @@ async function main(): Promise<void> {
         await engine.init();
         const scene = buildScene();
         await engine.loadScene(scene);
-        engine.start(scene);
+        engine.start();
 
         (window as unknown as { engine: Engine; scene: Scene }).engine = engine;
         (window as unknown as { engine: Engine; scene: Scene }).scene = scene;

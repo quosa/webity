@@ -295,7 +295,7 @@ async function main() {
         await engine.loadScene(scene);
 
         // Start the frame loop (input → physics → update → render)
-        engine.start(scene);
+        engine.start();
 
         // Set initial input target (after scene is assigned)
         (window as any).setInputTarget('camera');

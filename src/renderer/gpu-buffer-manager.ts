@@ -39,6 +39,11 @@ export class GPUBufferManager {
         const totalVertexBytes = this.meshRegistry.getTotalVertexBytes();
         const totalIndexBytes = this.meshRegistry.getTotalIndexBytes();
 
+        // Destroy the previous shared buffers before reallocating — registerMesh rebuilds these
+        // on every call (and on every scene load), so without this each rebuild leaks a GPUBuffer.
+        this.sharedVertexBuffer?.destroy();
+        this.sharedIndexBuffer?.destroy();
+
         // Create separate shared vertex buffer (f32 data)
         this.sharedVertexBuffer = this.device.createBuffer({
             size: Math.max(totalVertexBytes, GPUBufferManager.INITIAL_VERTEX_SIZE),
@@ -204,6 +209,18 @@ export class GPUBufferManager {
     // Get reverse mapping from mesh index to mesh ID
     getMeshIndexToIdMap(): Map<number, string> {
         return this.meshRegistry.getMeshIndexToIdMap();
+    }
+
+    // Drop all registered meshes + their shared GPU buffers so a new scene can register its own
+    // from scratch (used by Engine scene-swap). The instance buffer is left alone — it is
+    // re-uploaded from the active scene's WASM every frame.
+    clearMeshes(): void {
+        this.sharedVertexBuffer?.destroy();
+        this.sharedIndexBuffer?.destroy();
+        this.sharedVertexBuffer = null;
+        this.sharedIndexBuffer = null;
+        this.meshRegistry.clear();
+        this.meshDataCache.clear();
     }
 
     // Clean up GPU resources

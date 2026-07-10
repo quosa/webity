@@ -38,7 +38,7 @@ async function main(): Promise<void> {
         await engine.init();
         const scene = buildScene();
         await engine.loadScene(scene);
-        engine.start(scene);
+        engine.start();
 
         // Expose for console debugging + the index.html buttons.
         (window as any).engine = engine;

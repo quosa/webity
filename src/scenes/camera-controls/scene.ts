@@ -73,7 +73,7 @@ async function main(): Promise<void> {
         await engine.init();
         const scene = buildScene();
         await engine.loadScene(scene);
-        engine.start(scene);
+        engine.start();
 
         // Expose for console debugging + the index.html camera panel.
         (window as any).engine = engine;

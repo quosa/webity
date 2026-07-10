@@ -87,7 +87,7 @@ function createInitialStackScene(scene: Scene): void {
     // Drive the engine loop: resume restarts input→physics→update→render, pause halts it.
     if (isPlaying) {
         if (engine && scene) {
-            engine.start(scene);
+            engine.start();
         }
     } else {
         engine?.stop();
@@ -437,7 +437,7 @@ async function main() {
         await engine.loadScene(scene);
 
         // Start the frame loop (input → physics → update → render)
-        engine.start(scene);
+        engine.start();
 
         console.log('✅ Stack test scene initialized successfully');
 
