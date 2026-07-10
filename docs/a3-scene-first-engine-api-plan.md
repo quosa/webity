@@ -175,6 +175,22 @@ Verified against `main`; the migration did not cause these:
      `updateECSTransformMatrix` at add time, so position/scale/rotation all apply for static
      entities without needing a RigidBody. WASM ABI change + `build:wasm`; same "entity/transform
      ABI is too coarse" family as items #1 and #8.
+10. **Renderer picks the draw pass from a hard-coded mesh-id allowlist, not the mesh's render mode (found 2026-07-10):**
+    `renderWasmInstancesByMode` filters entities against literal id lists
+    (`webgpu.renderer.ts:441-442`: `triangleMeshes = ['triangle','cube','sphere','pyramid']`,
+    `lineMeshes = ['grid']`). Any mesh id **not** in the matching list is silently skipped in
+    **both** passes, so a custom-id mesh (e.g. `Mesh.createGrid('floorGrid', …)` /
+    `'wallGrid'`) renders nothing. The `renderMode` on `MeshRenderer` is not consulted. This is
+    the standing `:440`/`:453` TODOs.
+    - **Workaround today:** reuse the blessed ids (`'grid'` for lines, `'cube'`/`'sphere'`/etc.
+      for triangles). Note `loadScene` dedups meshes by id, so one id == one geometry — you can't
+      have two differently-sized `'grid'` meshes.
+    - **Fix (own PR, like #8):** thread the real render mode through registration —
+      `registerMesh(id, data, renderMode = 'triangles')` storing a `Map<id, mode>`;
+      `Engine.loadScene` passes `meshRenderer.renderMode` (and `Engine.registerMesh(mesh, mode?)`
+      for runtime spawns); then filter by `meshRenderMode.get(meshId) === renderMode` instead of
+      the hard-coded arrays. Keys mode per mesh id (matches the TODO); a per-entity mode (same id
+      drawn both ways) would be a larger change. No WASM/ABI change — TS renderer + engine only.
 
 ## Resume pointer
 Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green
