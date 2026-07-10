@@ -161,6 +161,20 @@ Verified against `main`; the migration did not cause these:
      - *Option A — make `useGravity` real:* add a per-entity `use_gravity` bit to `PhysicsComponent` + an `add_entity` param, plumb via the bridge, and gate the gravity line (`game_engine.zig:301`) on it. Unlocks the floating-dynamic state; pairs naturally with the item #1 `physics_enabled` gate fix (both are "the WASM entity-flags ABI is too coarse"). Needs `build:wasm` + regression check on grid/floor scenes.
      - *Option B — drop `useGravity` (YAGNI):* removes no working behavior today, but gives up the API slot for floating-dynamic bodies (re-add later if wanted). Breaking change across **62 `new RigidBody(` call sites**; must *remove* the positional arg (never same-position-swap to `kinematic` — that would silently flip every dynamic body to immovable). The existing `useGravity=false` sites (e.g. `input-demo/scene.ts:44,58`, `jku-scene.ts` staticCube) are **latent-intent bugs** — authors expected "no fall" and never got it; each needs a per-site dynamic-vs-kinematic decision.
    - Best done as its own PR, not folded into the A3 cleanup.
+9. **Static (mesh-only) entities silently drop their initial rotation (found 2026-07-10):**
+   `add_entity` bakes **position + scale** into the render matrix but has **no rotation param**
+   (`game_engine.zig:1176-1188` — always identity rotation). Rotation only reaches WASM later via
+   `set_entity_rotation`, which is called from `RigidBody.syncToWasm()` (`components.ts:271-273`),
+   and that runs only for a **kinematic RigidBody** (or a `RotatorComponent` animates `phys.rotation`
+   directly). So a GameObject with a MeshRenderer but **no RigidBody** never has its
+   `transform.setRotation()` applied — it renders unrotated (position/scale still work).
+   - **Repro:** a `createGrid` wall with `setRotation(0,0,90)` and no RigidBody stays flat.
+   - **Workaround today:** attach a kinematic body (`RigidBody.staticBody(...)`); its per-frame
+     `syncToWasm()` pushes the rotation (also makes it a collider).
+   - **Fix:** add rotation params to the `add_entity` ABI and build the matrix via
+     `updateECSTransformMatrix` at add time, so position/scale/rotation all apply for static
+     entities without needing a RigidBody. WASM ABI change + `build:wasm`; same "entity/transform
+     ABI is too coarse" family as items #1 and #8.
 
 ## Resume pointer
 Branch `worktree-a3-scene-first-engine-api` → **PR #8** (draft). Core A3 done + green
