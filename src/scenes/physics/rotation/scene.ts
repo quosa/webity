@@ -217,7 +217,7 @@ async function main() {
         }
 
         // Start scene lifecycle + frame loop
-        engine.start(scene);
+        engine.start();
 
         (window as any).engine = engine;
         (window as any).scene = scene;

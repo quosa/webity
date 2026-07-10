@@ -90,7 +90,7 @@ async function main() {
     await engine.init();                  // WebGPU + renderer
     const scene = createMyScene();        // pure data
     await engine.loadScene(scene);        // mount: upload meshes, register entities (fail-loud)
-    engine.start(scene);                  // loop: input → physics → update → render
+    engine.start();                  // loop: input → physics → update → render
 }
 
 main().catch(console.error);
@@ -245,7 +245,7 @@ After creating a scene:
    ✅ **Correct**: `import from '../../engine/scene-system.js'` (required for ES modules)
 
 6. ❌ **Mounting by hand**: calling `scene.start()` without `await engine.loadScene(scene)`
-   ✅ **Correct**: `await engine.loadScene(scene)` (uploads meshes + registers entities) then `engine.start(scene)`
+   ✅ **Correct**: `await engine.loadScene(scene)` (uploads meshes + registers entities) then `engine.start()`
 
 7. ❌ **Inert collider**: a `RigidBody` with `mass = 0` is silently non-colliding
    ✅ **Correct**: use a non-zero mass, or `RigidBody.staticBody(shape, extents)` for fixed surfaces

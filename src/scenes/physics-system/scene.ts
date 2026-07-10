@@ -64,7 +64,7 @@ async function main(): Promise<void> {
         await engine.init();
         const scene = buildScene();
         await engine.loadScene(scene);
-        engine.start(scene);
+        engine.start();
 
         // Expose for console debugging + the index.html panel.
         (window as any).engine = engine;
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
                 engine.stop();
                 paused = true;
             } else if (shouldRun && paused) {
-                engine.start(scene);
+                engine.start();
                 paused = false;
             }
         }, 100);

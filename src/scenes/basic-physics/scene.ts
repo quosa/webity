@@ -59,7 +59,7 @@ async function main(): Promise<void> {
         await engine.init();               // WebGPU + WASM
         const scene = buildScene();        // pure data
         await engine.loadScene(scene);     // mount: upload meshes, register entities (fail-loud)
-        engine.start(scene);               // input > physics > update > render
+        engine.start();               // input > physics > update > render
 
         // Expose for console debugging.
         (window as unknown as { engine: Engine; scene: Scene }).engine = engine;

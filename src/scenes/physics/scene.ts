@@ -136,7 +136,7 @@ async function main() {
         await engine.init();               // WebGPU + WASM
         const scene = await buildScene();  // pure data
         await engine.loadScene(scene);     // mount: upload meshes, register entities (fail-loud)
-        engine.start(scene);               // input > physics > update > render
+        engine.start();               // input > physics > update > render
 
         // Expose for console debugging.
         (window as unknown as { engine: Engine; scene: Scene }).engine = engine;
@@ -216,7 +216,7 @@ async function main() {
 
         (window as any).resumeEngine = () => {
             console.log('▶️ Engine resumed');
-            engine.start(scene);
+            engine.start();
         };
 
         console.log('✅ physics scene running (two stacked balls → floor grid)');

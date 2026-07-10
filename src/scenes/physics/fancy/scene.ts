@@ -249,7 +249,7 @@ async function initFancyPhysicsScene(): Promise<void> {
         await engine.init();               // WebGPU + WASM
         const scene = await buildScene();  // pure data
         await engine.loadScene(scene);     // mount: upload meshes, register entities (fail-loud)
-        engine.start(scene);               // input > physics > update > render
+        engine.start();               // input > physics > update > render
 
         // Expose for console debugging.
         (window as any).engine = engine;
@@ -317,7 +317,7 @@ async function initFancyPhysicsScene(): Promise<void> {
         (window as any).resumeEngine = () => {
             console.log('▶️ Fancy Physics Engine resumed');
             if (!isRunning) {
-                engine.start(scene);
+                engine.start();
                 isRunning = true;
             }
             updateUI();

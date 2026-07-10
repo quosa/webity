@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engine Lifecycle — play / pause / restart / switch</title>
+    <style>
+        body { margin: 0; background: #222; font-family: Arial, sans-serif; color: white; }
+        canvas { display: block; margin: 20px auto; border: 2px solid #444; }
+        .info { text-align: center; margin: 16px; }
+        .controls { text-align: center; margin: 16px; }
+        .controls button {
+            font-size: 15px;
+            padding: 8px 16px;
+            margin: 4px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .controls button:hover { background: #444; }
+        #status { margin-top: 10px; color: #8f8; font-family: monospace; }
+        #error-message {
+            display: none;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 12px 16px;
+            background: #5a1a1a;
+            border: 1px solid #a33;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🔁 Engine Lifecycle Demo</h1>
+        <p>One Engine, one WebGPU device. Play/pause, restart the current level, or switch levels.</p>
+    </div>
+
+    <canvas id="webgpu-canvas" width="800" height="600"></canvas>
+
+    <div id="error-message"></div>
+
+    <div class="controls">
+        <button id="btn-playpause" onclick="togglePlayPause()">⏸ Pause</button>
+        <button id="btn-restart" onclick="restart()">↻ Restart</button>
+        <button id="btn-scene-a" onclick="switchScene(0)">🎾 Falling Balls</button>
+        <button id="btn-scene-b" onclick="switchScene(1)">📦 Box Drop</button>
+        <div id="status">Loading…</div>
+    </div>
+
+    <div class="info">
+        <p><strong>Restart / switch:</strong> <code>await engine.loadScene(build()); engine.start()</code> —
+           <strong>pause / resume:</strong> <code>engine.stop()</code> / <code>engine.start()</code></p>
+        <p><strong>Console:</strong> open devtools (F12) — <code>window.engine</code> is exposed.</p>
+    </div>
+
+    <script type="module" src="./scene.ts"></script>
+</body>
+</html>

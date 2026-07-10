@@ -4,7 +4,7 @@
 import { CameraObject, PerspectiveCamera } from './camera-object';
 import { GameObject } from './gameobject';
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
-import { WasmPhysicsBridge } from './wasm-physics-bridge';
+import { WasmPhysicsBridge, WasmPhysicsInterface } from './wasm-physics-bridge';
 import { MeshRenderer, RigidBody, CameraComponent } from './components';
 import { InputManager } from './input';
 import { InputController, CameraController, GameObjectController, OrbitCameraController } from './input-controller';
@@ -188,9 +188,11 @@ export class Scene {
     // (Engine.loadScene does this from the scene tree, or a legacy caller registered them).
     // Resolves each entity's mesh index and registers it with WASM in one pass, failing loud
     // with an aggregated error listing every unresolved GameObject.
-    async mount(renderer: WebGPURendererV2): Promise<void> {
+    async mount(renderer: WebGPURendererV2, wasm?: WasmPhysicsInterface): Promise<void> {
         this.renderer = renderer;
-        await this.physicsBridge.init();
+        // The Engine passes its shared WASM module here; init() re-inits it (world → empty) so
+        // this scene starts clean. Falls back to loading its own module when called standalone.
+        await this.physicsBridge.init(wasm);
 
         const failures: string[] = [];
         for (const gameObject of this.entities.values()) {
