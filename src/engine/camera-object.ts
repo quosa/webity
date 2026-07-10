@@ -41,6 +41,6 @@ export class OrthographicCamera extends CameraObject {
         opts: { bounds?: { left: number; right: number; top: number; bottom: number }; near?: number; far?: number } = {},
     ) {
         const bounds = opts.bounds ?? { left: -5, right: 5, top: 5, bottom: -5 };
-        super(id, new CameraComponent(false, Math.PI / 4, opts.near ?? 0.1, opts.far ?? 100, bounds));
+        super(id, new CameraComponent(false, undefined, opts.near ?? 0.1, opts.far ?? 100, bounds));
     }
 }
