@@ -1,5 +1,8 @@
 // src/v2/mesh-registry.ts
 
+// Which draw pass renders a mesh's instances (single source of truth for the union).
+export type RenderMode = 'triangles' | 'lines';
+
 export interface MeshData {
     vertices: Float32Array;
     indices: Uint16Array;
@@ -12,6 +15,7 @@ export interface MeshAllocation {
     indexCount: number;    // Number of indices
     vertexByteSize: number;
     indexByteSize: number;
+    renderMode: RenderMode; // Draw pass (triangles vs lines) for this mesh's instances
 }
 
 export class MeshRegistry {
@@ -24,7 +28,7 @@ export class MeshRegistry {
     private meshIndexMap = new Map<string, number>();
 
     // Pre-calculate offsets for mesh data
-    allocate(meshId: string, meshData: MeshData): MeshAllocation {
+    allocate(meshId: string, meshData: MeshData, renderMode: RenderMode = 'triangles'): MeshAllocation {
         if (this.allocations.has(meshId)) {
             console.warn(`Mesh ${meshId} already allocated`);
             return this.allocations.get(meshId)!;
@@ -44,6 +48,7 @@ export class MeshRegistry {
             indexCount: meshData.indices.length,
             vertexByteSize: alignedVertexSize,
             indexByteSize: alignedIndexSize,
+            renderMode,
         };
 
         this.allocations.set(meshId, allocation);

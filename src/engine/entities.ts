@@ -1,6 +1,7 @@
 // src/v2/entities.ts
 
 import { makeTransformMatrix } from '../utils/math-utils';
+import type { RenderMode } from '../renderer/mesh-registry';
 
 export interface Transform {
     position: [number, number, number];
@@ -13,7 +14,7 @@ export interface EntityData {
     meshId: string;
     transform: Transform;
     color: [number, number, number, number];
-    renderMode: 'triangles' | 'lines';
+    renderMode: RenderMode;
     textureId?: string;
 }
 
@@ -58,7 +59,7 @@ export class EntityManager {
             .filter(e => e.data.meshId === meshId);
     }
     
-    getByRenderMode(mode: 'triangles' | 'lines'): Entity[] {
+    getByRenderMode(mode: RenderMode): Entity[] {
         return Array.from(this.entities.values())
             .filter(e => e.data.renderMode === mode);
     }

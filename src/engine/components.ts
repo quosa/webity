@@ -9,6 +9,7 @@ import {
 } from '../utils/math-utils';
 import type { Mesh } from './mesh';
 import { Material } from './material';
+import type { RenderMode } from '../renderer/mesh-registry';
 
 export abstract class Component {
     public gameObject: any; // Will be GameObject, but avoiding circular import
@@ -121,7 +122,7 @@ export class MeshRenderer extends Component {
     public meshIndex: number | undefined; // For WASM integration
     public materialId: string;
     public color: Vector3 & { w: number }; // RGBA color
-    public renderMode: 'triangles' | 'lines';
+    public renderMode: RenderMode;
 
     // The actual asset objects. The engine uploads/registers `mesh` at mount and resolves
     // its mesh index; `color` is derived from the material's RGBA.
@@ -131,7 +132,7 @@ export class MeshRenderer extends Component {
     constructor(
         mesh: Mesh,
         material: Material = Material.default,
-        renderMode: 'triangles' | 'lines' = 'triangles',
+        renderMode: RenderMode = 'triangles',
     ) {
         super();
         this.meshIndex = undefined; // resolved at mount

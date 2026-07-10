@@ -45,6 +45,24 @@ describe('GPUBufferManager', () => {
         bufferManager.dispose();
     });
 
+    describe('Render mode registry', () => {
+        test('defaults to triangles when a mesh is registered without a mode', () => {
+            bufferManager.registerMesh('cube', createTestMeshData(8, 36));
+            expect(bufferManager.getMeshRenderMode('cube')).toBe('triangles');
+        });
+
+        test('stores the render mode supplied at registration', () => {
+            bufferManager.registerMesh('floorGrid', createTestMeshData(4, 6), 'lines');
+            bufferManager.registerMesh('ball', createTestMeshData(64, 128), 'triangles');
+            expect(bufferManager.getMeshRenderMode('floorGrid')).toBe('lines');
+            expect(bufferManager.getMeshRenderMode('ball')).toBe('triangles');
+        });
+
+        test('returns undefined for an unregistered mesh id (rendered in neither pass)', () => {
+            expect(bufferManager.getMeshRenderMode('never-registered')).toBeUndefined();
+        });
+    });
+
     describe('Mesh Registration', () => {
         test('should register a single mesh correctly', () => {
             const cubeData = createTestMeshData(8, 36); // 8 vertices, 36 indices for cube
