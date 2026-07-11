@@ -1,35 +1,25 @@
 // tests/buffer-comparison.test.ts
 // Unit tests comparing TypeScript vs WASM buffer outputs
 
-import { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
 import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer } from '../src/engine/components';
 import { Mesh } from '../src/engine/mesh';
 import { Material } from '../src/engine/material';
-import { createTriangleMesh } from '../src/renderer/mesh-utils';
-import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
+import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 
-// Set up WebGPU mocking environment
-setupWebGPUTestEnvironment();
-
-// Mock canvas context
-const mockCanvas = WebGPUMockFactory.createMockCanvas();
-
+// Compares the TS-side transform (from the GameObject in a Scene) against the WASM instance
+// buffer. The Engine owns the bridge at runtime; here we register the entity in both a Scene
+// (TS data source) and a directly-driven bridge (WASM buffer) for a headless comparison.
 describe('Buffer Comparison: TypeScript vs WASM', () => {
-    let renderer: WebGPURendererV2;
     let scene: Scene;
+    let bridge: WasmPhysicsBridge;
     let triangleGameObject: GameObject;
 
     beforeEach(async () => {
-        // Create renderer and scene
-        renderer = new WebGPURendererV2();
-        await renderer.init(mockCanvas as any);
-
-        // Register triangle mesh
-        renderer.registerMesh('triangle', createTriangleMesh());
-
         scene = new Scene();
+        bridge = new WasmPhysicsBridge();
+        await bridge.init();
 
         // Create triangle GameObject (same as in working test)
         triangleGameObject = new GameObject('test-triangle', 'TestTriangle');
@@ -37,23 +27,22 @@ describe('Buffer Comparison: TypeScript vs WASM', () => {
         triangleGameObject.transform.setScale(2, 2, 2);
 
         const meshRenderer = new MeshRenderer(Mesh.createTriangle('triangle', 1), new Material('red', { r: 1, g: 0, b: 0, a: 1 }));
-        // this is normally done by Scene when adding GameObject
-        meshRenderer.meshIndex = 0; // Simulate assigned mesh index
+        // The Engine assigns this at registration; set it manually for the headless test.
+        meshRenderer.meshIndex = 0;
         triangleGameObject.addComponent(meshRenderer);
 
         scene.addGameObject(triangleGameObject);
-        await scene.mount(renderer);
-        scene.start();
+        bridge.addEntity(triangleGameObject);
     });
 
     test('Compare TypeScript vs WASM instance buffer data', async () => {
         console.log('🧪 Testing Buffer Comparison...');
 
         // 1. Get TypeScript rendering buffer data
-        const tsBufferData = captureTypeScriptBufferData(scene, renderer);
+        const tsBufferData = captureTypeScriptBufferData(scene);
 
         // 2. Get WASM rendering buffer data
-        const wasmBufferData = captureWasmBufferData(scene, renderer);
+        const wasmBufferData = captureWasmBufferData(bridge);
 
         // 3. Compare buffers
         console.log('📊 TypeScript Buffer Data:', tsBufferData);
@@ -101,7 +90,7 @@ describe('Buffer Comparison: TypeScript vs WASM', () => {
     });
 });
 
-function captureTypeScriptBufferData(scene: Scene, _renderer: WebGPURendererV2) {
+function captureTypeScriptBufferData(scene: Scene) {
     console.log('📋 Capturing TypeScript buffer data...');
 
     // Force TypeScript rendering path
@@ -141,16 +130,16 @@ function captureTypeScriptBufferData(scene: Scene, _renderer: WebGPURendererV2) 
     };
 }
 
-function captureWasmBufferData(scene: Scene, _renderer: WebGPURendererV2) {
+function captureWasmBufferData(bridge: WasmPhysicsBridge) {
     console.log('📋 Capturing WASM buffer data...');
 
-    const stats = scene.physicsBridge.getStats();
+    const stats = bridge.getStats();
     let transforms: number[] = [];
     let colors: number[] = [];
 
-    if (scene.physicsBridge.hasWasmModule() && stats.entityCount > 0) {
-        const wasmMemory = scene.physicsBridge.getWasmMemory();
-        const transformsOffset = scene.physicsBridge.getEntityTransformsOffsetSafe();
+    if (bridge.hasWasmModule() && stats.entityCount > 0) {
+        const wasmMemory = bridge.getWasmMemory();
+        const transformsOffset = bridge.getEntityTransformsOffsetSafe();
 
         if (wasmMemory) {
             // Read instance data: 20 floats per instance (16 transform + 4 color)

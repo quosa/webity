@@ -49,12 +49,14 @@ async function main(): Promise<void> {
         // Debug helper wired to the "compareBuffers" button.
         (window as any).compareBuffers = () => {
             console.log('🔍 Buffer Comparison Debug:');
-            const stats = scene.physicsBridge.getStats();
+            const physicsBridge = engine.physicsBridge;
+            if (!physicsBridge) return;
+            const stats = physicsBridge.getStats();
             console.log('WASM Stats:', stats);
 
-            if (scene.physicsBridge.hasWasmModule()) {
-                const wasmMemory = scene.physicsBridge.getWasmMemory();
-                const transformsOffset = scene.physicsBridge.getEntityTransformsOffset();
+            if (physicsBridge.hasWasmModule()) {
+                const wasmMemory = physicsBridge.getWasmMemory();
+                const transformsOffset = physicsBridge.getEntityTransformsOffset();
                 console.log('WASM Memory:', wasmMemory);
                 console.log('Transforms Offset:', transformsOffset);
 

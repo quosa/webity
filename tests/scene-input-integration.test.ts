@@ -8,45 +8,13 @@ import { Mesh } from '../src/engine/mesh';
 import { Material } from '../src/engine/material';
 import { CameraController, GameObjectController, OrbitCameraController } from '../src/engine/input-controller';
 
-// Mock WebGPU renderer for testing
-class MockRenderer {
-    init = jest.fn();
-    getMeshIndex = jest.fn().mockReturnValue(0);
-    mapInstanceDataFromWasm = jest.fn();
-    getAspectRatio = jest.fn().mockReturnValue(1.0);
-    updateCamera = jest.fn();
-    render = jest.fn();
-}
-
-// Mock WASM physics bridge for testing
-class MockWasmPhysicsBridge {
-    init = jest.fn();
-    addEntity = jest.fn().mockReturnValue(42);
-    applyForce = jest.fn();
-    setEntityVelocity = jest.fn();
-    setEntityPosition = jest.fn();
-    update = jest.fn();
-    getStats = jest.fn().mockReturnValue({ entityCount: 1, isInitialized: true });
-    hasWasmModule = jest.fn().mockReturnValue(true);
-    getWasmMemory = jest.fn().mockReturnValue(new ArrayBuffer(1024));
-    getEntityTransformsOffset = jest.fn().mockReturnValue(0);
-    getWasmModule = jest.fn().mockReturnValue({});
-}
-
 describe('Scene Input Integration', () => {
     let scene: Scene;
-    let mockRenderer: MockRenderer;
 
-    beforeEach(async () => {
+    beforeEach(() => {
+        // The Scene is pure data + input/lifecycle now; the Engine owns the renderer + bridge.
+        // These input tests exercise the Scene directly (input controllers + updateComponents).
         scene = new Scene();
-        mockRenderer = new MockRenderer();
-
-        // Replace physics bridge with mock
-        (scene as any).physicsBridge = new MockWasmPhysicsBridge();
-
-        // Initialize scene with mock renderer
-        await scene.mount(mockRenderer as any);
-
         jest.clearAllMocks();
     });
 
@@ -176,7 +144,7 @@ describe('Scene Input Integration', () => {
     });
 
     describe('Scene Update Integration', () => {
-        test('should call input controller update during scene update', () => {
+        test('should call input controller update during updateComponents', () => {
             const mockController = {
                 handleInput: jest.fn(),
                 update: jest.fn()
@@ -185,18 +153,18 @@ describe('Scene Input Integration', () => {
             // Replace active controller with mock
             (scene as any).activeInputController = mockController;
 
-            scene.update(0.016);
+            scene.updateComponents(0.016);
 
             expect(mockController.update).toHaveBeenCalledWith(0.016);
         });
 
-        test('should handle scene update with null input controller', () => {
+        test('should handle updateComponents with null input controller', () => {
             scene.setInputTarget(null);
 
-            expect(() => scene.update(0.016)).not.toThrow();
+            expect(() => scene.updateComponents(0.016)).not.toThrow();
         });
 
-        test('should call input controller before other scene systems', () => {
+        test('should update the input controller before GameObject components', () => {
             const updateOrder: string[] = [];
 
             const mockController = {
@@ -204,18 +172,16 @@ describe('Scene Input Integration', () => {
                 update: jest.fn(() => updateOrder.push('input'))
             };
 
-            // Mock physics bridge update to track order
-            const originalUpdate = (scene as any).physicsBridge.update;
-            (scene as any).physicsBridge.update = jest.fn(() => updateOrder.push('physics'));
+            // A GameObject whose component update records ordering.
+            const go = new GameObject('ordered');
+            jest.spyOn(go, 'update').mockImplementation(() => { updateOrder.push('component'); });
+            scene.addGameObject(go);
 
             (scene as any).activeInputController = mockController;
 
-            scene.update(0.016);
+            scene.updateComponents(0.016);
 
-            expect(updateOrder).toEqual(['input', 'physics']);
-
-            // Restore original update
-            (scene as any).physicsBridge.update = originalUpdate;
+            expect(updateOrder).toEqual(['input', 'component']);
         });
     });
 
@@ -289,7 +255,7 @@ describe('Scene Input Integration', () => {
             (scene as any).activeInputController = faultyController;
 
             // Should not crash the entire scene update
-            expect(() => scene.update(0.016)).toThrow('Controller error');
+            expect(() => scene.updateComponents(0.016)).toThrow('Controller error');
         });
 
         test('should handle missing WASM entity ID gracefully', () => {

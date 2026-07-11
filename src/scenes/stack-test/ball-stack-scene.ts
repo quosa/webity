@@ -9,6 +9,7 @@ import { Mesh } from '../../engine/mesh.js';
 import { Material } from '../../engine/material.js';
 
 let scene: Scene | undefined;
+let engine: Engine | undefined;
 let ballCount = 0;
 let isMonitoringCollisions = false;
 let lastLoggedCollisionCounter = 0;
@@ -161,8 +162,10 @@ function createInitialStackScene(scene: Scene): void {
 // 🔍 COLLISION MONITORING FUNCTIONS - New real-time collision tracking
 function checkForNewCollisions() {
     if (!scene || !isMonitoringCollisions) return;
+    const physicsBridge = engine?.physicsBridge;
+    if (!physicsBridge) return;
 
-    const currentCollisionCounter = scene.physicsBridge.getCollisionEventCounter();
+    const currentCollisionCounter = physicsBridge.getCollisionEventCounter();
 
     // Check if new collisions occurred since last check
     if (currentCollisionCounter > lastLoggedCollisionCounter) {
@@ -170,7 +173,7 @@ function checkForNewCollisions() {
         console.log(`🚨 NEW COLLISION EVENTS: ${newCollisions} new collision(s) detected (total: ${currentCollisionCounter})`);
 
         // Log details of the latest collision
-        const lastCollisionData = scene.physicsBridge.getLastCollisionData();
+        const lastCollisionData = physicsBridge.getLastCollisionData();
         if (lastCollisionData) {
             // Map WASM entity IDs back to GameObjects
             const entities = scene.getAllGameObjects().filter(e => e.name !== 'Floor');
@@ -195,8 +198,10 @@ function checkForNewCollisions() {
 (window as any).startCollisionMonitoring = () => {
     if (!scene) return;
 
+    const physicsBridge = engine?.physicsBridge;
+    if (!physicsBridge) return;
     isMonitoringCollisions = true;
-    lastLoggedCollisionCounter = scene.physicsBridge.getCollisionEventCounter();
+    lastLoggedCollisionCounter = physicsBridge.getCollisionEventCounter();
     console.log('🔍 COLLISION MONITORING STARTED - Real-time collision logging enabled');
     console.log(`   Starting from collision count: ${lastLoggedCollisionCounter}`);
 };
@@ -209,7 +214,7 @@ function checkForNewCollisions() {
 (window as any).clearCollisionEvents = () => {
     if (!scene) return;
 
-    scene.physicsBridge.clearCollisionEventCounter();
+    engine?.physicsBridge?.clearCollisionEventCounter();
     lastLoggedCollisionCounter = 0;
     console.log('🔍 COLLISION EVENT COUNTER CLEARED');
 };
@@ -218,21 +223,23 @@ function checkForNewCollisions() {
     if (!scene) return;
 
     console.log('🧪 Running physics diagnostics...');
+    const physicsBridge = engine?.physicsBridge;
+    if (!physicsBridge) return;
 
     // Get physics stats
-    const stats = scene.physicsBridge.getStats();
+    const stats = physicsBridge.getStats();
     console.log('📊 Physics Bridge Stats:', stats);
 
     // Get collision information
-    const collisionState = scene.physicsBridge.getWasmModule()?.get_collision_state?.();
+    const collisionState = physicsBridge.getWasmModule()?.get_collision_state?.();
     console.log('💥 Collision State:', `0x${collisionState?.toString(16).padStart(2, '0')}`);
 
     // 🔍 COLLISION EVENT LOGGING - New collision logging system
-    const collisionEventCounter = scene.physicsBridge.getCollisionEventCounter();
+    const collisionEventCounter = physicsBridge.getCollisionEventCounter();
     console.log(`🔍 COLLISION EVENTS: ${collisionEventCounter} total collisions detected`);
 
     if (collisionEventCounter > 0) {
-        const lastCollisionData = scene.physicsBridge.getLastCollisionData();
+        const lastCollisionData = physicsBridge.getLastCollisionData();
         if (lastCollisionData) {
             console.log('🔍 LAST COLLISION DATA:');
             console.log(`   Entity IDs: ${lastCollisionData.entity1} vs ${lastCollisionData.entity2}`);
@@ -270,7 +277,7 @@ function checkForNewCollisions() {
             console.log(`📍 ${entity.name} (WASM ID ${wasmId}): pos=(${transform.position.x.toFixed(3)}, ${finalY.toFixed(3)}, ${transform.position.z.toFixed(3)})`);
 
             // 🔍 WASM DEBUG: Get actual collision radius being used by WASM physics
-            const wasmCollisionRadius = scene.physicsBridge.getEntityCollisionRadius(wasmId);
+            const wasmCollisionRadius = physicsBridge.getEntityCollisionRadius(wasmId);
             const typescriptRadius = rigidBody?.extents.x;
 
             console.log(`🔍 COLLISION RADIUS DEBUG for ${entity.name}:`);
@@ -392,72 +399,46 @@ async function main() {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Scene-first engine API: the Engine owns the renderer + WASM. Build the scene as
-        // pure data, then loadScene() uploads its meshes (sphere + grid from the tree) and
-        // mounts it. The custom game loop below drives scene.update() (pause/resume + FPS +
-        // collision monitoring), so we don't use engine.start().
-        const engine = new Engine(canvas);
+        // Scene-first engine API: the Engine owns the renderer + WASM + the sim/render loop.
+        // Build the scene as pure data, loadScene() uploads its meshes + mounts it, and
+        // engine.start() drives the frame loop. Pause/resume = engine.stop()/start().
+        engine = new Engine(canvas);
         await engine.init();
 
         scene = new Scene();
         createInitialStackScene(scene);
         await engine.loadScene(scene);
+        engine.start();
 
-        // Start the scene
-        scene.start();
-
-        // Animation loop with FPS counter and pause/resume system
-        let lastTime = performance.now();
+        // Separate lightweight UI loop: real-time collision monitoring + FPS HUD. It does NOT
+        // drive the simulation (the Engine does) — it just observes while the Engine is running.
         let frameCount = 0;
-        let lastFpsTime = 0;
-        let isRunning = true;
-        let animationId: number | null = null;
-
-        const gameLoop = (currentTime: number) => {
-            const rawDeltaTime = (currentTime - lastTime) / 1000;
-            const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
-            lastTime = currentTime;
-
-            if (isRunning) {
-                // Update scene
-                scene?.update(deltaTime);
-
-                // Check for new collision events (real-time monitoring)
+        let lastFpsTime = performance.now();
+        const uiLoop = (currentTime: number): void => {
+            if (engine?.isRunning) {
                 checkForNewCollisions();
             }
-
-            // Update FPS counter
             frameCount++;
             if (currentTime - lastFpsTime >= 1000) {
                 const fpsElement = document.getElementById('fps');
                 if (fpsElement) fpsElement.textContent = frameCount.toString();
-
                 updateStatus();
-
                 frameCount = 0;
                 lastFpsTime = currentTime;
             }
-
-            animationId = requestAnimationFrame(gameLoop);
+            requestAnimationFrame(uiLoop);
         };
 
         // Engine control functions for debugging
         (window as any).pauseEngine = () => {
             console.log('⏸️ Ball Stack Engine paused');
-            isRunning = false;
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-            }
+            engine?.stop();
             updateUI();
         };
 
         (window as any).resumeEngine = () => {
             console.log('▶️ Ball Stack Engine resumed');
-            if (!isRunning) {
-                isRunning = true;
-                lastTime = performance.now(); // Reset time to avoid large delta
-                animationId = requestAnimationFrame(gameLoop);
-            }
+            engine?.start();
             updateUI();
         };
 
@@ -467,7 +448,7 @@ async function main() {
 
         const updateUI = () => {
             if (playPauseBtn) {
-                if (isRunning) {
+                if (engine?.isRunning) {
                     playPauseBtn.innerHTML = '⏸️';
                     playPauseBtn.title = 'Pause Physics Engine';
                 } else {
@@ -476,14 +457,14 @@ async function main() {
                 }
             }
             if (engineStatus) {
-                engineStatus.textContent = isRunning ? 'Engine Running' : 'Engine Paused';
+                engineStatus.textContent = engine?.isRunning ? 'Engine Running' : 'Engine Paused';
             }
         };
 
         // Button click handler (if button exists)
         if (playPauseBtn) {
             playPauseBtn.addEventListener('click', () => {
-                if (isRunning) {
+                if (engine?.isRunning) {
                     (window as any).pauseEngine();
                 } else {
                     (window as any).resumeEngine();
@@ -519,7 +500,7 @@ async function main() {
         updateDebugUI();
 
         // Start the game loop
-        animationId = requestAnimationFrame(gameLoop);
+        requestAnimationFrame(uiLoop);
 
         // Initial status update
         updateStatus();

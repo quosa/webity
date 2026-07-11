@@ -3,12 +3,18 @@
 
 import { CameraObject, PerspectiveCamera } from './camera-object';
 import { GameObject } from './gameobject';
-import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
-import { WasmPhysicsBridge, WasmPhysicsInterface } from './wasm-physics-bridge';
-import { MeshRenderer, RigidBody, CameraComponent } from './components';
+import { CameraComponent } from './components';
 import { InputManager } from './input';
 import { InputController, CameraController, GameObjectController, OrbitCameraController } from './input-controller';
 import { GamepadInputManager, GamepadConfiguration, GAMEPAD_PRESETS } from './gamepad-input';
+
+// The runtime a Scene is bound to once mounted (implemented by the Engine). The Scene is pure
+// data + lifecycle; it delegates entity registration for runtime spawns/removals to the Engine,
+// which owns the renderer and physics bridge.
+export interface SceneRuntime {
+    registerRuntimeEntity(_gameObject: GameObject): void;
+    unregisterRuntimeEntity(_gameObject: GameObject): void;
+}
 
 export class Scene {
     private entities = new Map<string, GameObject>();
@@ -21,12 +27,10 @@ export class Scene {
     get camera(): CameraComponent {
         return this.activeCamera.cameraComponent;
     }
-    private renderer?: WebGPURendererV2;
-    public physicsBridge: WasmPhysicsBridge;
-
-    // A3: the scene is pure data until an Engine mounts it. `mounted` gates whether
-    // addGameObject registers eagerly (late add / runtime spawn) or defers to mount().
-    private mounted = false;
+    // A3: the scene is pure data until an Engine mounts it (Engine.loadScene). Once bound, late
+    // adds/removes (runtime spawns) register through the Engine; before binding they are pure
+    // data inserts. The Scene holds no renderer or physics bridge — the Engine owns those.
+    private runtime: SceneRuntime | undefined = undefined;
 
     // Input Management
     private inputManager?: InputManager;
@@ -41,9 +45,6 @@ export class Scene {
         this.activeCamera = new PerspectiveCamera('scene-default-camera', { fov: Math.PI / 3 });
         this.activeCamera.transform.setPosition(0, 5, -10);
         this.activeCamera.lookAt(0, 0, 0);
-
-        // Initialize physics bridge
-        this.physicsBridge = new WasmPhysicsBridge();
 
         // Initialize input managers
         this.inputManager = new InputManager();
@@ -60,86 +61,20 @@ export class Scene {
         // Default to camera control
         this.setInputTarget('camera');
     }
-    _addMeshIndex(gameObject: GameObject) {
-        const meshRenderer = gameObject.getComponent(MeshRenderer);
-        if (!meshRenderer) {
-            console.log(`⚪ GameObject "${gameObject.name}" has no MeshRenderer - skipping mesh index assignment`);
-            return;
-        }
-        if (meshRenderer.meshIndex !== undefined) {
-            console.log(`✅ GameObject "${gameObject.name}" already has mesh index ${meshRenderer.meshIndex}`);
-            return; // Already has mesh index assigned
-        }
-
-        if (!this.renderer) {
-            throw new Error('❌ Renderer not set in Scene - cannot get mesh index');
-        }
-
-        console.log(`🔍 Getting mesh index for "${meshRenderer.meshId}" in GameObject "${gameObject.name}"`);
-        const meshIndex = this.renderer.getMeshIndex(meshRenderer.meshId);
-        if (meshIndex === undefined) {
-            throw new Error(`❌ Unknown mesh ID "${meshRenderer.meshId}" in GameObject "${gameObject.name}" - make sure mesh is registered with renderer`);
-        }
-        meshRenderer.meshIndex = meshIndex;
-        console.log(`✅ Assigned mesh index ${meshIndex} for "${meshRenderer.meshId}" to GameObject "${gameObject.name}"`);
-    }
 
     // Entity Management
-    // A3: adding a GameObject is a pure data insert. Registration with the renderer/WASM
-    // happens at mount() (Engine.loadScene). If the scene is already mounted (a legacy scene
-    // adding objects after init, or a runtime spawn), register the new object immediately.
+    // A3: adding a GameObject is a pure data insert. Registration with the renderer/WASM happens
+    // in Engine.loadScene. If the scene is already mounted (a runtime spawn after load), the bound
+    // Engine registers the new object immediately.
     addGameObject(gameObject: GameObject): void {
         this.entities.set(gameObject.id, gameObject);
         gameObject.setScene(this);
-        if (this.mounted) {
-            this.registerEntity(gameObject);
-        }
+        this.runtime?.registerRuntimeEntity(gameObject);
     }
 
     // Preferred short alias for addGameObject.
     add(gameObject: GameObject): void {
         this.addGameObject(gameObject);
-    }
-
-    // Warn about a RigidBody that will be inert: the engine gates simulation/collision on
-    // `physics_enabled = mass != 0`, so a mass-0 RigidBody is silently skipped by physics and
-    // never collides. (Mesh-only entities with no RigidBody are intentionally static — no warning.)
-    private warnIfInertRigidBody(gameObject: GameObject): void {
-        const rigidBody = gameObject.getComponent(RigidBody);
-        if (rigidBody && rigidBody.mass === 0) {
-            console.warn(
-                `⚠️ "${gameObject.name}": RigidBody has mass 0 — physics & collision are DISABLED for it ` +
-                '(the engine only simulates entities with mass != 0). For a fixed, collidable surface use a ' +
-                'non-zero mass together with isKinematic (which keeps it from moving).',
-            );
-        }
-    }
-
-    // Register a single GameObject with the renderer (mesh index) + WASM. Used for eager
-    // late adds; errors are logged (matches legacy addGameObject behavior). The mount() path
-    // registers strictly (fail-loud) instead.
-    // Shared registration core: warn about inert bodies, resolve the mesh index, and register
-    // with WASM. Returns an error message on failure (null on success) so callers choose their
-    // policy — the eager late-add path logs and continues; mount() aggregates and fails loud.
-    private tryRegister(gameObject: GameObject): string | null {
-        this.warnIfInertRigidBody(gameObject);
-        try {
-            this._addMeshIndex(gameObject);
-            this.physicsBridge.addEntity(gameObject);
-            return null;
-        } catch (error) {
-            return error instanceof Error ? error.message : String(error);
-        }
-    }
-
-    private registerEntity(gameObject: GameObject): void {
-        const error = this.tryRegister(gameObject);
-        if (error) {
-            console.error(`❌ Failed to add GameObject "${gameObject.name}" to WASM: ${error}`);
-        } else {
-            const entityType = gameObject.getComponent(RigidBody) ? 'physics' : 'static';
-            console.log(`🔵 Added GameObject "${gameObject.name}" to WASM as ${entityType} entity`);
-        }
     }
 
     removeGameObject(id: string): boolean {
@@ -157,12 +92,8 @@ export class Scene {
             this.removeGameObject(childId);
         }
 
-        // Remove from physics simulation if it has a RigidBody
-        const rigidBody = gameObject.getComponent(RigidBody);
-        if (rigidBody) {
-            this.physicsBridge.removePhysicsEntity(gameObject.id);
-            console.log(`🗑️ Removed GameObject "${gameObject.name}" from physics simulation`);
-        }
+        // Remove from physics simulation (the bound Engine skips non-physics entities).
+        this.runtime?.unregisterRuntimeEntity(gameObject);
 
         // Remove from scene
         gameObject.setScene(null);
@@ -184,30 +115,10 @@ export class Scene {
     }
 
     // Lifecycle Methods
-    // A3: the single deterministic mount. Meshes must already be registered on the renderer
-    // (Engine.loadScene does this from the scene tree, or a legacy caller registered them).
-    // Resolves each entity's mesh index and registers it with WASM in one pass, failing loud
-    // with an aggregated error listing every unresolved GameObject.
-    async mount(renderer: WebGPURendererV2, wasm?: WasmPhysicsInterface): Promise<void> {
-        this.renderer = renderer;
-        // The Engine passes its shared WASM module here; init() re-inits it (world → empty) so
-        // this scene starts clean. Falls back to loading its own module when called standalone.
-        await this.physicsBridge.init(wasm);
-
-        const failures: string[] = [];
-        for (const gameObject of this.entities.values()) {
-            const error = this.tryRegister(gameObject);
-            if (error) {
-                failures.push(`  - "${gameObject.name}": ${error}`);
-            }
-        }
-        this.mounted = true;
-
-        if (failures.length > 0) {
-            throw new Error(`Scene.mount(): failed to register ${failures.length} GameObject(s):\n${failures.join('\n')}`);
-        }
-
-        this.awake();
+    // Bind/unbind the runtime (Engine). Called by Engine.loadScene after the initial entities are
+    // registered, so subsequent runtime spawns register through the Engine.
+    bindRuntime(runtime: SceneRuntime): void {
+        this.runtime = runtime;
     }
 
     // Phase 5: Complete scene lifecycle - awake all GameObjects and components
@@ -234,68 +145,21 @@ export class Scene {
         console.log(`✅ Started ${this.entities.size} GameObjects with their components`);
     }
 
-    // Phase 5: Zero-copy update loop - WASM becomes master data source
-    update(deltaTime: number): void {
-        // 1. Update input controller BEFORE other systems
+    // Per-frame component update, driven by the Engine's loop (Engine.tick): input controller
+    // first, then every GameObject's components (rotators, input-driven forces, kinematic bodies
+    // pushing their transform into WASM). The Engine runs physics + render around this.
+    updateComponents(deltaTime: number): void {
         this.activeInputController?.update(deltaTime);
-
-        // 2. Update all GameObject components once (rotators, input-driven forces,
-        //    kinematic bodies pushing their transform into WASM, etc.)
         for (const gameObject of this.entities.values()) {
-            // Update GameObject (which already calls update on all components)
             gameObject.update(deltaTime);
         }
-
-        // 3. Run WASM physics simulation. bridge.update() also syncs results back into
-        //    each dynamic GameObject's transform via syncPhysicsResults(), so no
-        //    separate post-physics component pass is needed here.
-        this.physicsBridge.update(deltaTime);
-
-        // 4. Sync camera state to WASM for view matrix calculation
-        this.syncCameraToWasm();
-
-        // 5. Render with WASM buffer access (WASM buffers → GPU)
-        this.render();
     }
 
-    // Phase 6: WASM instance buffer entity rendering (2-pass: triangles + lines)
-    render(): void {
-        if (!this.renderer) return; //TODO: throw error?
-        if (!this.physicsBridge.hasWasmModule()) return; //TODO: throw error?
-
-        const wasmEntityCount = this.physicsBridge.getStats().entityCount;
-        if (wasmEntityCount === 0) return; // Nothing to render
-
-        // console.log(`📊 Pure WASM rendering: ${wasmEntityCount} entities registered with WASM`);
-
-        // Get WASM memory and entity transform data
-        const wasmMemory = this.physicsBridge.getWasmMemory();
-        if (!wasmMemory) {
-            console.warn('⚠️ WASM memory not available - skipping frame');
-            return;
-        }
-        const transformsOffset = this.physicsBridge.getEntityTransformsOffset();
-        if (transformsOffset === undefined) {
-            console.warn('⚠️ WASM transforms offset not available - skipping frame');
-            return;
-        }
-
-        // Map WASM data directly to GPU instance buffer
-        this.renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, wasmEntityCount);
-
-        // Update camera matrices
-        const aspect = this.renderer.getAspectRatio();
-        // TODO: camera view-projection goes directly to renderer still (ts->webgpu uniform)
-        //       not sure if this makes sense to move to WASM (only 1/frame update cost)
-        const viewProjectionMatrix = this.activeCamera.getViewProjectionMatrix(aspect);
-        this.renderer.updateCamera(viewProjectionMatrix);
-
-        // Pure WASM rendering: 2-pass (triangles + lines) from WASM buffers
-        const wasmModule = this.physicsBridge.getWasmModule();
-        this.renderer.render(wasmModule);
+    // The camera view-projection for the given aspect ratio (the Engine pushes this to the
+    // renderer each frame). The active camera GameObject is the single source of truth.
+    getViewProjectionMatrix(aspect: number): Float32Array {
+        return this.activeCamera.getViewProjectionMatrix(aspect);
     }
-
-    // TODO: Implement hybrid rendering for non-triangle entities if needed in the future
 
     // Set the camera GameObject used for both rendering and input (PerspectiveCamera /
     // OrthographicCamera). Rebinds the active camera/orbit input controller onto the new
@@ -307,16 +171,6 @@ export class Scene {
         }
     }
 
-    // Phase 5: Sync camera state to WASM for view matrix calculation
-    private syncCameraToWasm(): void {
-        // TODO: Future implementation - sync camera to WASM for view matrix calculation
-        // For Phase 5, camera matrices are still calculated in TypeScript
-        // This method is a placeholder for future WASM camera integration
-
-        // Future WASM camera sync:
-        // this.physicsBridge.setCameraPosition(this.camera.getPosition());
-        // this.physicsBridge.setCameraTarget(this.camera.getTarget());
-    }
 
     // Input Management Methods
     setInputTarget(target: 'camera' | 'orbit' | GameObject | null): void {
@@ -390,6 +244,7 @@ export class Scene {
         this.gamepadInputManager?.dispose();
         this.activeInputController = null;
         this.inputTarget = null;
+        this.runtime = undefined; // unbind from the Engine
         console.log('🧹 Scene disposed - input managers cleaned up');
     }
 
@@ -418,12 +273,10 @@ export class Scene {
         return this.entities.size;
     }
 
-    getSceneInfo(): { entityCount: number; cameraPosition: number[]; physicsStats?: any } {
-        const physicsStats = this.physicsBridge.getStats();
+    getSceneInfo(): { entityCount: number; cameraPosition: number[] } {
         return {
             entityCount: this.entities.size,
             cameraPosition: this.camera.getPosition(),
-            physicsStats
         };
     }
 }

@@ -44,11 +44,11 @@ async function main(): Promise<void> {
 
         // Debug buttons in index.html call these.
         (window as unknown as { renderCube: () => void }).renderCube = () => {
-            scene.render();
+            engine.render();
             console.log('🔄 Re-rendered cube');
         };
         (window as unknown as { debugCube: () => void }).debugCube = () => {
-            console.log('📊 WASM Stats:', scene.physicsBridge.getStats());
+            console.log('📊 WASM Stats:', engine.physicsBridge?.getStats());
             console.log('📦 Scene Entities:', scene.getAllGameObjects().map((e) => ({
                 name: e.name,
                 meshId: e.getComponent(MeshRenderer)?.meshId,

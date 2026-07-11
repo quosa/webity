@@ -90,11 +90,8 @@ window.runRenderingTest = async function (testName: string) {
     // Mount: register meshes + entities
     await engine.loadScene(scene);
 
-    // Start the scene
-    scene.start();
-
-    // Render
-    scene.render();
+    // Start the engine loop (renders the static scene for the snapshot)
+    engine.start();
 };
 
 // Camera controls test setup function
@@ -151,13 +148,8 @@ async function setupCameraControlsTest(engine: Engine, _canvas: HTMLCanvasElemen
     scene.camera.move(1, 0, 0); // Move forward slightly
     scene.camera.orbitAroundTarget(0.1, 0); // Slight orbit for dynamic view
 
-    // Start the scene
-    scene.start();
-
-    // Render the scene multiple times to ensure stable output
-    for (let i = 0; i < 5; i++) {
-        scene.update(1/60);
-    }
+    // Start the engine loop (renders the static scene for the snapshot)
+    engine.start();
 
     console.log('✅ Camera controls test setup complete');
     console.log(`📊 Scene entities: ${scene.getEntityCount()}`);

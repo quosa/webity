@@ -18,18 +18,22 @@
 
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { RenderMode } from '../renderer/mesh-registry';
-import { Scene } from './scene-system';
-import { MeshRenderer } from './components';
+import { Scene, SceneRuntime } from './scene-system';
+import { MeshRenderer, RigidBody } from './components';
 import { Mesh } from './mesh';
+import { GameObject } from './gameobject';
 import { WasmLoader } from './wasm-loader';
-import { WasmPhysicsInterface } from './wasm-physics-bridge';
+import { WasmPhysicsBridge, WasmPhysicsInterface } from './wasm-physics-bridge';
 
-export class Engine {
+export class Engine implements SceneRuntime {
     private canvas: HTMLCanvasElement;
     private renderer?: WebGPURendererV2;
-    // WASM physics module, loaded once in init() and shared across every scene the Engine
-    // mounts (each scene's bridge is re-init'd against it, which resets the world to empty).
+    // WASM physics module, loaded once in init() and shared across every scene the Engine mounts.
     private wasm?: WasmPhysicsInterface;
+    // The physics bridge for the current scene. The Engine owns it: a fresh bridge is created per
+    // loadScene() (its init() resets the shared WASM world to empty), and the Engine drives its
+    // update() each frame. Undefined before the first loadScene()/after deinit().
+    private bridge: WasmPhysicsBridge | undefined = undefined;
     // The mounted scene, or undefined before the first loadScene()/after deinit(). start()/
     // stop() operate on this.
     private currentScene: Scene | undefined = undefined;
@@ -48,6 +52,11 @@ export class Engine {
             throw new Error(`Engine: canvas '${canvas}' not found`);
         }
         this.canvas = element as HTMLCanvasElement;
+    }
+
+    /** The current scene's physics bridge (for debug/console hooks). Undefined until loadScene(). */
+    get physicsBridge(): WasmPhysicsBridge | undefined {
+        return this.bridge;
     }
 
     /** Whether the frame loop is currently running (for pause/resume UI). */
@@ -98,6 +107,7 @@ export class Engine {
         }
         this.unloadCurrent();
 
+        // 1. Register every mesh the scene references (dedup by id).
         const registered = new Set<string>();
         for (const gameObject of scene.getAllGameObjects()) {
             const meshRenderer = gameObject.getComponent(MeshRenderer);
@@ -107,18 +117,122 @@ export class Engine {
             registered.add(mesh.id);
         }
 
-        await scene.mount(this.renderer, this.wasm);
+        // 2. Fresh physics world for this scene (init() resets the shared WASM world to empty).
+        this.bridge = new WasmPhysicsBridge();
+        await this.bridge.init(this.wasm);
+
+        // 3. Register every entity (mesh index + WASM) in one fail-loud pass.
+        const failures: string[] = [];
+        for (const gameObject of scene.getAllGameObjects()) {
+            const error = this.registerEntity(gameObject);
+            if (error) failures.push(`  - "${gameObject.name}": ${error}`);
+        }
+        if (failures.length > 0) {
+            throw new Error(`Engine.loadScene(): failed to register ${failures.length} GameObject(s):\n${failures.join('\n')}`);
+        }
+
+        // 4. Bind runtime (so late adds/removes register through the Engine), then awake.
+        scene.bindRuntime(this);
+        scene.awake();
+
         this.currentScene = scene;
         this.hasStarted = false;
     }
 
-    /** Unmount the current scene: tear down its input, clear the WASM world + renderer meshes. */
+    // Register one GameObject with the renderer (mesh index) + WASM. Returns an error message on
+    // failure (null on success) so loadScene can aggregate and fail loud.
+    private registerEntity(gameObject: GameObject): string | null {
+        this.warnIfInertRigidBody(gameObject);
+        try {
+            this.addMeshIndex(gameObject);
+            this.bridge?.addEntity(gameObject);
+            return null;
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+        }
+    }
+
+    // Resolve and cache the renderer's mesh index onto the GameObject's MeshRenderer.
+    private addMeshIndex(gameObject: GameObject): void {
+        const meshRenderer = gameObject.getComponent(MeshRenderer);
+        if (!meshRenderer || meshRenderer.meshIndex !== undefined) return;
+        if (!this.renderer) throw new Error('Engine: renderer not initialized');
+        const meshIndex = this.renderer.getMeshIndex(meshRenderer.meshId);
+        if (meshIndex === undefined) {
+            throw new Error(`Unknown mesh ID "${meshRenderer.meshId}" in GameObject "${gameObject.name}" — make sure the mesh is registered`);
+        }
+        meshRenderer.meshIndex = meshIndex;
+    }
+
+    // Warn about a RigidBody that will be inert: the engine gates simulation/collision on
+    // `physics_enabled = mass != 0`, so a mass-0 RigidBody is silently skipped and never collides.
+    private warnIfInertRigidBody(gameObject: GameObject): void {
+        const rigidBody = gameObject.getComponent(RigidBody);
+        if (rigidBody && rigidBody.mass === 0) {
+            console.warn(
+                `⚠️ "${gameObject.name}": RigidBody has mass 0 — physics & collision are DISABLED for it ` +
+                '(the engine only simulates entities with mass != 0). For a fixed, collidable surface use a ' +
+                'non-zero mass together with isKinematic (RigidBody.staticBody).',
+            );
+        }
+    }
+
+    // SceneRuntime: register/unregister a GameObject added or removed at runtime (after loadScene).
+    registerRuntimeEntity(gameObject: GameObject): void {
+        if (!this.bridge) return; // scene not mounted yet
+        const error = this.registerEntity(gameObject);
+        if (error) {
+            console.error(`❌ Engine.registerRuntimeEntity("${gameObject.name}"): ${error}`);
+        }
+    }
+
+    unregisterRuntimeEntity(gameObject: GameObject): void {
+        if (gameObject.getComponent(RigidBody)) {
+            this.bridge?.removePhysicsEntity(gameObject.id);
+        }
+    }
+
+    /** Unmount the current scene: tear down its input, drop its physics world + renderer meshes. */
     private unloadCurrent(): void {
         if (!this.currentScene) return;
-        this.currentScene.dispose();
-        this.wasm?.init(); // reset the shared WASM world to empty for the next scene
+        this.currentScene.dispose(); // also unbinds the runtime
         this.renderer?.clearMeshes();
+        this.bridge = undefined;
         this.currentScene = undefined;
+    }
+
+    // One frame of the runtime: component/input update → physics step → render.
+    private tick(deltaTime: number): void {
+        const scene = this.currentScene;
+        if (!scene) return;
+        scene.updateComponents(deltaTime);
+        this.bridge?.update(deltaTime);
+        this.render();
+    }
+
+    // Render the current scene: map WASM instance data → GPU, push the camera, draw.
+    render(): void {
+        if (!this.renderer || !this.bridge || !this.currentScene) return;
+        if (!this.bridge.hasWasmModule()) return;
+
+        const entityCount = this.bridge.getStats().entityCount;
+        if (entityCount === 0) return; // nothing to render
+
+        const wasmMemory = this.bridge.getWasmMemory();
+        if (!wasmMemory) {
+            console.warn('⚠️ WASM memory not available - skipping frame');
+            return;
+        }
+        const transformsOffset = this.bridge.getEntityTransformsOffset();
+        if (transformsOffset === undefined) {
+            console.warn('⚠️ WASM transforms offset not available - skipping frame');
+            return;
+        }
+
+        this.renderer.mapInstanceDataFromWasm(wasmMemory, transformsOffset, entityCount);
+        const aspect = this.renderer.getAspectRatio();
+        this.renderer.updateCamera(this.currentScene.getViewProjectionMatrix(aspect));
+        this.renderer.render(this.bridge.getWasmModule());
     }
 
     /**
@@ -152,7 +266,7 @@ export class Engine {
             if (!this.running) return;
             const deltaTime = Math.min((now - this.lastTime) / 1000, 1 / 30); // clamp at 30fps
             this.lastTime = now;
-            scene.update(deltaTime);
+            this.tick(deltaTime);
             this.animationId = requestAnimationFrame(loop);
         };
         this.animationId = requestAnimationFrame(loop);

@@ -122,12 +122,9 @@ export class GameObjectController implements InputController {
         if (this.currentInputState.has(1016)) force.y -= this.forceStrength;  // force-down
 
         if (force.x || force.y || force.z) {
-            // Apply force to WASM physics entity via the physics bridge
-            const entityId = rigidBody.getWasmEntityId();
-            const scene = this.gameObject.getScene();
-            if (entityId !== undefined && scene?.physicsBridge) {
-                scene.physicsBridge.applyForce(entityId, force);
-            }
+            // Apply force through the RigidBody, which holds the Engine-wired bridge handle
+            // (no Scene/bridge reference needed here).
+            rigidBody.applyForce(force.x, force.y, force.z);
         }
 
         // TODO: Add rotation support for rotation-yaw (1031), rotation-pitch (1032), rotation-roll (1033)

@@ -343,21 +343,16 @@ describe('Scene System (v2)', () => {
         expect(id1).not.toBe(id2);
     });
 
-    test('should run each component update exactly once per scene.update() (no double update)', () => {
-        // Regression test: Scene.update() used to call gameObject.update() twice
+    test('should run each component update exactly once per updateComponents() (no double update)', () => {
+        // Regression test: the old Scene.update() called gameObject.update() twice
         // (once before and once after physics), which double-applied per-frame
         // component logic - e.g. rotators spun at 2x speed. See cleanup plan A2.
+        // updateComponents() (driven by the Engine) runs each component once.
         const obj = new GameObject('rotator-obj');
         obj.addComponent(new RotatorComponent(0, 45, 0)); // 45 deg/sec around Y
         scene.addGameObject(obj);
 
-        // Neutralize only the physics step, keeping the real (typed) bridge intact so
-        // that any additional bridge usage introduced in Scene.update() would surface
-        // rather than be masked by a stub.
-        jest.spyOn(scene.physicsBridge, 'update').mockImplementation(() => {});
-        // No renderer is set, so Scene.render() returns early.
-
-        scene.update(1.0); // 1 second
+        scene.updateComponents(1.0); // 1 second
 
         // Rotation must advance once (45 deg), not twice (90 deg).
         expect(obj.transform.rotation.y).toBeCloseTo(45);

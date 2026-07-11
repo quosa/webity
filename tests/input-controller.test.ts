@@ -131,13 +131,18 @@ describe('Input Controller System', () => {
         let gameObject: GameObject;
         let rigidBody: RigidBody;
         let controller: GameObjectController;
+        // The Engine wires the bridge + entity id onto the RigidBody at registration; the
+        // controller applies force through the RigidBody (not the Scene). Mock that here.
+        let mockBridge: { applyForce: jest.Mock };
 
         beforeEach(() => {
             gameObject = new GameObject('test-object');
-            gameObject.setScene(mockScene);
+            gameObject.setScene(mockScene as any);
 
             rigidBody = new RigidBody(1.0, false);
             rigidBody.setWasmEntityId(42); // Mock entity ID
+            mockBridge = { applyForce: jest.fn() };
+            rigidBody.setPhysicsBridge(mockBridge);
             gameObject.addComponent(rigidBody);
 
             controller = new GameObjectController(gameObject, 8.0);
@@ -153,7 +158,7 @@ describe('Input Controller System', () => {
             controller.handleInput(87, true);
             controller.update(0.1);
 
-            expect(mockScene.physicsBridge.applyForce).toHaveBeenCalledWith(
+            expect(mockBridge.applyForce).toHaveBeenCalledWith(
                 42, // entity ID
                 { x: 0, y: 0, z: -8.0 }
             );
@@ -165,7 +170,7 @@ describe('Input Controller System', () => {
             controller.handleInput(65, true); // A
             controller.update(0.1);
 
-            expect(mockScene.physicsBridge.applyForce).toHaveBeenCalledWith(
+            expect(mockBridge.applyForce).toHaveBeenCalledWith(
                 42,
                 { x: -8.0, y: 0, z: -8.0 }
             );
@@ -178,7 +183,7 @@ describe('Input Controller System', () => {
             controller.handleInput(87, true); // W
             controller.update(0.1);
 
-            expect(mockScene.physicsBridge.applyForce).toHaveBeenCalledWith(
+            expect(mockBridge.applyForce).toHaveBeenCalledWith(
                 42,
                 { x: 0, y: 0, z: -15.0 }
             );
@@ -189,18 +194,18 @@ describe('Input Controller System', () => {
             controller.handleInput(32, true);
             controller.update(0.1);
 
-            expect(mockScene.physicsBridge.applyForce).toHaveBeenCalledWith(
+            expect(mockBridge.applyForce).toHaveBeenCalledWith(
                 42,
                 { x: 0, y: 8.0, z: 0 }
             );
 
             // Clear mock, press minus (down force)
-            mockScene.physicsBridge.applyForce.mockClear();
+            mockBridge.applyForce.mockClear();
             controller.handleInput(32, false);
             controller.handleInput(45, true);
             controller.update(0.1);
 
-            expect(mockScene.physicsBridge.applyForce).toHaveBeenCalledWith(
+            expect(mockBridge.applyForce).toHaveBeenCalledWith(
                 42,
                 { x: 0, y: -8.0, z: 0 }
             );
@@ -209,7 +214,7 @@ describe('Input Controller System', () => {
         test('should not apply forces when no keys are pressed', () => {
             controller.update(0.1);
 
-            expect(mockScene.physicsBridge.applyForce).not.toHaveBeenCalled();
+            expect(mockBridge.applyForce).not.toHaveBeenCalled();
         });
 
         test('should handle GameObject without RigidBody gracefully', () => {
@@ -221,7 +226,7 @@ describe('Input Controller System', () => {
             staticController.handleInput(87, true);
             expect(() => staticController.update(0.1)).not.toThrow();
 
-            expect(mockScene.physicsBridge.applyForce).not.toHaveBeenCalled();
+            expect(mockBridge.applyForce).not.toHaveBeenCalled();
         });
 
         test('should handle GameObject without scene reference gracefully', () => {
