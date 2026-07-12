@@ -27,6 +27,11 @@ export interface WasmPhysicsInterface {
     get_entity_metadata_offset(): number;
     get_entity_metadata_size(): number;
 
+    // Mesh-bucket draw table (B2/B3): same-mesh entities are contiguous in the
+    // instance buffer; each mesh renders as one drawIndexed over [start, start+count)
+    get_mesh_bucket_start(_meshIndex: number): number;
+    get_mesh_bucket_count(_meshIndex: number): number;
+
     // Debug functions for buffer layout investigation
     get_entity_size(): number;
     get_entity_stride(): number;

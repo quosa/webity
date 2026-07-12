@@ -50,6 +50,7 @@ export class WasmLoader {
                 'init', 'update', 'add_entity', 'remove_entity', 'get_entity_count',
                 'apply_force', 'set_entity_position', 'set_entity_velocity', 'set_entity_rotation', 'set_entity_scale',
                 'get_entity_transforms_offset', 'get_entity_metadata_offset', 'get_entity_metadata_size',
+                'get_mesh_bucket_start', 'get_mesh_bucket_count',
                 'get_entity_size', 'get_entity_stride', 'debug_get_entity_mesh_id',
                 'get_entity_position_x', 'get_entity_position_y', 'get_entity_position_z',
                 'get_entity_velocity_x', 'get_entity_velocity_y', 'get_entity_velocity_z',
@@ -111,6 +112,10 @@ export class WasmLoader {
                 get_entity_transforms_offset: wasmExports.get_entity_transforms_offset,
                 get_entity_metadata_offset: wasmExports.get_entity_metadata_offset,
                 get_entity_metadata_size: wasmExports.get_entity_metadata_size,
+
+                // Mesh-bucket draw table (B2/B3)
+                get_mesh_bucket_start: wasmExports.get_mesh_bucket_start,
+                get_mesh_bucket_count: wasmExports.get_mesh_bucket_count,
 
                 // Debug functions
                 get_entity_size: wasmExports.get_entity_size,

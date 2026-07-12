@@ -332,42 +332,11 @@ export class WebGPURendererV2 {
         this.bufferManager.mapInstanceDataFromWasm(wasmMemory, offset, count);
     }
 
-    // Helper: Read mesh ID for specific entity from WASM metadata
-    private getEntityMeshId(wasmMemory: ArrayBuffer, metadataOffset: number, metadataSize: number, entityIndex: number): number {
-        // EntityMetadata structure in WASM (from game_engine.zig) - Zig struct alignment:
-        // id: u32 (offset 0, 4 bytes)
-        // mesh_id: u32 (offset 4, 4 bytes) ⭐ CORRECTED!
-        // material_id: u32 (offset 8, 4 bytes)
-        // active: bool (offset 12, 1 byte)
-        // physics_enabled: bool (offset 13, 1 byte)
-        // rendering_enabled: bool (offset 14, 1 byte)
-        // transform_dirty: bool (offset 15, 1 byte)
-
-        const entityMetadataOffset = metadataOffset + (entityIndex * metadataSize);
-        const meshIdOffset = entityMetadataOffset + 4; // mesh_id is at offset 4 bytes (FIXED!)
-
-        // Read mesh_id as u32 from WASM memory
-        const meshIdView = new Uint32Array(wasmMemory, meshIdOffset, 1);
-        return meshIdView[0]!;
-    }
-
-    // Helper: Convert WASM mesh ID to TypeScript mesh string
-    private wasmMeshIdToString(wasmMeshId: number): string {
-        // Build reverse mapping from mesh index to mesh ID
-        const meshIndexToId = this.bufferManager.getMeshIndexToIdMap();
-        const meshId = meshIndexToId.get(wasmMeshId);
-
-        if (meshId) {
-            return meshId;
-        }
-
-        console.warn(`⚠️ Unknown WASM mesh index: ${wasmMeshId}, cannot find corresponding mesh ID`);
-        // Return a placeholder that won't match any registered mesh
-        return `unknown_mesh_${wasmMeshId}`;
-    }
-
-    // Phase 6: 2-pass WASM rendering (triangles + lines) - eliminates TypeScript entity iteration
-    render(wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number, get_entity_transforms_offset(): number }): void {
+    // B3: 2-pass WASM rendering (triangles + lines) driven by the per-mesh draw table.
+    // WASM keeps same-mesh entities contiguous (B2 mesh buckets), so each mesh is one
+    // drawIndexed over [bucketStart, bucketStart+count) of the shared instance buffer —
+    // no per-frame regrouping, no per-frame buffer creation.
+    render(wasmModule?: { memory: WebAssembly.Memory, get_mesh_bucket_start(_meshIndex: number): number, get_mesh_bucket_count(_meshIndex: number): number }): void {
         const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
         const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
         const instanceBuffer = this.bufferManager.getInstanceBuffer();
@@ -401,18 +370,22 @@ export class WebGPURendererV2 {
         // rebinding the shared buffers at byte offsets.
         renderPass.setVertexBuffer(0, sharedVertexBuffer);
         renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16');
+        // B3: the bulk-uploaded instance buffer is bound once too; per-mesh draws select
+        // their contiguous slice via firstInstance (instance-step attributes honor it).
+        renderPass.setVertexBuffer(1, instanceBuffer);
 
-        const maxSafeInstanceCount = 1000; // Conservative safety upper bound
+        // Matches WASM MAX_ENTITIES; counts beyond this indicate a corrupt read, not a big scene.
+        const maxSafeInstanceCount = 10000;
         const instanceCount = this.bufferManager.getWasmEntityCount();
 
         // 🔒 CRITICAL: Validate instance count before rendering to prevent ghost triangles
-        if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount) {
+        if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount && wasmModule) {
 
             // PASS 1: Render triangle entities (sphere, cube, pyramid...)
-            this.renderWasmInstancesByMode(renderPass, this.renderPipeline, instanceCount, 'triangles', wasmModule);
+            this.drawMeshBuckets(renderPass, this.renderPipeline, 'triangles', wasmModule);
 
             // PASS 2: Render line entities (grid)
-            this.renderWasmInstancesByMode(renderPass, this.linePipeline, instanceCount, 'lines', wasmModule);
+            this.drawMeshBuckets(renderPass, this.linePipeline, 'lines', wasmModule);
 
         } else if (instanceCount > maxSafeInstanceCount) {
             console.error(`❌ Suspicious instance count ${instanceCount} - refusing to render (possible buffer corruption)`);
@@ -424,102 +397,30 @@ export class WebGPURendererV2 {
         this.device.queue.submit([commandBuffer]);
     }
 
-    // New method: Render WASM instances filtered by render mode (triangles or lines)
-    private renderWasmInstancesByMode(
+    // B3: walk the per-mesh draw table for one pass (triangles or lines): one
+    // drawIndexed per registered mesh with live instances. Zero allocations, zero
+    // buffer creation — everything was bound once by render().
+    private drawMeshBuckets(
         renderPass: any, // GPURenderPassEncoder
         pipeline: GPURenderPipeline,
-        instanceCount: number,
         renderMode: RenderMode,
-        wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number, get_entity_transforms_offset(): number }
+        wasmModule: { get_mesh_bucket_start(_meshIndex: number): number, get_mesh_bucket_count(_meshIndex: number): number }
     ): void {
         renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, this.bindGroup);
 
-        if (!wasmModule?.memory) {
-            console.error(`❌ WASM module not available for ${renderMode} pass`);
-            return;
+        for (const [meshId, allocation] of this.bufferManager.getMeshAllocations()) {
+            if (allocation.renderMode !== renderMode) continue;
+
+            const meshIndex = this.bufferManager.getMeshIndex(meshId);
+            if (meshIndex === undefined) continue;
+
+            const bucketCount = wasmModule.get_mesh_bucket_count(meshIndex);
+            if (bucketCount === 0) continue;
+
+            const firstInstance = wasmModule.get_mesh_bucket_start(meshIndex);
+            renderPass.drawIndexed(allocation.indexCount, bucketCount, allocation.firstIndex, allocation.baseVertex, firstInstance);
         }
-
-        // Get WASM metadata info
-        const metadataOffset = wasmModule.get_entity_metadata_offset();
-        const metadataSize = wasmModule.get_entity_metadata_size();
-
-        const wasmMemory = wasmModule.memory.buffer;
-
-        // Group entities by mesh type, filtering for this render mode
-        const meshGroups = new Map<string, number[]>(); // meshId -> array of entity indices
-
-        for (let entityIndex = 0; entityIndex < instanceCount; entityIndex++) {
-            try {
-                const wasmMeshId = this.getEntityMeshId(wasmMemory, metadataOffset, metadataSize, entityIndex);
-                const meshId = this.wasmMeshIdToString(wasmMeshId);
-
-                // Filter by the mesh's registered render mode (from its MeshRenderer.renderMode),
-                // not a hard-coded id allowlist — so any mesh id renders in the correct pass.
-                if (this.bufferManager.getMeshRenderMode(meshId) !== renderMode) {
-                    continue; // Skip entities that don't match this render mode
-                }
-
-                if (!meshGroups.has(meshId)) {
-                    meshGroups.set(meshId, []);
-                }
-                meshGroups.get(meshId)!.push(entityIndex);
-            } catch (error) {
-                console.error(`❌ Error reading mesh_id for entity ${entityIndex} in ${renderMode} pass:`, error);
-            }
-        }
-
-        // Render each mesh group for this mode
-        for (const [meshId, entityIndices] of meshGroups) {
-            if (entityIndices.length === 0) continue;
-
-            const allocation = this.bufferManager.getMeshAllocation(meshId);
-            if (!allocation) {
-                console.warn(`⚠️ Mesh allocation not found for '${meshId}' - skipping ${entityIndices.length} entities`);
-                continue;
-            }
-
-            // Temporary approach: build a contiguous instance buffer per mesh group
-            // because entity indices in WASM memory are not guaranteed contiguous per mesh.
-
-            // We need to be able to either copy and use the wasm memory as-is
-            // or we need to re-think the whole rendering wasm approach...
-
-            if (wasmModule?.memory && entityIndices.length > 0) {
-                const wasmMemory = wasmModule.memory.buffer;
-                const transformsOffset = wasmModule.get_entity_transforms_offset();
-
-                // Create temporary instance buffer with only this mesh's entity data
-                const meshInstanceData = new Float32Array(entityIndices.length * 20); // 20 floats per entity
-
-                for (let i = 0; i < entityIndices.length; i++) {
-                    const entityIndex = entityIndices[i]!;
-                    const entityDataOffset = transformsOffset + (entityIndex * 20 * 4);
-                    const entityData = new Float32Array(wasmMemory, entityDataOffset, 20);
-
-                    // Copy this entity's data to contiguous position in mesh buffer
-                    meshInstanceData.set(entityData, i * 20);
-                }
-
-                // Create temporary GPU buffer for this mesh group (one allocation per draw call)
-                const meshInstanceBuffer = this.device.createBuffer({
-                    size: meshInstanceData.byteLength,
-                    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-                    mappedAtCreation: true,
-                });
-                new Float32Array(meshInstanceBuffer.getMappedRange()).set(meshInstanceData);
-                meshInstanceBuffer.unmap();
-
-                // Use the contiguous mesh instance buffer; geometry comes from the bind-once
-                // atlas via firstIndex/baseVertex (indices are mesh-relative 0-based).
-                renderPass.setVertexBuffer(1, meshInstanceBuffer, 0);
-                renderPass.drawIndexed(allocation.indexCount, entityIndices.length, allocation.firstIndex, allocation.baseVertex, 0);
-
-                // Note: Don't destroy buffer immediately - GPU commands are async
-                // Buffer will be garbage collected when commands complete
-            }
-        }
-
     }
 
     updateCamera(viewProjectionMatrix: Float32Array): void {
