@@ -2,7 +2,7 @@
 // Bridge between TypeScript Scene system and WASM physics simulation
 
 import { GameObject } from './gameobject';
-import { RigidBody } from './components';
+import { RigidBody, Vector3 } from './components';
 import { WasmLoader } from './wasm-loader';
 
 export interface WasmPhysicsInterface {
@@ -32,7 +32,8 @@ export interface WasmPhysicsInterface {
     get_entity_stride(): number;
     debug_get_entity_mesh_id(_index: number): number;
 
-    // TODO: make these return a vec3 or similar
+    // Per-component scalar getters by design: the wasm32 C ABI cannot return structs,
+    // so vec3 aggregation happens bridge-side (getEntityPosition/getEntityVelocity below).
 
     // Entity position getters
     get_entity_position_x(_index: number): number;
@@ -176,7 +177,7 @@ export class WasmPhysicsBridge {
             color.z, // Blue
             color.w, // Alpha
             meshIndex,
-            0, // material ID (TODO: implement material system)
+            0, // material ID — single default material until the Phase 9 asset/material pipeline (GAME_ENGINE_PLAN.md)
             mass,
             extents.x, // Use extents.x as radius for backward compatibility
             isKinematic
@@ -294,28 +295,50 @@ export class WasmPhysicsBridge {
         }
     }
 
-    // Get physics data for entity (for reading from WASM)
-    public getEntityData(wasmEntityId: number): { position: { x: number; y: number; z: number } } | null {
+    // Entity position as a vec3 (aggregates the scalar WASM getters)
+    public getEntityPosition(wasmEntityId: number): Vector3 | null {
         if (!this.wasm) return null;
 
         try {
-            const x = this.wasm.get_entity_position_x(wasmEntityId);
-            const y = this.wasm.get_entity_position_y(wasmEntityId);
-            const z = this.wasm.get_entity_position_z(wasmEntityId);
-
             return {
-                position: { x, y, z }
+                x: this.wasm.get_entity_position_x(wasmEntityId),
+                y: this.wasm.get_entity_position_y(wasmEntityId),
+                z: this.wasm.get_entity_position_z(wasmEntityId),
             };
         } catch (error) {
-            console.warn(`Failed to get entity data for ${wasmEntityId}:`, error);
+            console.warn(`Failed to get entity position for ${wasmEntityId}:`, error);
             return null;
         }
     }
 
-    // Set kinematic state for entity
+    // Entity velocity as a vec3 (aggregates the scalar WASM getters)
+    public getEntityVelocity(wasmEntityId: number): Vector3 | null {
+        if (!this.wasm) return null;
+
+        try {
+            return {
+                x: this.wasm.get_entity_velocity_x(wasmEntityId),
+                y: this.wasm.get_entity_velocity_y(wasmEntityId),
+                z: this.wasm.get_entity_velocity_z(wasmEntityId),
+            };
+        } catch (error) {
+            console.warn(`Failed to get entity velocity for ${wasmEntityId}:`, error);
+            return null;
+        }
+    }
+
+    // Get physics data for entity (for reading from WASM)
+    public getEntityData(wasmEntityId: number): { position: Vector3 } | null {
+        const position = this.getEntityPosition(wasmEntityId);
+        return position ? { position } : null;
+    }
+
+    // Set kinematic state for entity.
+    // TODO(Stage B4/B6 ABI window — docs/instanced-rendering-refactor-plan.md "Agreed sequencing"):
+    // there is no set_entity_kinematic WASM export; is_kinematic is fixed at add_entity time.
+    // Runtime toggling needs the entity-flags ABI rework (rides with physics_enabled/use_gravity).
     public setKinematic(_wasmEntityId: number, kinematic: boolean): void {
-        console.log(`🎮 Set entity ${_wasmEntityId} kinematic: ${kinematic}`);
-        // TODO: Implement WASM kinematic state update
+        console.warn(`⚠️ setKinematic(${kinematic}) for entity ${_wasmEntityId} is NOT applied in WASM — kinematic state is fixed at registration (see Stage B4/B6 ABI work)`);
     }
 
     // Set collision shape for entity
@@ -408,25 +431,20 @@ export class WasmPhysicsBridge {
             }
 
             // Read actual position from WASM physics simulation
-            try {
-                const newX = this.wasm.get_entity_position_x(wasmEntityId);
-                const newY = this.wasm.get_entity_position_y(wasmEntityId);
-                const newZ = this.wasm.get_entity_position_z(wasmEntityId);
-
-                // Update GameObject transform with new physics position
-                gameObject.transform.setPosition(newX, newY, newZ);
-
-                // Also update RigidBody velocity for consistency
-                const velX = this.wasm.get_entity_velocity_x(wasmEntityId);
-                const velY = this.wasm.get_entity_velocity_y(wasmEntityId);
-                const velZ = this.wasm.get_entity_velocity_z(wasmEntityId);
-
-                rigidBody.velocity.x = velX;
-                rigidBody.velocity.y = velY;
-                rigidBody.velocity.z = velZ;
-            } catch (error) {
-                console.warn(`Failed to sync physics results for entity ${wasmEntityId}:`, error);
+            const position = this.getEntityPosition(wasmEntityId);
+            const velocity = this.getEntityVelocity(wasmEntityId);
+            if (!position || !velocity) {
+                console.warn(`Failed to sync physics results for entity ${wasmEntityId}`);
+                continue;
             }
+
+            // Update GameObject transform with new physics position
+            gameObject.transform.setPosition(position.x, position.y, position.z);
+
+            // Also update RigidBody velocity for consistency
+            rigidBody.velocity.x = velocity.x;
+            rigidBody.velocity.y = velocity.y;
+            rigidBody.velocity.z = velocity.z;
         }
     }
 
