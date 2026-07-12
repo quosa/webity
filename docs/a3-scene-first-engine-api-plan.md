@@ -30,9 +30,10 @@ State (2026-07-11): **312 Jest tests** + Zig 8/8 + typecheck + lint green on `ma
 - ✅ **Inc 8** legacy removed (eager registration, `registerEntitiesWithWasm`, string `MeshRenderer` ctor, compat shim, `scene.init(renderer)`); stale docs fixed. (PR #9.)
 - ◑ **Inc 9** ergonomics (partial): `RigidBody { kinematic }` opt + `RigidBody.staticBody()` DONE; `GameObject.cube/sphere/grid` sugar not built (low priority).
 
-**Still open — the one thing left for "Scene = pure data":** follow-up #11 below (move
-`physicsBridge` ownership + `mount`/`update`/`render` from Scene to Engine). Characterization
-net for it landed in PR #12.
+**✅ A3 COMPLETE (PR #14):** the last piece — "Scene = pure data" — is done. `physicsBridge`
+ownership + `mount`/`update`/`render` moved from Scene to Engine; the Scene is now GameObjects +
+camera + input + lifecycle hooks only. Characterization net landed in PR #12; render parity
+confirmed by the Playwright snapshots on #14.
 
 **To resume in a fresh worktree** (a3 worktree is git-only; build artifacts + node_modules are gitignored):
 1. `npm install`
@@ -208,28 +209,24 @@ Verified against `main`; the migration did not cause these:
       read per-entity in the render loop. That removes the per-mesh-id "one mode per id"
       limitation (same mesh drawn both ways) and the registration threading — but it's a WASM
       ABI change, so it rides with #8/#9 rather than the TS-only pass above.
-11. **Scene is still the runtime coordinator, not pure data — the core A3 goal is unfinished
-    (found reviewing PR #11, 2026-07-11):** the target footprint says *"Scene … no renderer/WASM
-    held,"* but today the `Scene` **owns** the `WasmPhysicsBridge` (`scene-system.ts:46`, public)
-    and runs the whole runtime: `mount()` registers entities (`:191`), `update()` drives
-    `physicsBridge.update()` then `render()` (`:238`), and `render()` reads WASM memory + calls the
-    renderer (`:262`). The Engine is just device + loop scheduling delegating to the Scene.
-    - **Why it matters:** "Scene = pure data" is the whole point of A3; until the runtime moves to
-      the Engine, `mount()`/`update()`/`render()` living on the Scene is the wrong side.
-    - **Target:** the Engine owns `renderer` **and** `physicsBridge`; the Scene holds only
-      GameObjects + camera + input config + `awake/start/update`(components) hooks. `Engine.loadScene`
-      does registration; the Engine frame loop runs input → components → `bridge.update` → render.
-    - **The real cost — ~60 `scene.physicsBridge.*` call sites** must re-route: scene debug/console
-      hooks (stats, collision counters, wasm memory), `input-controller.ts:129` (`applyForce`), and
-      ~a dozen tests. Expose a read-only `engine.physics`/stats accessor for the debug hooks and give
-      the input controller a bridge handle. Own PR — bigger than #11, touches every scene + tests.
-      PR #11's `mount(renderer, wasm)` (Engine supplies the module) is a first nudge in this direction.
+11. **✅ DONE (PR #14) — Engine owns the runtime; Scene is pure data.** The `Scene` no longer
+    owns the `WasmPhysicsBridge` or runs `mount`/`update`/`render`. The Engine owns the bridge
+    (fresh per `loadScene`), does entity registration, and drives the frame via `tick()` (input →
+    components → `bridge.update` → render); the Scene keeps `updateComponents`/`getViewProjection
+    Matrix`/`bindRuntime` + lifecycle. Input force routes through `RigidBody.applyForce` (Engine-
+    wired bridge handle), not the Scene. The ~60 `scene.physicsBridge.*` debug hooks re-routed to
+    `engine.physicsBridge`; 6 custom-loop demo scenes migrated to `engine.start()/stop()`; tests
+    migrated. Render parity confirmed by Playwright snapshots. Also fixed an asymmetric runtime
+    unregister (static entities now removed from WASM too — Fable review, `c593997`).
 
 ## Resume pointer
 Core A3 **merged to `main`** (PR #8 + #9), plus follow-ups #10/#11/#12. Green on `main`:
 typecheck / **312 Jest** / Zig 8/8 (CI) / lint / builds. To resume in a fresh worktree:
 `npm install` → `npm run build:wasm` → baseline.
 
-**Next actionable:** follow-up **#11** — the Engine-owns-the-runtime refactor (Scene → pure
-data). PR #12 pinned the update/render/sync seam it moves, so it now has a regression net.
-The WASM-ABI cluster (#1/#8/#9) remains a separate, later effort.
+**A3 is complete** (PRs #8–#14). Remaining engine work is tracked above but is no longer A3:
+- The **WASM-ABI cluster** (#1 `physics_enabled` gate, #8 `useGravity`, #9 static-entity
+  rotation) — a Zig/ABI effort (`build:wasm` + regression).
+- **A5** bridge TODOs (the last Stage-A leftover in the instanced-rendering plan).
+- **Stage B** proper (B1–B8) in `docs/instanced-rendering-refactor-plan.md` — the actual
+  instanced-rendering perf refactor, which now builds on the clean Engine/Scene split.

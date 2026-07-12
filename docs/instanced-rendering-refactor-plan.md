@@ -40,7 +40,10 @@ Most of **Stage A** landed — but via the separate **A3 scene-first engine API*
 - ◑ **A5** is the only Stage A item left: bridge TODOs still open (`wasm-physics-bridge.ts:35` vec3
   getter, `:179` material id, `:318` kinematic-state).
 - Also since this plan was written: the `Engine` gained restart/scene-switch lifecycle (PR #11), and the
-  `Scene`-owns-runtime cleanup (relevant to B8's sync round-trip) is tracked as a3 follow-up #11.
+  `Engine`-owns-the-runtime refactor landed (PR #14) — the `Engine` now owns the renderer + physics
+  bridge and drives `tick()` (components → physics → render), so **A3 is complete**. This is the clean
+  base Stage B builds on: B3/B8 (kill the per-frame hot loop, trim the sync round-trip) now touch the
+  Engine's `render()`/`tick()`, not a Scene method.
 
 **Not started: Stage B proper (B1–B8)** — the instanced-rendering perf refactor (bind-once atlas,
 bucket-aware removal, per-mesh draw table, storage-buffer instances, widened structs, lighting). This is
