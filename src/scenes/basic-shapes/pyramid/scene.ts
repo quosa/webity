@@ -78,13 +78,13 @@ async function main(): Promise<void> {
 
         (window as any).renderPyramidScene = () => {
             console.log('🔺 Re-rendering pyramid scene with WASM...');
-            scene.render();
+            engine.render();
             console.log('✅ Pyramid render complete');
         };
 
         (window as any).debugPyramidScene = () => {
             console.log('🔍 Pyramid Scene Debug Info:');
-            console.log('WASM Stats:', scene.physicsBridge.getStats());
+            console.log('WASM Stats:', engine.physicsBridge?.getStats());
             const entities = scene.getAllGameObjects();
             console.log('Scene Entities:', entities.map((e) => ({
                 name: e.name,

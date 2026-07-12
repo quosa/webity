@@ -156,8 +156,8 @@ function addGameObjectsToScene(scene: Scene): void {
     const playerRigidBody = playerBall.getComponent(RigidBody);
     const playerEntityId = playerRigidBody?.getWasmEntityId();
     if (playerEntityId !== undefined) {
-        scene.physicsBridge.setEntityVelocity(playerEntityId, { x: 0, y: 0, z: 0 });
-        scene.physicsBridge.setEntityPosition(playerEntityId, { x: 0, y: 2, z: 0 });
+        engine?.physicsBridge?.setEntityVelocity(playerEntityId, { x: 0, y: 0, z: 0 });
+        engine?.physicsBridge?.setEntityPosition(playerEntityId, { x: 0, y: 2, z: 0 });
     }
 
     // Reset cube
@@ -165,8 +165,8 @@ function addGameObjectsToScene(scene: Scene): void {
     const cubeRigidBody = controlCube.getComponent(RigidBody);
     const cubeEntityId = cubeRigidBody?.getWasmEntityId();
     if (cubeEntityId !== undefined) {
-        scene.physicsBridge.setEntityVelocity(cubeEntityId, { x: 0, y: 0, z: 0 });
-        scene.physicsBridge.setEntityPosition(cubeEntityId, { x: 3, y: 1, z: 0 });
+        engine?.physicsBridge?.setEntityVelocity(cubeEntityId, { x: 0, y: 0, z: 0 });
+        engine?.physicsBridge?.setEntityPosition(cubeEntityId, { x: 3, y: 1, z: 0 });
     }
 
     // Reset camera

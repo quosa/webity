@@ -4,10 +4,26 @@ import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer, RigidBody, CollisionShape } from '../src/engine/components';
 import { Mesh } from '../src/engine/mesh';
 import { Material } from '../src/engine/material';
+import { WasmLoader } from '../src/engine/wasm-loader';
 import type { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
 
-// Minimal renderer stub: mount() only needs getMeshIndex to resolve a mesh index.
-const stubRenderer = { getMeshIndex: () => 0 } as unknown as WebGPURendererV2;
+// Minimal renderer stub: registration only needs registerMesh + getMeshIndex; clearMeshes runs
+// on scene swap.
+const stubRenderer = {
+    getMeshIndex: () => 0,
+    registerMesh: () => {},
+    clearMeshes: () => {},
+} as unknown as WebGPURendererV2;
+
+// Mount a scene through the Engine with the stub renderer + a real WASM module (the Engine owns
+// registration + the physics bridge now). Bypasses Engine.init()'s real WebGPU device.
+async function mountScene(scene: Scene): Promise<void> {
+    document.body.innerHTML = '<canvas id="webgpu-canvas"></canvas>';
+    const engine = new Engine('webgpu-canvas');
+    (engine as unknown as { renderer: WebGPURendererV2 }).renderer = stubRenderer;
+    (engine as unknown as { wasm: unknown }).wasm = await WasmLoader.loadPhysicsModule();
+    await engine.loadScene(scene);
+}
 
 describe('Scene is pure data before mount (A3)', () => {
     it('builds a full scene with object-mode assets and no renderer/WASM — no throw', () => {
@@ -64,7 +80,7 @@ describe('mount-time inert-collider warning (A3)', () => {
         scene.add(platform);
 
         const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-        await scene.mount(stubRenderer);
+        await mountScene(scene);
 
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('mass 0'));
         warn.mockRestore();
@@ -77,7 +93,7 @@ describe('mount-time inert-collider warning (A3)', () => {
         scene.add(floor);
 
         const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-        await scene.mount(stubRenderer);
+        await mountScene(scene);
 
         expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('mass 0'));
         warn.mockRestore();

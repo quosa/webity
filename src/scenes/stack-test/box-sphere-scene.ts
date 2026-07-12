@@ -10,7 +10,6 @@ let scene: Scene | undefined;
 let engine: Engine | undefined;
 let sphere: GameObject | undefined;
 let box: GameObject | undefined;
-let isPaused = false;
 
 function createBoxSphereTestScene(scene: Scene): void {
     console.log('📦🏀 Creating isolated box-sphere collision test...');
@@ -157,11 +156,11 @@ function moveSphere(xOffset: number): void {
 }
 
 function togglePause(): void {
-    isPaused = !isPaused;
-
-    if (isPaused) {
+    if (engine?.isRunning) {
+        engine.stop();
         console.log('⏸️ Physics paused');
     } else {
+        engine?.start();
         console.log('▶️ Physics resumed');
     }
 }
@@ -180,9 +179,9 @@ async function main(): Promise<void> {
             throw new Error('WebGPU is not supported in this browser');
         }
 
-        // Scene-first engine API: the Engine owns the renderer + WASM (initializeScene builds
-        // the scene and calls engine.loadScene). The custom game loop below drives
-        // scene.update() for pause/resume + FPS, so we don't use engine.start().
+        // Scene-first engine API: the Engine owns the renderer + WASM + the sim/render loop
+        // (initializeScene builds the scene and calls engine.loadScene). engine.start() drives
+        // the loop; a lightweight FPS loop runs alongside. Pause/resume = engine.stop()/start().
         engine = new Engine(canvas);
         await engine.init();
 
@@ -205,79 +204,39 @@ async function main(): Promise<void> {
         await initializeScene();
 
         if (scene) {
-            scene.start();
+            engine.start(); // Engine drives the sim + render loop
 
-            // Animation loop with FPS counter and pause/resume system
-            let lastTime = performance.now();
+            // Lightweight FPS HUD loop (does not drive the sim — the Engine does).
             let frameCount = 0;
-            let lastFpsTime = 0;
-            let isRunning = true;
-            let animationId: number | null = null;
-
-            const gameLoop = (currentTime: number) => {
-                const rawDeltaTime = (currentTime - lastTime) / 1000;
-                const deltaTime = Math.min(rawDeltaTime, 1/30); // Cap at 30fps
-                lastTime = currentTime;
-
-                if (isRunning && !isPaused) {
-                    // Update scene
-                    scene?.update(deltaTime);
-                }
-
-                // Update FPS counter
+            let lastFpsTime = performance.now();
+            const uiLoop = (currentTime: number): void => {
                 frameCount++;
                 if (currentTime - lastFpsTime >= 1000) {
-                    // Update FPS display if element exists
                     const fpsElement = document.getElementById('fps');
                     if (fpsElement) fpsElement.textContent = frameCount.toString();
-
                     frameCount = 0;
                     lastFpsTime = currentTime;
                 }
-
-                animationId = requestAnimationFrame(gameLoop);
+                requestAnimationFrame(uiLoop);
             };
+            requestAnimationFrame(uiLoop);
 
             // Engine control functions
-            (window as any).pauseEngine = () => {
-                console.log('⏸️ Box-sphere engine paused');
-                isRunning = false;
-                if (animationId) {
-                    cancelAnimationFrame(animationId);
-                }
-            };
+            (window as any).pauseEngine = () => { console.log('⏸️ Box-sphere engine paused'); engine?.stop(); };
+            (window as any).resumeEngine = () => { console.log('▶️ Box-sphere engine resumed'); engine?.start(); };
 
-            (window as any).resumeEngine = () => {
-                console.log('▶️ Box-sphere engine resumed');
-                if (!isRunning) {
-                    isRunning = true;
-                    lastTime = performance.now(); // Reset time to avoid large delta
-                    animationId = requestAnimationFrame(gameLoop);
-                }
-            };
-
-            // Enhanced pause functionality for button updates
+            // Pause button toggles the engine and updates its label
             const enhancedTogglePause = () => {
                 togglePause();
-
-                // Update pause button text
                 const pauseButton = document.getElementById('pauseBtn') as HTMLButtonElement;
                 if (pauseButton) {
-                    if (isPaused) {
-                        pauseButton.textContent = '▶️ Resume Physics';
-                    } else {
-                        pauseButton.textContent = '⏸️ Pause Physics';
-                    }
+                    pauseButton.textContent = engine?.isRunning ? '⏸️ Pause Physics' : '▶️ Resume Physics';
                 }
             };
-
-            // Update the button event listener to use enhanced version
             pauseBtn.removeEventListener('click', togglePause);
             pauseBtn.addEventListener('click', enhancedTogglePause);
 
-            // Start the game loop
-            animationId = requestAnimationFrame(gameLoop);
-            console.log('✅ Box-sphere test scene started with game loop');
+            console.log('✅ Box-sphere test scene started');
         }
 
     } catch (error) {

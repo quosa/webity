@@ -283,13 +283,12 @@ export class RigidBody extends Component {
         }
     }
 
-    // Apply force to physics body
+    // Apply force to physics body. The bridge + wasmEntityId are wired by the Engine at
+    // registration (WasmPhysicsBridge.addEntity), so input controllers apply force through the
+    // RigidBody without needing a reference to the Scene or the bridge.
     public applyForce(fx: number, fy: number, fz: number): void {
         if (this.isKinematic || !this.physicsBridge || this.wasmEntityId === undefined) return;
-
-        console.log(`💥 RigidBody.applyForce(${fx}, ${fy}, ${fz}) to entity ${this.wasmEntityId}`);
-        // TODO: Apply force through WASM physics bridge
-        // this.physicsBridge.applyForce(this.wasmEntityId, fx, fy, fz);
+        this.physicsBridge.applyForce(this.wasmEntityId, { x: fx, y: fy, z: fz });
     }
 
     // Set velocity directly

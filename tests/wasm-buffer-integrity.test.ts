@@ -1,35 +1,21 @@
 // tests/wasm-buffer-integrity.test.ts
 // Unit test for WASM buffer data integrity - validates entity data without GPU rendering
 
-import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
 import { MeshRenderer } from '../src/engine/components';
 import { Mesh } from '../src/engine/mesh';
 import { Material } from '../src/engine/material';
-import { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
-import { createTriangleMesh, createCubeMesh } from '../src/renderer/mesh-utils';
-import { setupWebGPUTestEnvironment, WebGPUMockFactory } from './utils/webgpu-mocks';
+import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 
-// Set up WebGPU mocking environment
-setupWebGPUTestEnvironment();
-
-// Mock canvas context
-const mockCanvas = WebGPUMockFactory.createMockCanvas();
-
+// These tests validate the WASM instance buffer directly through the physics bridge (the Engine
+// owns the bridge at runtime, but for a headless buffer check we drive the bridge directly —
+// entities carry a manually-assigned meshIndex, as the Engine would assign at registration).
 describe('WASM Buffer Integrity Tests', () => {
-    let renderer: WebGPURendererV2;
-    let scene: Scene;
+    let bridge: WasmPhysicsBridge;
 
     beforeEach(async () => {
-        // Create renderer and scene
-        renderer = new WebGPURendererV2();
-        await renderer.init(mockCanvas as any);
-
-        // Register triangle and cube meshes
-        renderer.registerMesh('triangle', createTriangleMesh());
-        renderer.registerMesh('cube', createCubeMesh(1));
-
-        scene = new Scene();
+        bridge = new WasmPhysicsBridge();
+        await bridge.init();
     });
 
     test('Single triangle entity WASM buffer data integrity', async () => {
@@ -45,17 +31,16 @@ describe('WASM Buffer Integrity Tests', () => {
         meshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(meshRenderer);
 
-        scene.addGameObject(triangle);
-        await scene.mount(renderer);
+        bridge.addEntity(triangle);
 
         // Get WASM buffer data
-        const stats = scene.physicsBridge.getStats();
+        const stats = bridge.getStats();
         expect(stats.entityCount).toBe(1);
         expect(stats.isInitialized).toBe(true);
 
-        if (scene.physicsBridge.hasWasmModule()) {
-            const wasmMemory = scene.physicsBridge.getWasmMemory();
-            const transformsOffset = scene.physicsBridge.getEntityTransformsOffsetSafe();
+        if (bridge.hasWasmModule()) {
+            const wasmMemory = bridge.getWasmMemory();
+            const transformsOffset = bridge.getEntityTransformsOffsetSafe();
 
             expect(wasmMemory).not.toBeNull();
 
@@ -107,7 +92,7 @@ describe('WASM Buffer Integrity Tests', () => {
         // this is normally done by Scene when adding GameObject
         triangleMeshRenderer.meshIndex = 0; // Simulate assigned mesh index
         triangle.addComponent(triangleMeshRenderer);
-        scene.addGameObject(triangle);
+        bridge.addEntity(triangle);
 
         // Create cube entity
         const cube = new GameObject('test-cube', 'Cube');
@@ -118,19 +103,18 @@ describe('WASM Buffer Integrity Tests', () => {
         // this is normally done by Scene when adding GameObject
         cubeMeshRenderer.meshIndex = 1; // Simulate assigned mesh index
         cube.addComponent(cubeMeshRenderer);
-        scene.addGameObject(cube);
+        bridge.addEntity(cube);
 
         // Initialize scene
-        await scene.mount(renderer);
 
         // Validate WASM stats
-        const stats = scene.physicsBridge.getStats();
+        const stats = bridge.getStats();
         expect(stats.entityCount).toBe(2);
         expect(stats.isInitialized).toBe(true);
 
-        if (scene.physicsBridge.hasWasmModule()) {
-            const wasmMemory = scene.physicsBridge.getWasmMemory();
-            const transformsOffset = scene.physicsBridge.getEntityTransformsOffsetSafe();
+        if (bridge.hasWasmModule()) {
+            const wasmMemory = bridge.getWasmMemory();
+            const transformsOffset = bridge.getEntityTransformsOffsetSafe();
 
             expect(wasmMemory).not.toBeNull();
 
@@ -203,17 +187,16 @@ describe('WASM Buffer Integrity Tests', () => {
             // this is normally done by Scene when adding GameObject
             meshRenderer.meshIndex = 0; // Simulate assigned mesh index
             entity.addComponent(meshRenderer);
-            scene.addGameObject(entity);
+            bridge.addEntity(entity);
         }
 
-        await scene.mount(renderer);
 
-        const stats = scene.physicsBridge.getStats();
+        const stats = bridge.getStats();
         expect(stats.entityCount).toBe(5);
 
-        if (scene.physicsBridge.hasWasmModule()) {
-            const wasmMemory = scene.physicsBridge.getWasmMemory();
-            const transformsOffset = scene.physicsBridge.getEntityTransformsOffsetSafe();
+        if (bridge.hasWasmModule()) {
+            const wasmMemory = bridge.getWasmMemory();
+            const transformsOffset = bridge.getEntityTransformsOffsetSafe();
 
             expect(wasmMemory).not.toBeNull();
 

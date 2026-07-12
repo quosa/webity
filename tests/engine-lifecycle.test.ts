@@ -11,18 +11,22 @@ import type { WasmPhysicsInterface } from '../src/engine/wasm-physics-bridge';
 
 interface FakeScene {
     getAllGameObjects: jest.Mock;
-    mount: jest.Mock;
+    bindRuntime: jest.Mock;
+    awake: jest.Mock;
     start: jest.Mock;
-    update: jest.Mock;
+    updateComponents: jest.Mock;
+    getViewProjectionMatrix: jest.Mock;
     dispose: jest.Mock;
 }
 
 function makeScene(): FakeScene {
     return {
         getAllGameObjects: jest.fn().mockReturnValue([]),
-        mount: jest.fn().mockResolvedValue(undefined),
+        bindRuntime: jest.fn(),
+        awake: jest.fn(),
         start: jest.fn(),
-        update: jest.fn(),
+        updateComponents: jest.fn(),
+        getViewProjectionMatrix: jest.fn().mockReturnValue(new Float32Array(16)),
         dispose: jest.fn(),
     };
 }
@@ -124,9 +128,10 @@ describe('Engine lifecycle', () => {
         // Loop stopped for the swap; old scene torn down; WASM world + renderer meshes cleared.
         expect(engine.isRunning).toBe(false);
         expect(sceneA.dispose).toHaveBeenCalledTimes(1);
-        expect(wasm.init).toHaveBeenCalled();          // unloadCurrent clears the world
+        expect(wasm.init).toHaveBeenCalled();          // fresh bridge.init(wasm) resets the world
         expect(renderer.clearMeshes).toHaveBeenCalled();
-        expect(sceneB.mount).toHaveBeenCalledWith(renderer, wasm);
+        expect(sceneB.bindRuntime).toHaveBeenCalledWith(engine); // Engine binds itself as runtime
+        expect(sceneB.awake).toHaveBeenCalled();
 
         // hasStarted was reset, so the next start() runs the NEW scene's start() once.
         engine.start();

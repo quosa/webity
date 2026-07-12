@@ -149,7 +149,9 @@ async function main() {
         // Test zero-copy rendering validation
         (window as any).testZeroCopyRendering = () => {
             console.log('🧪 Testing Zero-Copy Rendering Pipeline...');
-            const stats = scene.physicsBridge.getStats();
+            const physicsBridge = engine.physicsBridge;
+            if (!physicsBridge) return;
+            const stats = physicsBridge.getStats();
             console.log('📊 Physics Stats:', stats);
 
             if (stats.entityCount > 0) {
@@ -159,16 +161,17 @@ async function main() {
             }
 
             console.log('🎯 Testing render() method...');
-            scene.render(); // Force call to test zero-copy path
+            engine.render(); // Force call to test zero-copy path
         };
 
         // Test WASM buffer access
         (window as any).testWasmBuffers = () => {
             console.log('🧪 Testing WASM Buffer Access...');
 
-            if (scene.physicsBridge.hasWasmModule()) {
-                const wasmMemory = scene.physicsBridge.getWasmMemory();
-                const transformsOffset = scene.physicsBridge.getEntityTransformsOffset();
+            const physicsBridge = engine.physicsBridge;
+            if (physicsBridge && physicsBridge.hasWasmModule()) {
+                const wasmMemory = physicsBridge.getWasmMemory();
+                const transformsOffset = physicsBridge.getEntityTransformsOffset();
 
                 console.log('📦 WASM Memory Buffer:', wasmMemory);
                 console.log('🎯 Transforms Offset:', transformsOffset);
@@ -177,7 +180,7 @@ async function main() {
                     console.log('✅ Zero-copy buffer access ready!');
 
                     // Read actual transform data from WASM memory
-                    const entityCount = scene.physicsBridge.getStats().entityCount;
+                    const entityCount = physicsBridge.getStats().entityCount;
                     console.log(`📊 Entity count: ${entityCount}`);
 
                     if (entityCount > 0) {

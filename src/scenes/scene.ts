@@ -74,7 +74,7 @@ async function main(): Promise<void> {
         };
 
         (window as any).logWasmInfo = () => {
-            console.log('📊 WASM Stats:', scene.physicsBridge.getStats());
+            console.log('📊 WASM Stats:', engine.physicsBridge?.getStats());
         };
 
         console.log('✅ static scene running');

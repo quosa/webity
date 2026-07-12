@@ -185,8 +185,10 @@ function createInitialStackScene(scene: Scene): void {
 // 🔍 COLLISION MONITORING FUNCTIONS - New real-time collision tracking
 function checkForNewCollisions() {
     if (!scene || !isMonitoringCollisions) return;
+    const physicsBridge = engine?.physicsBridge;
+    if (!physicsBridge) return;
 
-    const currentCollisionCounter = scene.physicsBridge.getCollisionEventCounter();
+    const currentCollisionCounter = physicsBridge.getCollisionEventCounter();
 
     // Check if new collisions occurred since last check
     if (currentCollisionCounter > lastLoggedCollisionCounter) {
@@ -194,7 +196,7 @@ function checkForNewCollisions() {
         console.log(`🚨 NEW COLLISION EVENTS: ${newCollisions} new collision(s) detected (total: ${currentCollisionCounter})`);
 
         // Log details of the latest collision
-        const lastCollisionData = scene.physicsBridge.getLastCollisionData();
+        const lastCollisionData = physicsBridge.getLastCollisionData();
         if (lastCollisionData) {
             // Map WASM entity IDs back to GameObjects
             const entities = scene.getAllGameObjects().filter(e => e.name !== 'Floor');
@@ -219,8 +221,10 @@ function checkForNewCollisions() {
 (window as any).startCollisionMonitoring = () => {
     if (!scene) return;
 
+    const physicsBridge = engine?.physicsBridge;
+    if (!physicsBridge) return;
     isMonitoringCollisions = true;
-    lastLoggedCollisionCounter = scene.physicsBridge.getCollisionEventCounter();
+    lastLoggedCollisionCounter = physicsBridge.getCollisionEventCounter();
     console.log('🔍 COLLISION MONITORING STARTED - Real-time collision logging enabled');
     console.log(`   Starting from collision count: ${lastLoggedCollisionCounter}`);
 };
@@ -233,7 +237,7 @@ function checkForNewCollisions() {
 (window as any).clearCollisionEvents = () => {
     if (!scene) return;
 
-    scene.physicsBridge.clearCollisionEventCounter();
+    engine?.physicsBridge?.clearCollisionEventCounter();
     lastLoggedCollisionCounter = 0;
     console.log('🔍 COLLISION EVENT COUNTER CLEARED');
 };
@@ -242,21 +246,23 @@ function checkForNewCollisions() {
     if (!scene) return;
 
     console.log('🧪 Running physics diagnostics...');
+    const physicsBridge = engine?.physicsBridge;
+    if (!physicsBridge) return;
 
     // Get physics stats
-    const stats = scene.physicsBridge.getStats();
+    const stats = physicsBridge.getStats();
     console.log('📊 Physics Bridge Stats:', stats);
 
     // Get collision information
-    const collisionState = scene.physicsBridge.getWasmModule()?.get_collision_state?.();
+    const collisionState = physicsBridge.getWasmModule()?.get_collision_state?.();
     console.log('💥 Collision State:', `0x${collisionState?.toString(16).padStart(2, '0')}`);
 
     // 🔍 COLLISION EVENT LOGGING - New collision logging system
-    const collisionEventCounter = scene.physicsBridge.getCollisionEventCounter();
+    const collisionEventCounter = physicsBridge.getCollisionEventCounter();
     console.log(`🔍 COLLISION EVENTS: ${collisionEventCounter} total collisions detected`);
 
     if (collisionEventCounter > 0) {
-        const lastCollisionData = scene.physicsBridge.getLastCollisionData();
+        const lastCollisionData = physicsBridge.getLastCollisionData();
         if (lastCollisionData) {
             console.log('🔍 LAST COLLISION DATA:');
             console.log(`   Entity IDs: ${lastCollisionData.entity1} vs ${lastCollisionData.entity2}`);
@@ -294,7 +300,7 @@ function checkForNewCollisions() {
             console.log(`📍 ${entity.name} (WASM ID ${wasmId}): pos=(${transform.position.x.toFixed(3)}, ${finalY.toFixed(3)}, ${transform.position.z.toFixed(3)})`);
 
             // 🔍 WASM DEBUG: Get actual collision radius being used by WASM physics
-            const wasmCollisionRadius = scene.physicsBridge.getEntityCollisionRadius(wasmId);
+            const wasmCollisionRadius = physicsBridge.getEntityCollisionRadius(wasmId);
             const typescriptRadius = rigidBody?.extents.x;
 
             console.log(`🔍 COLLISION RADIUS DEBUG for ${entity.name}:`);

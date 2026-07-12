@@ -1,31 +1,22 @@
-// Characterization tests for the runtime seam that the A3 "Engine owns the runtime" refactor
-// (plan item #11) will MOVE from Scene to Engine. These pin the CURRENT observable behavior so
-// the refactor can be verified to reproduce it:
-//   1. Scene.update() pipeline order: input → components → physics → render, and render()'s
-//      exact calls into the renderer (mapInstanceDataFromWasm → updateCamera → render) + guards.
-//   2. Engine's rAF loop body: scene.update() is called with a delta clamped to 1/30, and the
-//      frame clock advances.
-//   3. WasmPhysicsBridge.update() sync-back: dynamic bodies' transforms/velocities are written
-//      from WASM; kinematic bodies are skipped.
-//
-// When #11 lands, tests (1) migrate from scene.update()/render() to the Engine-driven path;
-// (2) and (3) are entry-point-stable (Engine loop + bridge survive the move).
+// Runtime-seam tests. Originally characterization tests written BEFORE the "Engine owns the
+// runtime" refactor (plan #11); now that the runtime lives on the Engine, they assert the Engine
+// reproduces the pinned behavior:
+//   1. Engine.tick() pipeline order: scene.updateComponents → bridge.update → render (which calls
+//      the renderer as mapInstanceDataFromWasm → updateCamera → render), plus render() guards.
+//   2. Engine's rAF loop body: tick runs with a delta clamped to 1/30, and the clock advances.
+//   3. WasmPhysicsBridge.update() sync-back: dynamic bodies written from WASM, kinematic skipped.
 
 import { Engine } from '../src/engine/engine';
-import { Scene } from '../src/engine/scene-system';
 import { GameObject } from '../src/engine/gameobject';
-import { MeshRenderer, RigidBody, CollisionShape } from '../src/engine/components';
-import { Mesh } from '../src/engine/mesh';
-import { Material } from '../src/engine/material';
-import { PerspectiveCamera } from '../src/engine/camera-object';
+import { RigidBody, CollisionShape } from '../src/engine/components';
 import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
 import type { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
+import type { Scene } from '../src/engine/scene-system';
 import type { WasmPhysicsInterface } from '../src/engine/wasm-physics-bridge';
 
-// A physicsBridge stub whose render-facing getters report one entity with valid WASM memory.
+// A bridge stub whose render-facing getters report one entity with valid WASM memory.
 function makeBridgeStub(calls?: string[]) {
     return {
-        init: jest.fn(),
         update: jest.fn(() => calls?.push('physics')),
         hasWasmModule: jest.fn().mockReturnValue(true),
         getStats: jest.fn().mockReturnValue({ entityCount: 1, isInitialized: true }),
@@ -41,50 +32,49 @@ function makeRendererStub(calls?: string[]) {
         getAspectRatio: jest.fn().mockReturnValue(1),
         updateCamera: jest.fn(() => calls?.push('camera')),
         render: jest.fn(() => calls?.push('render')),
-        getMeshIndex: jest.fn().mockReturnValue(0),
     };
 }
 
-function sceneWithMocks(bridge: object, renderer: object): Scene {
-    const scene = new Scene();
-    scene.setCamera(new PerspectiveCamera('cam'));
-    (scene as unknown as { physicsBridge: object }).physicsBridge = bridge;
-    (scene as unknown as { renderer: object }).renderer = renderer;
-    return scene;
+function makeSceneStub(calls?: string[]) {
+    return {
+        updateComponents: jest.fn(() => calls?.push('components')),
+        getViewProjectionMatrix: jest.fn().mockReturnValue(new Float32Array(16)),
+    };
 }
 
-describe('Scene.update() pipeline (seam moving to Engine in #11)', () => {
-    it('runs input → components → physics → render in that order, then draws', () => {
+// Build an Engine with injected stubs (bypasses init()'s real WebGPU + WASM).
+function engineWith(scene: object, bridge: object, renderer: object): Engine {
+    document.body.innerHTML = '<canvas id="webgpu-canvas"></canvas>';
+    const engine = new Engine('webgpu-canvas');
+    (engine as unknown as { renderer: WebGPURendererV2 }).renderer = renderer as unknown as WebGPURendererV2;
+    (engine as unknown as { bridge: object }).bridge = bridge;
+    (engine as unknown as { currentScene: Scene }).currentScene = scene as unknown as Scene;
+    return engine;
+}
+
+describe('Engine.tick() pipeline (moved from Scene in #11)', () => {
+    it('runs components → physics → render in order, then draws', () => {
         const calls: string[] = [];
+        const scene = makeSceneStub(calls);
         const bridge = makeBridgeStub(calls);
         const renderer = makeRendererStub(calls);
-        const scene = sceneWithMocks(bridge, renderer);
+        const engine = engineWith(scene, bridge, renderer);
 
-        const go = new GameObject('go');
-        go.addComponent(new MeshRenderer(Mesh.createCube('cube'), Material.default));
-        const goUpdate = jest.spyOn(go, 'update').mockImplementation(() => { calls.push('component'); });
-        scene.add(go);
+        (engine as unknown as { tick(dt: number): void }).tick(0.016);
 
-        (scene as unknown as { activeInputController: { update: jest.Mock } }).activeInputController = {
-            update: jest.fn(() => calls.push('input')),
-        };
-
-        scene.update(0.016);
-
-        // Documented pipeline order (scene-system.ts:238-258).
-        expect(calls).toEqual(['input', 'component', 'physics', 'map', 'camera', 'render']);
+        expect(calls).toEqual(['components', 'physics', 'map', 'camera', 'render']);
+        expect(scene.updateComponents).toHaveBeenCalledWith(0.016);
         expect(bridge.update).toHaveBeenCalledWith(0.016);
         expect(renderer.mapInstanceDataFromWasm).toHaveBeenCalledWith(expect.any(ArrayBuffer), 0, 1);
-        goUpdate.mockRestore();
     });
 
     it('render() skips drawing when the scene has no WASM entities', () => {
         const bridge = makeBridgeStub();
         bridge.getStats.mockReturnValue({ entityCount: 0, isInitialized: true });
         const renderer = makeRendererStub();
-        const scene = sceneWithMocks(bridge, renderer);
+        const engine = engineWith(makeSceneStub(), bridge, renderer);
 
-        scene.render();
+        engine.render();
 
         expect(renderer.mapInstanceDataFromWasm).not.toHaveBeenCalled();
         expect(renderer.render).not.toHaveBeenCalled();
@@ -94,9 +84,9 @@ describe('Scene.update() pipeline (seam moving to Engine in #11)', () => {
         const bridge = makeBridgeStub();
         bridge.hasWasmModule.mockReturnValue(false);
         const renderer = makeRendererStub();
-        const scene = sceneWithMocks(bridge, renderer);
+        const engine = engineWith(makeSceneStub(), bridge, renderer);
 
-        scene.render();
+        engine.render();
 
         expect(renderer.render).not.toHaveBeenCalled();
     });
@@ -115,11 +105,11 @@ describe('Engine rAF loop body (delta clamping + clock)', () => {
         global.cancelAnimationFrame = jest.fn() as unknown as typeof cancelAnimationFrame;
     });
 
-    function startedEngine(sceneUpdate: jest.Mock): Engine {
+    function startedEngine(updateComponents: jest.Mock): Engine {
         const engine = new Engine('webgpu-canvas');
         (engine as unknown as { renderer: WebGPURendererV2 }).renderer = makeRendererStub() as unknown as WebGPURendererV2;
-        (engine as unknown as { wasm: WasmPhysicsInterface }).wasm = { init: jest.fn() } as unknown as WasmPhysicsInterface;
-        const scene = { getAllGameObjects: () => [], mount: jest.fn().mockResolvedValue(undefined), start: jest.fn(), update: sceneUpdate, dispose: jest.fn() };
+        (engine as unknown as { bridge: object }).bridge = makeBridgeStub();
+        const scene = { updateComponents, getViewProjectionMatrix: () => new Float32Array(16), start: jest.fn() };
         (engine as unknown as { currentScene: object }).currentScene = scene;
         (engine as unknown as { hasStarted: boolean }).hasStarted = true; // skip scene.start()
         return engine;
@@ -151,7 +141,7 @@ describe('Engine rAF loop body (delta clamping + clock)', () => {
     });
 });
 
-describe('WasmPhysicsBridge.update() sync-back (stays on the bridge across #11)', () => {
+describe('WasmPhysicsBridge.update() sync-back', () => {
     function fakeWasm(): WasmPhysicsInterface {
         return {
             init: jest.fn(),

@@ -271,7 +271,7 @@ async function initFancyPhysicsScene(): Promise<void> {
 
         // Collision stats function for manual checking
         (window as any).checkCollisions = () => {
-            const wasmModule = scene.physicsBridge.getWasmModule();
+            const wasmModule = engine.physicsBridge?.getWasmModule();
             if (wasmModule && wasmModule.get_collision_state) {
                 const collisionState = wasmModule.get_collision_state();
                 console.log(`📊 Current collision state: 0x${collisionState.toString(16)} (${collisionState})`);

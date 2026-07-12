@@ -272,9 +272,10 @@
             // Refresh scene reference
             scene = window.physicsTestScene || window.scene;
             
-            // Check if physics system is running
-            if (scene && scene.physicsBridge) {
-                const stats = scene.physicsBridge.getStats();
+            // Check if physics system is running (the Engine owns the physics bridge now)
+            const engine = window.engine;
+            if (scene && engine && engine.physicsBridge) {
+                const stats = engine.physicsBridge.getStats();
                 
                 markValidation('physics-bridge-check', 'pass', 'Physics bridge initialized');
                 markValidation('rigidbody-check', 'pass', 'RigidBody components created');
