@@ -1617,18 +1617,22 @@ cluster below.)
 
 The plan's "Tracked follow-up tasks" + "Backlog" sections hold the full detail; the still-open ones:
 
-- **WASM-ABI cluster** — three findings with one root cause (*the `add_entity` ABI / entity-flag
-  model is too coarse*). **Scheduled: rides in the Stage B B4/B6 ABI-break window** so the entity
-  ABI is broken once, not twice:
-  - (#1) `physics_enabled = mass != 0` gate (`game_engine.zig:1194`) — zero-mass RigidBody colliders
-    are silently inert; replace with a real `physics_enabled` flag (care: mesh-only static entities).
-  - (#8) `RigidBody.useGravity` is a write-only no-op — **decision: Option A, make it real** (per-entity
-    `use_gravity` bit; unlocks the legitimate "dynamic + no-gravity" floating-body state). Existing
-    `useGravity=false` call sites are latent-intent bugs to revisit per-site.
-  - (#9) static (mesh-only) entities silently drop their initial rotation — `add_entity` has no
-    rotation param; add it and build the matrix at add time.
-  - (#10 deeper form) per-entity `render_mode` in WASM `EntityMetadata` (removes the per-mesh-id
-    "one mode per id" limitation of the TS-side fix from PR #10).
+- ✅ **WASM-ABI cluster — DONE (2026-07-12, Stage B B4/B6 window)** as the **BodyType model**
+  (single `BodyType` enum DYNAMIC/KINEMATIC/STATIC + stored mass + `gravityScale` float; the
+  solver uses `inv_mass`, 0 = immovable — same representation as PhysX/Jolt/Rapier):
+  - ✅ (#1) real `physics_enabled` param on `add_entity` — the `mass != 0` gate is gone;
+    KINEMATIC/STATIC bodies are immovable colliders regardless of mass, and DYNAMIC mass ≤ 0
+    clamps to 1 with a warning (a poisoned inv_mass can never NaN a simulation island).
+  - ✅ (#8) `gravityScale: f32` supersedes the dead `useGravity` bool (1.0 normal, 0.0 space,
+    0.16 moon, -1.0 reverse); DYNAMIC-only. TS `RigidBody` keeps `useGravity` as a bool
+    accessor over the float, so existing call sites now DO what their authors intended.
+  - ✅ (#9) `add_entity` takes rotation (radians) and bakes T*R*S at add time — static
+    entities keep their initial rotation without a per-frame kinematic sync.
+  - Bonus: `set_entity_body_type` (runtime transitions — a KINEMATIC elevator whose cable
+    snaps becomes DYNAMIC and its stored mass goes live) + `set_entity_gravity_scale`.
+  - ❌ (#10 deeper form, per-entity `render_mode`) **consciously dropped**: B3's per-mesh draw
+    table made per-mesh mode the aligned choice; per-entity mode would need (mesh × mode)
+    buckets. Revisit only if a real "same mesh drawn both ways" need appears.
 - (#4) shared `runScene()` bootstrap helper, adopted across the ~15 demo scenes.
 - (#7) coverage refinement — `engine.ts` (~24%), `scene-system.ts` `setCamera`/`camera` getter,
   `camera-object.ts` `OrthographicCamera` branch, `components.ts` RigidBody lifecycle branches; Zig

@@ -62,8 +62,21 @@ Most of **Stage A** landed — but via the separate **A3 scene-first engine API*
 - ⚠️ Snapshot parity (`browser-tests`) still needs a run on real hardware — WebGPU can't
   initialize in the headless dev container.
 
-**Remaining: B4–B8** (extern-struct layout + the folded-in WASM-ABI cluster, storage-buffer
-instances, 96 B instance struct, normals/uv + lambert, sync-round-trip trim).
+**B4 ✅ + B6 ✅ + WASM-ABI cluster ✅ (2026-07-12):** extern `RenderingComponent` (96 B, offsets
+asserted in `entity_abi_test.zig`) + extern `EntityMetadata`; the entity-flags ABI landed as the
+**BodyType model** (single enum + stored mass + gravityScale float, solver uses `inv_mass`
+with 0 = immovable): `add_entity(id, pos, rot, scale, color, mesh, mat, bodyType, mass,
+gravityScale, radius, physicsEnabled)`; rotation baked at add time (a3 #9); real
+`physics_enabled` param (a3 #1 — zero-mass colliders footgun gone; KINEMATIC/STATIC are
+immovable colliders regardless of mass, DYNAMIC mass ≤ 0 clamps to 1 with a warning);
+`gravityScale` float supersedes `useGravity` (a3 #8 — 0.0 = space, 0.16 = moon; TS keeps a
+bool accessor); `set_entity_body_type` (runtime transitions, stored mass becomes live) +
+`set_entity_gravity_scale` exports.
+- **Consciously deferred: per-entity `render_mode` (a3 #10 deeper form)** — B3's per-mesh draw
+  table made per-*mesh* mode the architecturally aligned choice; per-entity mode would need
+  two-level (mesh × mode) buckets. Revisit only if a real "same mesh drawn both ways" need appears.
+
+**Remaining: B5, B7, B8** (storage-buffer instances, normals/uv + lambert, sync-round-trip trim).
 
 ## Agreed sequencing (decided 2026-07-12)
 

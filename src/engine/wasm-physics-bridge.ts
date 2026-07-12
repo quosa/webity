@@ -2,7 +2,7 @@
 // Bridge between TypeScript Scene system and WASM physics simulation
 
 import { GameObject } from './gameobject';
-import { RigidBody, Vector3 } from './components';
+import { BodyType, RigidBody, Vector3 } from './components';
 import { WasmLoader } from './wasm-loader';
 
 export interface WasmPhysicsInterface {
@@ -10,10 +10,14 @@ export interface WasmPhysicsInterface {
     init(): void;
     update(deltaTime: number): void;
 
-    // Entity lifecycle
-    add_entity(id: number, x: number, y: number, z: number, scaleX: number, scaleY: number, scaleZ: number, colorR: number, colorG: number, colorB: number, colorA: number, meshId: number, materialId: number, mass: number, radius: number, isKinematic: boolean): void;
+    // Entity lifecycle. Entity-flags ABI (B4/B6 window): rotation is baked at add time,
+    // bodyType is 0=DYNAMIC 1=KINEMATIC 2=STATIC, gravityScale applies to DYNAMIC only,
+    // and physicsEnabled=false keeps mesh-only decorative entities fully inert.
+    add_entity(id: number, x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number, scaleX: number, scaleY: number, scaleZ: number, colorR: number, colorG: number, colorB: number, colorA: number, meshId: number, materialId: number, bodyType: number, mass: number, gravityScale: number, radius: number, physicsEnabled: boolean): void;
     remove_entity(id: number): void;
     get_entity_count(): number;
+    set_entity_body_type(id: number, bodyType: number): void;
+    set_entity_gravity_scale(id: number, scale: number): void;
 
     // Physics interaction
     apply_force(id: number, fx: number, fy: number, fz: number): void;
@@ -147,10 +151,13 @@ export class WasmPhysicsBridge {
             rigidBody.setPhysicsBridge(this);
         }
 
-        // Add to WASM entity system (ALL entities for zero-copy rendering)
-        // Default values for non-physics entities
+        // Add to WASM entity system (ALL entities for zero-copy rendering).
+        // No RigidBody -> physicsEnabled=false: the entity is decorative (renders, but
+        // never collides or simulates); its bodyType/mass values are moot.
+        const physicsEnabled = !!rigidBody;
+        const bodyType = rigidBody ? rigidBody.bodyType : BodyType.STATIC;
         const mass = rigidBody ? rigidBody.mass : 0;
-        const isKinematic = rigidBody ? rigidBody.isKinematic : true; // Static by default
+        const gravityScale = rigidBody ? rigidBody.gravityScale : 0;
 
         // Get color and mesh ID from MeshRenderer if it exists
         const color = meshRenderer ? meshRenderer.color : { x: 1, y: 1, z: 1, w: 1 }; // Default white
@@ -162,18 +169,19 @@ export class WasmPhysicsBridge {
         const collisionShape = rigidBody ? rigidBody.collisionShape : 0; // Default to SPHERE
         const extents = rigidBody ? rigidBody.extents : { x: 0.5, y: 0.5, z: 0.5 }; // Default sphere
 
-        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, mass=${mass}, shape=${collisionShape}, extents=(${extents.x}, ${extents.y}, ${extents.z}), isKinematic=${isKinematic}`);
+        console.log(`   ➡️  Adding entity ${wasmEntityId} to WASM: position=(${transform.position.x}, ${transform.position.y}, ${transform.position.z}), scale=(${transform.scale.x}, ${transform.scale.y}, ${transform.scale.z}), color=(${color.x}, ${color.y}, ${color.z}, ${color.w}), meshIndex=${meshIndex}, bodyType=${bodyType}, mass=${mass}, gravityScale=${gravityScale}, shape=${collisionShape}, extents=(${extents.x}, ${extents.y}, ${extents.z}), physicsEnabled=${physicsEnabled}`);
 
-        // 🔍 RADIUS TRACING: Debug the exact radius value being passed to WASM
-        console.log(`🔍 RADIUS TRACE: Passing radius=${extents.x} to WASM add_entity for "${gameObject.name}" (entity ${wasmEntityId})`);
-
-        // Always use legacy add_entity to preserve colors, mass, scale, etc.
-        // Then set collision shape separately if enhanced collision system is available
+        // Initial rotation is baked into the WASM transform at add time (degrees -> radians),
+        // so static/rotated entities render correctly without a per-frame sync.
+        const DEG2RAD = Math.PI / 180;
         this.wasm.add_entity(
             wasmEntityId,
             transform.position.x,
             transform.position.y,
             transform.position.z,
+            transform.rotation.x * DEG2RAD,
+            transform.rotation.y * DEG2RAD,
+            transform.rotation.z * DEG2RAD,
             transform.scale.x,
             transform.scale.y,
             transform.scale.z,
@@ -183,9 +191,11 @@ export class WasmPhysicsBridge {
             color.w, // Alpha
             meshIndex,
             0, // material ID — single default material until the Phase 9 asset/material pipeline (GAME_ENGINE_PLAN.md)
+            bodyType,
             mass,
+            gravityScale,
             extents.x, // Use extents.x as radius for backward compatibility
-            isKinematic
+            physicsEnabled
         );
 
         // If enhanced collision system is available, update the collision shape
@@ -338,12 +348,20 @@ export class WasmPhysicsBridge {
         return position ? { position } : null;
     }
 
-    // Set kinematic state for entity.
-    // TODO(Stage B4/B6 ABI window — docs/instanced-rendering-refactor-plan.md "Agreed sequencing"):
-    // there is no set_entity_kinematic WASM export; is_kinematic is fixed at add_entity time.
-    // Runtime toggling needs the entity-flags ABI rework (rides with physics_enabled/use_gravity).
-    public setKinematic(_wasmEntityId: number, kinematic: boolean): void {
-        console.warn(`⚠️ setKinematic(${kinematic}) for entity ${_wasmEntityId} is NOT applied in WASM — kinematic state is fixed at registration (see Stage B4/B6 ABI work)`);
+    // Runtime body-type transition (DYNAMIC/KINEMATIC/STATIC). The stored mass
+    // survives transitions and becomes live when the body turns DYNAMIC.
+    public setBodyType(wasmEntityId: number, bodyType: BodyType): void {
+        this.wasm?.set_entity_body_type(wasmEntityId, bodyType);
+    }
+
+    // Legacy convenience mapping onto the body-type model.
+    public setKinematic(wasmEntityId: number, kinematic: boolean): void {
+        this.setBodyType(wasmEntityId, kinematic ? BodyType.KINEMATIC : BodyType.DYNAMIC);
+    }
+
+    // Runtime gravity-scale change (DYNAMIC bodies only; 1.0 normal, 0.0 space).
+    public setGravityScale(wasmEntityId: number, scale: number): void {
+        this.wasm?.set_entity_gravity_scale(wasmEntityId, scale);
     }
 
     // Set collision shape for entity

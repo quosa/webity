@@ -48,6 +48,7 @@ export class WasmLoader {
             // Validate that all required v2 API functions exist
             const requiredFunctions = [
                 'init', 'update', 'add_entity', 'remove_entity', 'get_entity_count',
+                'set_entity_body_type', 'set_entity_gravity_scale',
                 'apply_force', 'set_entity_position', 'set_entity_velocity', 'set_entity_rotation', 'set_entity_scale',
                 'get_entity_transforms_offset', 'get_entity_metadata_offset', 'get_entity_metadata_size',
                 'get_mesh_bucket_start', 'get_mesh_bucket_count',
@@ -100,6 +101,8 @@ export class WasmLoader {
                 add_entity: wasmExports.add_entity,
                 remove_entity: wasmExports.remove_entity,
                 get_entity_count: wasmExports.get_entity_count,
+                set_entity_body_type: wasmExports.set_entity_body_type,
+                set_entity_gravity_scale: wasmExports.set_entity_gravity_scale,
 
                 // Physics interaction
                 apply_force: wasmExports.apply_force,

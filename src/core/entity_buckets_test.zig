@@ -39,7 +39,7 @@ fn expectBucketMatchesScan(mesh_index: u32) !void {
 // prove they still resolve to the right entity after the arrays compact.
 fn addTagged(id: u32, mesh_index: u32) void {
     const tag: f32 = @floatFromInt(id);
-    engine.add_entity(id, tag, 0, 0, 1, 1, 1, 1, 1, 1, 1, mesh_index, 0, 1.0, 0.5, false);
+    engine.add_entity(id, tag, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, mesh_index, 0, 0, 1.0, 1.0, 0.5, true);
 }
 
 fn expectIdIntegrity(ids: []const u32) !void {
