@@ -187,9 +187,11 @@ export class Engine implements SceneRuntime {
     }
 
     unregisterRuntimeEntity(gameObject: GameObject): void {
-        if (gameObject.getComponent(RigidBody)) {
-            this.bridge?.removePhysicsEntity(gameObject.id);
-        }
+        // Registration adds every MeshRenderer entity to WASM (physics AND static), so removal
+        // must be symmetric — otherwise a runtime-removed static prop leaks its WASM entity and
+        // keeps rendering. removePhysicsEntity keys off gameObject.id and safely no-ops if the
+        // entity was never registered.
+        this.bridge?.removePhysicsEntity(gameObject.id);
     }
 
     /** Unmount the current scene: tear down its input, drop its physics world + renderer meshes. */
