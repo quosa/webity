@@ -1571,7 +1571,13 @@ test "physics simulation - gravity" {
 # TODO ITEMS
 
 Most of these were resolved by the **A3 scene-first engine API** effort (`Engine` facade + data-only
-`Scene`) — see `docs/a3-scene-first-engine-api-plan.md` for the full breakdown and remaining follow-ups.
+`Scene`) — see `docs/completed/a3-scene-first-engine-api-plan.md` for the full breakdown and remaining
+follow-ups.
+
+**🎯 Current priority (2026-07): Stage B — instanced-rendering foundation**, per
+`docs/instanced-rendering-refactor-plan.md` (the only active plan). Sequence: A5 bridge TODOs first,
+then B1→B2→B3 (kill the per-frame `createBuffer` hot loop), then B4+B6 folded together with the
+WASM-ABI cluster (see "Follow-up ideas" below), then B5/B7/B8.
 
 - ✅ **DONE (A3):** `refactor to engine.ts and use scene/game_object/component/camera etc.` — the
   `Engine(canvas)` facade (`init`/`loadScene`/`start`/`stop`/`deinit`) landed in PR #8; scenes are built
@@ -1581,9 +1587,8 @@ Most of these were resolved by the **A3 scene-first engine API** effort (`Engine
   are registered once (fail-loud, no double-registration), and `awake()`/`start()` run *after*
   registration — not before. The old "register eagerly in `addGameObject` before the bridge is ready +
   re-register everything in `init()`" trap is gone.
-  - NOTE (wording): this fixed the registration *ordering*. The `Scene` is not yet fully "pure data" —
-    it still owns the `WasmPhysicsBridge` and runs `mount`/`update`/`render`. Moving the runtime to the
-    Engine is the last A3 purity step (tracked as a3 plan follow-up #11).
+  - NOTE (wording): this fixed the registration *ordering*; the "Scene = pure data" purity step
+    landed later in PR #14 (Engine owns the bridge and drives `tick()`).
 - ✅ **DONE (A3 / PR #10):** `BUG: meshes have to be added before scene.init()` — `Engine.loadScene`
   registers each `MeshRenderer`'s mesh from the scene tree before mounting, so setup is no longer
   order-fragile; PR #10 also made the draw pass come from the mesh's render mode (not a hard-coded id
@@ -1593,10 +1598,84 @@ Most of these were resolved by the **A3 scene-first engine API** effort (`Engine
   zero-copy)` — WebGPU can't map WASM linear memory as a GPU buffer, so the accepted model is
   **copy-based**: one bulk `writeBuffer` + zero per-frame allocation + one draw call per mesh. See
   `docs/instanced-rendering-refactor-plan.md`.
-- ◑ **PARTIAL:** `check the game object and component life cycle` — awake/start/update lifecycle is in
-  place and driven by the Engine; the remaining piece is moving `mount`/`update`/`render` ownership from
-  Scene to Engine (a3 plan follow-up #11, characterization net landed in PR #12).
+- ✅ **DONE (PR #14):** `check the game object and component life cycle` — awake/start/update lifecycle
+  is in place and driven by the Engine; `mount`/`update`/`render` ownership moved from Scene to Engine
+  (characterization net landed in PR #12, refactor in PR #14).
 - ✅ **DONE:** `sort out camera and perspective to match original v1 snapshots in browser tests` —
   camera unified (`CameraComponent` is the single view/projection source) and the `browser-tests`
   Playwright snapshots pass against the original v1 references.
--
+
+# FOLLOW-UP IDEAS FROM COMPLETED PLANS
+
+Completed plan docs live in `docs/completed/`. This section collects the open ideas they left
+behind, grouped by originating plan, so they aren't lost when the plans went to the archive. Items
+here are **not scheduled** — pull them into an active plan when their time comes. (The active plan
+is `docs/instanced-rendering-refactor-plan.md`; its Stage B ABI window already absorbs the first
+cluster below.)
+
+## From `docs/completed/a3-scene-first-engine-api-plan.md` (A3 scene-first engine API)
+
+The plan's "Tracked follow-up tasks" + "Backlog" sections hold the full detail; the still-open ones:
+
+- **WASM-ABI cluster** — three findings with one root cause (*the `add_entity` ABI / entity-flag
+  model is too coarse*). **Scheduled: rides in the Stage B B4/B6 ABI-break window** so the entity
+  ABI is broken once, not twice:
+  - (#1) `physics_enabled = mass != 0` gate (`game_engine.zig:1194`) — zero-mass RigidBody colliders
+    are silently inert; replace with a real `physics_enabled` flag (care: mesh-only static entities).
+  - (#8) `RigidBody.useGravity` is a write-only no-op — **decision: Option A, make it real** (per-entity
+    `use_gravity` bit; unlocks the legitimate "dynamic + no-gravity" floating-body state). Existing
+    `useGravity=false` call sites are latent-intent bugs to revisit per-site.
+  - (#9) static (mesh-only) entities silently drop their initial rotation — `add_entity` has no
+    rotation param; add it and build the matrix at add time.
+  - (#10 deeper form) per-entity `render_mode` in WASM `EntityMetadata` (removes the per-mesh-id
+    "one mode per id" limitation of the TS-side fix from PR #10).
+- (#4) shared `runScene()` bootstrap helper, adopted across the ~15 demo scenes.
+- (#7) coverage refinement — `engine.ts` (~24%), `scene-system.ts` `setCamera`/`camera` getter,
+  `camera-object.ts` `OrthographicCamera` branch, `components.ts` RigidBody lifecycle branches; Zig
+  `test:wasm:coverage` top-up.
+- (Inc 9, low priority) `GameObject.cube/sphere/grid` construction sugar.
+- **Pre-existing bug backlog** (verified NOT A3 regressions): input-demo forward/back controls
+  swapped; physics-scene up/down/left/right force buttons log but have no visible effect
+  (`applyForce` → `wasm.apply_force` path — worth a look during Stage B3 while in that code);
+  box-sphere scene ball sinks into box + dead buttons; pyramid scene should split into simple +
+  all-mesh-types validation scenes; decorative floors have no collider (user decision: leave as-is).
+
+## From `docs/completed/collision-plan.md` (box & plane colliders)
+
+Box-collider scope shipped (Phase 8, Sept 2025); two designed-but-unbuilt pieces remain:
+
+- **Plane colliders** (plan Phase 6): sphere-plane + box-plane collision functions in
+  `game_core.zig`, a `PlaneCollider` component (normal/distance, infinite vs bounded), use cases:
+  ground planes, walls, trigger planes. Would let the decorative grid floors become real floors
+  without box hacks.
+- **Collision callbacks** (plan "Future Enhancement"): enter/stay/exit collision-pair tracking in
+  WASM (`get_collision_events_count`/`get_collision_event` exports) + a TypeScript
+  `CollisionEventManager` dispatching typed `CollisionEvent`s to GameObject callbacks — the
+  foundation for gameplay logic, sounds, and effects on impact.
+
+## From `docs/completed/physics-and-colliders-restoration-plan.md` (Phase 8 restoration)
+
+- All original goals achieved; no open items. Residual known imperfection: stacked boxes still show
+  **minimal jitter when viewed up close** (GPT-5 stabilization made it acceptable at normal zoom) —
+  further contact-stabilization polish is optional future work.
+
+## From `docs/completed/input_system_plan.md` (input system)
+
+The plan's "FUTURE ROADMAP" section sketches an input-system evolution (v2/v3); highest-value items:
+
+- **Known limitation (real bug-shaped gap):** gamepad analog magnitude is captured but discarded —
+  stick deflection maps to binary pressed/released, so force application is all-or-nothing
+  (constant `forceStrength`). Analog-proportional forces are the first thing to fix here.
+- Input System v2 candidates: configurable key bindings (persistent, alternative keys), full
+  gamepad support (analog sticks, vibration), mouse look + scroll, input context/mode stack
+  (game/menu/dialogue).
+- Later (v3+): touch/gestures, input buffering & combos, input recording/playback (great for
+  browser-test automation), component-based `InputReceiver`, input-driven animation, config UI,
+  accessibility features.
+
+## From `docs/completed/renderer-v2-integration-plan.md`, `docs/completed/wasm-refactor-to-ecs.md`, `docs/completed/webgpu-refactor-plan.md`
+
+- **No open follow-ups.** Renderer-v2's remaining physics work was folded into Phase 8 (done);
+  the ECS refactor closed clean; webgpu-refactor's trailing TODOs (restore buffer-manager, rename
+  to engine.ts, re-add input) were all superseded by the A3 Engine facade and the input system,
+  and its "Phase 6 WASM integration prep" by the accepted copy-based model.

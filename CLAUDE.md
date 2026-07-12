@@ -165,7 +165,9 @@ npm test
 - ✅ **Renderer V2 Integration** - Completed with copy-based WASM integration
 - ✅ **ECS Architecture** - 4-component system fully implemented
 - ✅ **GameObject System** - Unity-style architecture working
-- 🎯 **Current Priority** - Physics collision system improvements (Phase 8)
+- ✅ **Collision System (Phase 8)** - Box/sphere collision with SAT + stabilization (Sept 2025)
+- ✅ **A3 Scene-First Engine API** - `Engine` facade owns the runtime; `Scene` is pure data (PRs #8-#14)
+- 🎯 **Current Priority** - Stage B instanced-rendering foundation (see `docs/instanced-rendering-refactor-plan.md`)
 
 **Performance Baseline:**
 - 19.6KB optimized WASM module
@@ -187,5 +189,7 @@ NEVER proactively create documentation files (*.md) or README files. Only create
 # project-specific-notes
 - This is a mature 3D game engine with comprehensive test coverage
 - Focus on code quality and maintaining the 38+ test baseline
-- Physics collision improvements are the current development priority
+- Stage B of `docs/instanced-rendering-refactor-plan.md` is the current development priority
+- Completed plan docs are archived in `docs/completed/`; their open ideas live in the
+  "Follow-up ideas from completed plans" section of `GAME_ENGINE_PLAN.md`
 - Scene system provides multiple working demos for testing and validation
