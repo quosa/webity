@@ -76,7 +76,13 @@ bool accessor); `set_entity_body_type` (runtime transitions, stored mass becomes
   table made per-*mesh* mode the architecturally aligned choice; per-entity mode would need
   two-level (mesh × mode) buckets. Revisit only if a real "same mesh drawn both ways" need appears.
 
-**Remaining: B5, B7, B8** (storage-buffer instances, normals/uv + lambert, sync-round-trip trim).
+**B5 ✅ (2026-07-12):** per-instance data is a `var<storage, read> array<InstanceData>` fetched by
+`instance_index` (includes `firstInstance` — bucket ranges index the global array, no remapping);
+instance vertex stream deleted; bind group rebuilt only on buffer growth; compute-readable for
+Stage C culling/redirection.
+
+**Remaining: B7, B8** (normals/uv + lambert — intentionally changes visuals, needs a snapshot
+refresh on real hardware; sync-round-trip trim).
 
 ## Agreed sequencing (decided 2026-07-12)
 
