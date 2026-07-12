@@ -8,19 +8,19 @@ import { WasmLoader } from './wasm-loader';
 export interface WasmPhysicsInterface {
     // WASM module exports (will be implemented in Phase 3)
     init(): void;
-    update(_deltaTime: number): void;
+    update(deltaTime: number): void;
 
     // Entity lifecycle
-    add_entity(_id: number, _x: number, _y: number, _z: number, _scaleX: number, _scaleY: number, _scaleZ: number, _colorR: number, _colorG: number, _colorB: number, _colorA: number, _meshId: number, _materialId: number, _mass: number, _radius: number, _isKinematic: boolean): void;
-    remove_entity(_id: number): void;
+    add_entity(id: number, x: number, y: number, z: number, scaleX: number, scaleY: number, scaleZ: number, colorR: number, colorG: number, colorB: number, colorA: number, meshId: number, materialId: number, mass: number, radius: number, isKinematic: boolean): void;
+    remove_entity(id: number): void;
     get_entity_count(): number;
 
     // Physics interaction
-    apply_force(_id: number, _fx: number, _fy: number, _fz: number): void;
-    set_entity_position(_id: number, _x: number, _y: number, _z: number): void;
-    set_entity_velocity(_id: number, _vx: number, _vy: number, _vz: number): void;
-    set_entity_rotation(_id: number, _rx: number, _ry: number, _rz: number): void;
-    set_entity_scale(_id: number, _sx: number, _sy: number, _sz: number): void;
+    apply_force(id: number, fx: number, fy: number, fz: number): void;
+    set_entity_position(id: number, x: number, y: number, z: number): void;
+    set_entity_velocity(id: number, vx: number, vy: number, vz: number): void;
+    set_entity_rotation(id: number, rx: number, ry: number, rz: number): void;
+    set_entity_scale(id: number, sx: number, sy: number, sz: number): void;
 
     // Zero-copy buffer access for GPU (future integration)
     get_entity_transforms_offset(): number;
@@ -29,49 +29,49 @@ export interface WasmPhysicsInterface {
 
     // Mesh-bucket draw table (B2/B3): same-mesh entities are contiguous in the
     // instance buffer; each mesh renders as one drawIndexed over [start, start+count)
-    get_mesh_bucket_start(_meshIndex: number): number;
-    get_mesh_bucket_count(_meshIndex: number): number;
+    get_mesh_bucket_start(meshIndex: number): number;
+    get_mesh_bucket_count(meshIndex: number): number;
 
     // Debug functions for buffer layout investigation
     get_entity_size(): number;
     get_entity_stride(): number;
-    debug_get_entity_mesh_id(_index: number): number;
+    debug_get_entity_mesh_id(index: number): number;
 
     // Per-component scalar getters by design: the wasm32 C ABI cannot return structs,
     // so vec3 aggregation happens bridge-side (getEntityPosition/getEntityVelocity below).
 
     // Entity position getters
-    get_entity_position_x(_index: number): number;
-    get_entity_position_y(_index: number): number;
-    get_entity_position_z(_index: number): number;
+    get_entity_position_x(index: number): number;
+    get_entity_position_y(index: number): number;
+    get_entity_position_z(index: number): number;
 
     // Entity velocity getters
-    get_entity_velocity_x(_index: number): number;
-    get_entity_velocity_y(_index: number): number;
-    get_entity_velocity_z(_index: number): number;
+    get_entity_velocity_x(index: number): number;
+    get_entity_velocity_y(index: number): number;
+    get_entity_velocity_z(index: number): number;
 
     // Collision shape configuration (optional - may not be present in older WASM)
-    spawn_entity_with_collider?(_x: number, _y: number, _z: number, _collision_shape: number, _extent_x: number, _extent_y: number, _extent_z: number, _mesh_type_id: number): number;
-    set_entity_collision_shape?(_id: number, _shape: number, _extent_x: number, _extent_y: number, _extent_z: number): void;
-    get_entity_collision_shape?(_id: number): number;
-    get_entity_collision_extent_x?(_id: number): number;
-    get_entity_collision_extent_y?(_id: number): number;
-    get_entity_collision_extent_z?(_id: number): number;
+    spawn_entity_with_collider?(x: number, y: number, z: number, collision_shape: number, extent_x: number, extent_y: number, extent_z: number, mesh_type_id: number): number;
+    set_entity_collision_shape?(id: number, shape: number, extent_x: number, extent_y: number, extent_z: number): void;
+    get_entity_collision_shape?(id: number): number;
+    get_entity_collision_extent_x?(id: number): number;
+    get_entity_collision_extent_y?(id: number): number;
+    get_entity_collision_extent_z?(id: number): number;
 
     // Collision debug functions
     get_collision_checks_performed(): number;
     get_collisions_detected(): number;
     get_kinematic_collision_flag(): boolean;
     get_collision_state(): number;
-    debug_get_entity_physics_info(_id: number, _info_type: number): number;
-    debug_get_collision_radius?(_id: number): number;
+    debug_get_entity_physics_info(id: number, info_type: number): number;
+    debug_get_collision_radius?(id: number): number;
     get_wasm_version(): number;
 
     // Collision event logging functions
     get_collision_event_counter(): number;
     get_last_collision_entities(): number; // Returns packed u64 (32 bits each entity ID)
-    get_last_collision_pos1(_axis: number): number; // axis: 0=x, 1=y, 2=z
-    get_last_collision_pos2(_axis: number): number; // axis: 0=x, 1=y, 2=z
+    get_last_collision_pos1(axis: number): number; // axis: 0=x, 1=y, 2=z
+    get_last_collision_pos2(axis: number): number; // axis: 0=x, 1=y, 2=z
     clear_collision_event_counter(): void;
 
     // WASM memory

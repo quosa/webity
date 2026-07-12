@@ -3,8 +3,8 @@ import { GameObject } from './gameobject';
 import { RigidBody, CameraComponent } from './components';
 
 export interface InputController {
-    handleInput(_key: number, _pressed: boolean): void;
-    update(_deltaTime: number): void;
+    handleInput(key: number, pressed: boolean): void;
+    update(deltaTime: number): void;
 }
 
 /**

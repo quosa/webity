@@ -9,7 +9,7 @@ declare const GPUBufferUsage: {
     MAP_READ: number; MAP_WRITE: number; COPY_SRC: number; COPY_DST: number; INDEX: number; VERTEX: number; UNIFORM: number; STORAGE: number; INDIRECT: number; QUERY_RESOLVE: number;
 };
 // Minimal shape for GPUTexture to satisfy TS if DOM lib absent
-interface GPUTexture { createView(_descriptor?: any): any; destroy(): void; }
+interface GPUTexture { createView(descriptor?: any): any; destroy(): void; }
 
 
 // import { EntityManager, EntityData } from './entities';
@@ -19,8 +19,8 @@ import { MeshData, RenderMode } from './mesh-registry';
 // The only WASM surface the render path needs: the per-mesh draw table (B3). Narrow on purpose —
 // render() no longer reads wasm memory, so it must not require `memory` (keeps mocking simple).
 interface MeshBucketSource {
-    get_mesh_bucket_start(_meshIndex: number): number;
-    get_mesh_bucket_count(_meshIndex: number): number;
+    get_mesh_bucket_start(meshIndex: number): number;
+    get_mesh_bucket_count(meshIndex: number): number;
 }
 
 // Types
@@ -52,8 +52,8 @@ export class WebGPURendererV2 {
     private context!: GPUCanvasContext;
     private presentationFormat!: GPUTextureFormat;
 
-    private renderPipeline!: GPURenderPipeline; // main triangle pipeline
-    private linePipeline!: GPURenderPipeline; // line pipeline (for grid)
+    private trianglePipeline!: GPURenderPipeline; // triangle-list pipeline (solid meshes)
+    private linePipeline!: GPURenderPipeline; // line-list pipeline (grids/wireframes)
     private uniformBuffer!: GPUBuffer;
     private bindGroup!: GPUBindGroup;
 
@@ -220,7 +220,7 @@ export class WebGPURendererV2 {
         });
 
         // Create triangle render pipeline (vertex buffer + instance buffer)
-        this.renderPipeline = this.device.createRenderPipeline({
+        this.trianglePipeline = this.device.createRenderPipeline({
             layout: pipelineLayout,
             vertex: {
                 module: vertexModule,
@@ -290,7 +290,7 @@ export class WebGPURendererV2 {
 
         // Create bind group
         this.bindGroup = this.device.createBindGroup({
-            layout: this.renderPipeline.getBindGroupLayout(0),
+            layout: this.trianglePipeline.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
@@ -389,7 +389,7 @@ export class WebGPURendererV2 {
         if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount && wasmModule) {
 
             // PASS 1: Render triangle entities (sphere, cube, pyramid...)
-            this.drawMeshBuckets(renderPass, this.renderPipeline, 'triangles', wasmModule);
+            this.drawMeshBuckets(renderPass, this.trianglePipeline, 'triangles', wasmModule);
 
             // PASS 2: Render line entities (grid)
             this.drawMeshBuckets(renderPass, this.linePipeline, 'lines', wasmModule);
