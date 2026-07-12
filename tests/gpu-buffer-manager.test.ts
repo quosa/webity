@@ -199,9 +199,37 @@ describe('GPUBufferManager', () => {
         test('should return 0 for non-existent mesh offsets', () => {
             const vertexOffset = bufferManager.getVertexBufferOffset('nonexistent');
             const indexOffset = bufferManager.getIndexBufferOffset('nonexistent');
-            
+
             expect(vertexOffset).toBe(0);
             expect(indexOffset).toBe(0);
+        });
+
+        // B1 bind-once atlas: geometry is selected per mesh via
+        // drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance)
+        test('should expose baseVertex/firstIndex in element units for atlas draws', () => {
+            bufferManager.registerMesh('cube', createTestMeshData(8, 36));
+            bufferManager.registerMesh('sphere', createTestMeshData(64, 128));
+
+            const cube = bufferManager.getMeshAllocation('cube')!;
+            const sphere = bufferManager.getMeshAllocation('sphere')!;
+
+            expect(cube.baseVertex).toBe(0);
+            expect(cube.firstIndex).toBe(0);
+            // sphere starts after cube: 8 vertices, 36 uint16 indices (72 B, 4-aligned)
+            expect(sphere.baseVertex).toBe(8);
+            expect(sphere.firstIndex).toBe(36);
+        });
+
+        test('firstIndex accounts for alignment padding after an odd index count', () => {
+            // 30 indices = 60 B, 4-aligned; 5 indices = 10 B -> padded to 12 B
+            bufferManager.registerMesh('first', createTestMeshData(4, 5));
+            bufferManager.registerMesh('second', createTestMeshData(4, 30));
+
+            const second = bufferManager.getMeshAllocation('second')!;
+
+            // firstIndex derives from the padded byte offset (12 B / 2), NOT the raw count (5)
+            expect(second.firstIndex).toBe(6);
+            expect(second.baseVertex).toBe(4);
         });
     });
 

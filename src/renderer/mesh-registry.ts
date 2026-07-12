@@ -16,6 +16,11 @@ export interface MeshAllocation {
     vertexByteSize: number;
     indexByteSize: number;
     renderMode: RenderMode; // Draw pass (triangles vs lines) for this mesh's instances
+    // Bind-once atlas addressing: the shared buffers are bound once per pass and each mesh is
+    // selected via drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance).
+    // Indices stay mesh-relative (0-based), so uint16 limits a single mesh, not the atlas.
+    baseVertex: number;    // vertexOffset in vertices (12 B stride: xyz f32)
+    firstIndex: number;    // indexOffset in indices (2 B stride: uint16)
 }
 
 export class MeshRegistry {
@@ -49,6 +54,10 @@ export class MeshRegistry {
             vertexByteSize: alignedVertexSize,
             indexByteSize: alignedIndexSize,
             renderMode,
+            // Derived from the byte offsets (not cumulative counts) so index-padding from the
+            // 4-byte alignment is accounted for. Vertex allocations are always 12 B multiples.
+            baseVertex: this.totalVertexBytes / 12,
+            firstIndex: this.totalIndexBytes / 2,
         };
 
         this.allocations.set(meshId, allocation);

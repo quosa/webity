@@ -396,6 +396,12 @@ export class WebGPURendererV2 {
             },
         });
 
+        // B1: bind the geometry atlas ONCE per render pass — per-mesh geometry is selected via
+        // drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance), not by
+        // rebinding the shared buffers at byte offsets.
+        renderPass.setVertexBuffer(0, sharedVertexBuffer);
+        renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16');
+
         const maxSafeInstanceCount = 1000; // Conservative safety upper bound
         const instanceCount = this.bufferManager.getWasmEntityCount();
 
@@ -403,10 +409,10 @@ export class WebGPURendererV2 {
         if (instanceCount > 0 && instanceCount <= maxSafeInstanceCount) {
 
             // PASS 1: Render triangle entities (sphere, cube, pyramid...)
-            this.renderWasmInstancesByMode(renderPass, this.renderPipeline, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer, 'triangles', wasmModule);
+            this.renderWasmInstancesByMode(renderPass, this.renderPipeline, instanceCount, 'triangles', wasmModule);
 
             // PASS 2: Render line entities (grid)
-            this.renderWasmInstancesByMode(renderPass, this.linePipeline, instanceCount, sharedVertexBuffer, sharedIndexBuffer, instanceBuffer, 'lines', wasmModule);
+            this.renderWasmInstancesByMode(renderPass, this.linePipeline, instanceCount, 'lines', wasmModule);
 
         } else if (instanceCount > maxSafeInstanceCount) {
             console.error(`❌ Suspicious instance count ${instanceCount} - refusing to render (possible buffer corruption)`);
@@ -423,9 +429,6 @@ export class WebGPURendererV2 {
         renderPass: any, // GPURenderPassEncoder
         pipeline: GPURenderPipeline,
         instanceCount: number,
-        sharedVertexBuffer: GPUBuffer,
-        sharedIndexBuffer: GPUBuffer,
-        _instanceBuffer: GPUBuffer,
         renderMode: RenderMode,
         wasmModule?: { memory: WebAssembly.Memory, get_entity_metadata_offset(): number, get_entity_metadata_size(): number, get_entity_transforms_offset(): number }
     ): void {
@@ -476,14 +479,6 @@ export class WebGPURendererV2 {
                 continue;
             }
 
-            // Set vertex buffer with mesh-specific offset
-            const vertexOffset = this.bufferManager.getVertexBufferOffset(meshId);
-            renderPass.setVertexBuffer(0, sharedVertexBuffer, vertexOffset);
-
-            // Set index buffer with mesh-specific offset
-            const indexOffset = this.bufferManager.getIndexBufferOffset(meshId);
-            renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16', indexOffset);
-
             // Temporary approach: build a contiguous instance buffer per mesh group
             // because entity indices in WASM memory are not guaranteed contiguous per mesh.
 
@@ -515,9 +510,10 @@ export class WebGPURendererV2 {
                 new Float32Array(meshInstanceBuffer.getMappedRange()).set(meshInstanceData);
                 meshInstanceBuffer.unmap();
 
-                // Use the contiguous mesh instance buffer
+                // Use the contiguous mesh instance buffer; geometry comes from the bind-once
+                // atlas via firstIndex/baseVertex (indices are mesh-relative 0-based).
                 renderPass.setVertexBuffer(1, meshInstanceBuffer, 0);
-                renderPass.drawIndexed(allocation.indexCount, entityIndices.length);
+                renderPass.drawIndexed(allocation.indexCount, entityIndices.length, allocation.firstIndex, allocation.baseVertex, 0);
 
                 // Note: Don't destroy buffer immediately - GPU commands are async
                 // Buffer will be garbage collected when commands complete
