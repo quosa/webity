@@ -26,7 +26,7 @@ animation, GPU culling) is designed-for and left unblocked, not built now.
 ## Current state (updated 2026-07-11)
 
 Most of **Stage A** landed — but via the separate **A3 scene-first engine API** effort
-(`docs/a3-scene-first-engine-api-plan.md`), not as the increments below. (Naming collision warning:
+(`docs/completed/a3-scene-first-engine-api-plan.md`), not as the increments below. (Naming collision warning:
 "A3" *there* is the whole scene-first refactor; "A3" *here* is just the chicken-and-egg increment.)
 
 - ✅ **A1** dead render code removed. ✅ **A2** single per-frame `gameObject.update()`.
@@ -48,6 +48,30 @@ Most of **Stage A** landed — but via the separate **A3 scene-first engine API*
 **Not started: Stage B proper (B1–B8)** — the instanced-rendering perf refactor (bind-once atlas,
 bucket-aware removal, per-mesh draw table, storage-buffer instances, widened structs, lighting). This is
 the remaining substance of this plan.
+
+## Agreed sequencing (decided 2026-07-12)
+
+Stage B is the active effort. Order of attack:
+
+1. **A5 first** (small PR) — the three bridge TODOs; closes Stage A completely.
+2. **B1 → B2 → B3** in order — B1 is TS-only and safe; B2 (bucket-aware removal in Zig) is the
+   genuinely new data-structure work and gets its own PR with the bucket-contiguity test; B3 is the
+   payoff (per-mesh draw table, zero per-frame `createBuffer`, lift the 1000-instance cap).
+3. **B4 + B6 + the WASM-ABI cluster as one Zig/ABI effort.** B4 (extern structs + offset asserts) and
+   B6 (96 B instance struct) already break the entity ABI and force a `build:wasm` + regression pass —
+   so the a3-plan follow-up cluster rides in the same window instead of breaking the ABI twice:
+   - real `physics_enabled` flag (replaces the `mass != 0` gate, a3 follow-up #1);
+   - per-entity `use_gravity` bit (**decision: Option A** — make `useGravity` real, unlocks
+     floating-dynamic bodies; a3 follow-up #8);
+   - rotation params on `add_entity` so static entities keep their initial rotation (a3 follow-up #9);
+   - per-entity `render_mode` in `EntityMetadata` (deeper form of a3 follow-up #10).
+   One ABI migration, one regression pass over the mass-0/kinematic/static scenes.
+4. **B5, B7, B8** after — storage-buffer instances, normals/uv + lambert, trim the sync round-trip.
+
+Not scheduled here: the follow-up ledger at the end of `GAME_ENGINE_PLAN.md` (plane colliders,
+collision callbacks, input v2, coverage top-up, pre-existing scene bugs) — pull items from there as
+they become relevant. The physics-scene "force buttons have no effect" bug is worth a look during
+B3 while working in the render/physics data path.
 
 ## Why cleanup before the perf refactor
 
@@ -92,7 +116,7 @@ the "tried to register before WASM was ready" workaround.
 
 ### A4 — Fix the mesh-registration ordering requirement
 Today meshes **must** be registered on the renderer before `scene.init()`, or entities can't find their
-meshes (documented in `GAME_ENGINE_PLAN.md` TODO and `webgpu-refactor-plan.md`). Make mesh lookup
+meshes (documented in `GAME_ENGINE_PLAN.md` TODO and `docs/completed/webgpu-refactor-plan.md`). Make mesh lookup
 tolerant of registration order (resolve mesh IDs lazily at first render, or validate + clear-error at
 `init`), so scene setup isn't order-fragile.
 - **Files:** `src/renderer/mesh-registry.ts`, `src/renderer/webgpu.renderer.ts`,
@@ -178,6 +202,9 @@ Convert GPU-mapped Zig structs to `extern struct` with explicit padding. The cur
 offset read (`webgpu.renderer.ts:330-345`) is fragile because plain Zig structs have no layout guarantee.
 - **Files:** `src/core/game_engine.zig` (`RenderingComponent`/`EntityMetadata` :78-93).
 - **Done when:** Zig test asserts field offsets; layout is guaranteed, not incidental.
+- **Note:** B4+B6 form the ABI-break window that also carries the WASM-ABI cluster
+  (`physics_enabled` flag, `use_gravity` bit, rotation-at-add, per-entity `render_mode`) — see
+  "Agreed sequencing" above.
 
 ### B5 — Instance data → storage buffer
 Move per-instance data from a vertex stream to a `var<storage, read>` buffer indexed by

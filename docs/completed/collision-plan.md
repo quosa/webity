@@ -1,6 +1,9 @@
 # Box and Plane Collider Implementation Plan
 
-**Status**: Planning Phase
+**Status**: ✅ COMPLETED (September 2025) — the box-collider scope shipped as `GAME_ENGINE_PLAN.md`
+Phase 8 (box-box SAT, sphere-box, stabilization, RigidBody CollisionShape support). The **plane
+collider** foundation (Phase 6 below) and the **collision callbacks** enhancement were never built —
+they are tracked in the "Follow-up ideas from completed plans" section of `GAME_ENGINE_PLAN.md`.
 **Priority**: High
 **Dependencies**: Current sphere collision system (✅ Complete)
 **Target**: Add AABB box colliders and prepare plane collider foundation
