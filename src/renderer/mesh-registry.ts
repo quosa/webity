@@ -32,6 +32,15 @@ export class MeshRegistry {
     private meshCount = 0;
     private meshIndexMap = new Map<string, number>();
 
+    // Vertex layout is position-only (xyz f32) today. baseVertex math below divides byte offsets
+    // by this stride, so keep it named + assert allocations divide evenly — B7 (normals/uv) will
+    // widen it and must update this deliberately rather than silently mis-address geometry.
+    private static readonly VERTEX_STRIDE_BYTES = 12; // 3 × f32
+    private static readonly INDEX_STRIDE_BYTES = 2;   // uint16
+    // WASM buckets meshes into MAX_MESH_BUCKETS (game_engine.zig); indices at/after the last
+    // bucket share it and would render with one mesh's geometry — warn instead of failing silently.
+    private static readonly WASM_MAX_MESH_BUCKETS = 64;
+
     // Pre-calculate offsets for mesh data
     allocate(meshId: string, meshData: MeshData, renderMode: RenderMode = 'triangles'): MeshAllocation {
         if (this.allocations.has(meshId)) {
@@ -46,6 +55,16 @@ export class MeshRegistry {
         const alignedVertexSize = Math.ceil(vertexByteSize / 4) * 4;
         const alignedIndexSize = Math.ceil(indexByteSize / 4) * 4;
 
+        // baseVertex/firstIndex are in ELEMENTS, derived from the byte offsets. Guard the stride
+        // assumption so a future vertex-format change (B7) fails loud here instead of rendering
+        // garbage from a fractional/mis-scaled baseVertex.
+        if (this.totalVertexBytes % MeshRegistry.VERTEX_STRIDE_BYTES !== 0) {
+            throw new Error(
+                `MeshRegistry: vertex offset ${this.totalVertexBytes} is not a multiple of the ` +
+                `${MeshRegistry.VERTEX_STRIDE_BYTES}B vertex stride — did the vertex format change?`,
+            );
+        }
+
         const allocation: MeshAllocation = {
             vertexOffset: this.totalVertexBytes,
             vertexCount: meshData.vertices.length / 3, // 3 floats per vertex (x, y, z)
@@ -54,10 +73,10 @@ export class MeshRegistry {
             vertexByteSize: alignedVertexSize,
             indexByteSize: alignedIndexSize,
             renderMode,
-            // Derived from the byte offsets (not cumulative counts) so index-padding from the
-            // 4-byte alignment is accounted for. Vertex allocations are always 12 B multiples.
-            baseVertex: this.totalVertexBytes / 12,
-            firstIndex: this.totalIndexBytes / 2,
+            // Element units (byte offset ÷ stride); index-padding from the 4-byte alignment is
+            // accounted for because both offsets accumulate the aligned sizes.
+            baseVertex: this.totalVertexBytes / MeshRegistry.VERTEX_STRIDE_BYTES,
+            firstIndex: this.totalIndexBytes / MeshRegistry.INDEX_STRIDE_BYTES,
         };
 
         this.allocations.set(meshId, allocation);
@@ -67,6 +86,13 @@ export class MeshRegistry {
         // js Map maintains insertion order, so we can use it
         // to assign mesh indices for use in WASM module
         // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
+        if (this.meshCount >= MeshRegistry.WASM_MAX_MESH_BUCKETS - 1) {
+            console.warn(
+                `MeshRegistry: mesh "${meshId}" registered at index ${this.meshCount} — meshes at ` +
+                `index >= ${MeshRegistry.WASM_MAX_MESH_BUCKETS - 1} share the last WASM mesh bucket ` +
+                `and may render with the wrong geometry (game_engine.zig MAX_MESH_BUCKETS=${MeshRegistry.WASM_MAX_MESH_BUCKETS}).`,
+            );
+        }
         this.meshIndexMap.set(meshId, this.meshCount);
         this.meshCount++;
 
