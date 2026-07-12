@@ -61,7 +61,7 @@ const MeshType = enum(u8) {
 // =============================================================================
 
 // Physics-only component (hot data - cache-friendly)
-const PhysicsComponent = struct {
+pub const PhysicsComponent = struct {
     position: core.Vec3, // World position
     velocity: core.Vec3, // Movement velocity
     force: core.Vec3, // Accumulated forces
@@ -70,26 +70,36 @@ const PhysicsComponent = struct {
     mass: f32, // Physics mass
     radius: f32, // Collision radius/size (legacy - use extents.x for spheres)
     is_kinematic: bool, // Kinematic vs dynamic
+    use_gravity: bool, // Gravity applied during integration (dynamic bodies only; B4/B6 ABI)
     collision_shape: core.CollisionShape, // Shape type for collision detection
     extents: core.Vec3, // Half-extents for boxes, radius in .x for spheres, normal for planes
 };
 
-// Rendering-only component (GPU buffer layout - exactly 20 floats)
-const RenderingComponent = struct {
-    transform_matrix: [16]f32, // 4x4 world transform matrix (64 bytes)
-    color: [4]f32, // RGBA color (16 bytes)
-    // Total: exactly 80 bytes (20 floats) for zero-copy GPU mapping
+// Rendering-only component — GPU instance data, mapped 1:1 into the GPU instance
+// buffer. `extern struct` so the layout is GUARANTEED (B4), not incidental; widened
+// to 96 bytes (24 floats, std430 16-byte-friendly) so future workloads (crowd
+// animation, vegetation tint/wind/LOD) extend per-instance data without a re-layout (B6).
+pub const RenderingComponent = extern struct {
+    transform_matrix: [16]f32, // 64 B @ 0  — 4x4 world transform (column-major)
+    color: [4]f32, //             16 B @ 64 — RGBA tint
+    anim_time: f32, //             4 B @ 80 — march/wind/VAT time (Stage C; WASM-written)
+    variant_tex_index: u32, //     4 B @ 84 — texture/variant selector, set at spawn (Stage C)
+    lod_flags: u32, //             4 B @ 88 — lod (low bits) + flags (high bits) (Stage C)
+    bone_palette_off: u32, //      4 B @ 92 — reserved for future GPU skinning; unused
+    // Total: exactly 96 bytes — asserted in entity_abi_test.zig
 };
 
-// Entity metadata (lifecycle and dirty flags)
-const EntityMetadata = struct {
-    id: u32, // Entity ID for TypeScript mapping
-    active: bool, // Entity active flag
-    physics_enabled: bool, // Has physics simulation
-    rendering_enabled: bool, // Has rendering data
-    transform_dirty: bool, // Transform matrix needs recalculation
-    mesh_index: u32, // Mesh type identifier (moved from RenderingComponent)
-    material_id: u32, // Material identifier (moved from RenderingComponent)
+// Entity metadata (lifecycle and dirty flags). `extern struct` (B4): TypeScript reads
+// this array via get_entity_metadata_offset/size, so field offsets are ABI
+// (id @0, mesh_index @4, material_id @8, flags @12..15 — size 16).
+pub const EntityMetadata = extern struct {
+    id: u32, // @0  Entity ID for TypeScript mapping
+    mesh_index: u32, // @4  Mesh type identifier (offset read by TS/tests)
+    material_id: u32, // @8  Material identifier
+    active: bool, // @12 Entity active flag
+    physics_enabled: bool, // @13 Participates in physics & collision
+    rendering_enabled: bool, // @14 Has rendering data
+    transform_dirty: bool, // @15 Transform matrix needs recalculation
 };
 
 // Rotator component for animation behavior
@@ -234,6 +244,7 @@ fn initEntities() void {
             .mass = 1.0,
             .radius = 0.5, // Legacy field
             .is_kinematic = false,
+            .use_gravity = true,
             .collision_shape = core.CollisionShape.SPHERE, // Default to sphere
             .extents = .{ .x = 0.5, .y = 0.5, .z = 0.5 }, // Default sphere radius in .x
         };
@@ -249,6 +260,10 @@ fn initEntities() void {
                 0.0, 0.0, 0.0, 1.0,
             },
             .color = [_]f32{ 1.0, 1.0, 1.0, 1.0 }, // Default white
+            .anim_time = 0,
+            .variant_tex_index = 0,
+            .lod_flags = 0,
+            .bone_palette_off = 0,
         };
     }
 
@@ -560,6 +575,7 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .mass = 1.0,
         .radius = radius, // Legacy field
         .is_kinematic = false,
+        .use_gravity = true,
         .collision_shape = collision_shape,
         .extents = extents,
     };
@@ -579,6 +595,10 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
             .PYRAMID => [_]f32{ 1.0, 0.0, 1.0, 1.0 }, // Purple for pyramids
             .GRID => [_]f32{ 0.3, 0.3, 0.3, 1.0 }, // Gray for grid
         },
+        .anim_time = 0,
+        .variant_tex_index = 0,
+        .lod_flags = 0,
+        .bone_palette_off = 0,
     };
 
     // Initialize entity metadata
@@ -1285,6 +1305,7 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .mass = mass,
         .radius = radius, // Legacy field
         .is_kinematic = isKinematic,
+        .use_gravity = true, // placeholder: current behavior (all dynamic bodies fall) until the entity-flags ABI passes it explicitly
         .collision_shape = collision_shape,
         .extents = extents,
     };
@@ -1302,6 +1323,10 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
             x,      y,      z,      1.0,
         },
         .color = [_]f32{ colorR, colorG, colorB, colorA },
+        .anim_time = 0,
+        .variant_tex_index = 0,
+        .lod_flags = 0,
+        .bone_palette_off = 0,
     };
 
     // Initialize entity metadata
@@ -1501,6 +1526,7 @@ pub export fn spawn_entity_with_collider(
         .mass = 1.0,
         .radius = extent_x, // Legacy field - use extent_x as radius
         .is_kinematic = false,
+        .use_gravity = true,
         .collision_shape = shape,
         .extents = extents,
     };
@@ -1518,6 +1544,10 @@ pub export fn spawn_entity_with_collider(
             .BOX => [_]f32{ 0.2, 0.8, 1.0, 1.0 }, // Sky blue for boxes
             .PLANE => [_]f32{ 0.3, 0.7, 0.3, 1.0 }, // Green for planes
         },
+        .anim_time = 0,
+        .variant_tex_index = 0,
+        .lod_flags = 0,
+        .bone_palette_off = 0,
     };
 
     // Initialize entity metadata

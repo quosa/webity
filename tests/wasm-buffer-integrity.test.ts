@@ -45,8 +45,8 @@ describe('WASM Buffer Integrity Tests', () => {
             expect(wasmMemory).not.toBeNull();
 
             if (wasmMemory) {
-                // Read instance data: 20 floats per entity (16 transform + 4 color)
-                const instanceData = new Float32Array(wasmMemory, transformsOffset, 1 * 20);
+                // Read instance data: 24 floats per entity: 16 transform + 4 color + 4 Stage-C fields (96 B extern struct)
+                const instanceData = new Float32Array(wasmMemory, transformsOffset, 1 * 24);
 
                 // Validate transform matrix (column-major)
                 const expectedMatrix = [
@@ -119,10 +119,10 @@ describe('WASM Buffer Integrity Tests', () => {
             expect(wasmMemory).not.toBeNull();
 
             if (wasmMemory) {
-                // Read instance data: 20 floats per entity (16 transform + 4 color)
-                const instanceData = new Float32Array(wasmMemory, transformsOffset, 2 * 20);
+                // Read instance data: 24 floats per entity: 16 transform + 4 color + 4 Stage-C fields (96 B extern struct)
+                const instanceData = new Float32Array(wasmMemory, transformsOffset, 2 * 24);
 
-                console.log('Raw WASM buffer data (40 floats):', Array.from(instanceData));
+                console.log('Raw WASM buffer data (48 floats):', Array.from(instanceData));
 
                 // Entity 0 (Triangle at -2, 0, 0, red)
                 const entity0Transform = Array.from(instanceData.slice(0, 16));
@@ -146,8 +146,8 @@ describe('WASM Buffer Integrity Tests', () => {
                 }
 
                 // Entity 1 (Cube at 2, 0, 0, blue)
-                const entity1Transform = Array.from(instanceData.slice(20, 36));
-                const entity1Color = Array.from(instanceData.slice(36, 40));
+                const entity1Transform = Array.from(instanceData.slice(24, 40));
+                const entity1Color = Array.from(instanceData.slice(40, 44));
 
                 console.log('Entity 1 (Cube):');
                 console.log('  Transform:', entity1Transform);
@@ -157,13 +157,13 @@ describe('WASM Buffer Integrity Tests', () => {
                 // Validate Entity 1 transform (identity with translation)
                 const expectedMatrix1 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 0, 0, 1];
                 for (let i = 0; i < 16; i++) {
-                    expect(instanceData[20 + i]!).toBeCloseTo(expectedMatrix1[i]!, 5);
+                    expect(instanceData[24 + i]!).toBeCloseTo(expectedMatrix1[i]!, 5);
                 }
 
                 // Validate Entity 1 color (blue)
                 const expectedColor1 = [0, 0, 1, 1];
                 for (let i = 0; i < 4; i++) {
-                    expect(instanceData[36 + i]!).toBeCloseTo(expectedColor1[i]!, 5);
+                    expect(instanceData[40 + i]!).toBeCloseTo(expectedColor1[i]!, 5);
                 }
             }
         }
@@ -202,16 +202,16 @@ describe('WASM Buffer Integrity Tests', () => {
 
             if (wasmMemory) {
                 // Validate buffer bounds
-                const requiredBytes = 5 * 20 * 4; // 5 entities * 20 floats * 4 bytes per float
+                const requiredBytes = 5 * 24 * 4; // 5 entities * 24 floats * 4 bytes per float
                 const availableBytes = wasmMemory.byteLength - transformsOffset;
 
                 expect(availableBytes).toBeGreaterThanOrEqual(requiredBytes);
 
                 // Read and validate each entity's data is not corrupted
-                const instanceData = new Float32Array(wasmMemory, transformsOffset, 5 * 20);
+                const instanceData = new Float32Array(wasmMemory, transformsOffset, 5 * 24);
 
                 for (let i = 0; i < 5; i++) {
-                    const offset = i * 20;
+                    const offset = i * 24;
                     const transform = Array.from(instanceData.slice(offset, offset + 16));
                     const color = Array.from(instanceData.slice(offset + 16, offset + 20));
 

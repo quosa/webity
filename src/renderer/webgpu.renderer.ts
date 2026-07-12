@@ -188,9 +188,12 @@ export class WebGPURendererV2 {
             ],
         };
 
-        // Define instance buffer layout (transform matrix + color) - back to slot 1
+        // Define instance buffer layout (transform matrix + color) - back to slot 1.
+        // Stride matches WASM's 96 B extern RenderingComponent (B4/B6); the trailing
+        // 16 B (anim_time/variant/lod_flags/bone_palette) are Stage-C fields the
+        // shader does not consume yet — attributes may cover less than arrayStride.
         const instanceBufferLayout = {
-            arrayStride: (16 + 4) * 4, // 16 floats (4x4 matrix) + 4 floats (color) * 4 bytes = 80 bytes
+            arrayStride: 96, // 24 floats: 16 matrix + 4 color + 4 Stage-C
             stepMode: 'instance',
             attributes: [
                 // Transform matrix (4 vec4s)

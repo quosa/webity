@@ -44,8 +44,8 @@ describe('Direct WASM Buffer Tests', () => {
             expect(wasmMemory).not.toBeNull();
 
             if (wasmMemory) {
-                // Read instance data: 20 floats per entity (16 transform + 4 color)
-                const instanceData = new Float32Array(wasmMemory, transformsOffset, 1 * 20);
+                // Read instance data: 24 floats per entity: 16 transform + 4 color + 4 Stage-C fields (96 B extern struct)
+                const instanceData = new Float32Array(wasmMemory, transformsOffset, 1 * 24);
 
                 // Expected transform matrix (column-major)
                 const expectedMatrix = [
@@ -115,10 +115,10 @@ describe('Direct WASM Buffer Tests', () => {
             const transformsOffset = physicsBridge.getEntityTransformsOffsetSafe();
 
             if (wasmMemory) {
-                // Read 2 entities: 40 floats total (20 per entity)
-                const instanceData = new Float32Array(wasmMemory, transformsOffset, 2 * 20);
+                // Read 2 entities: 48 floats total (24 per entity)
+                const instanceData = new Float32Array(wasmMemory, transformsOffset, 2 * 24);
 
-                console.log('Raw WASM buffer (40 floats):', Array.from(instanceData));
+                console.log('Raw WASM buffer (48 floats):', Array.from(instanceData));
 
                 // Entity 0 (Triangle): Expected at (-2, 0, 0), red
                 const entity0Transform = Array.from(instanceData.slice(0, 16));
@@ -141,8 +141,8 @@ describe('Direct WASM Buffer Tests', () => {
                 }
 
                 // Entity 1 (Cube): Expected at (2, 0, 0), blue
-                const entity1Transform = Array.from(instanceData.slice(20, 36));
-                const entity1Color = Array.from(instanceData.slice(36, 40));
+                const entity1Transform = Array.from(instanceData.slice(24, 40));
+                const entity1Color = Array.from(instanceData.slice(40, 44));
 
                 console.log('Entity 1 (Cube):');
                 console.log('  Transform:', entity1Transform);
@@ -154,10 +154,10 @@ describe('Direct WASM Buffer Tests', () => {
                 const expectedColor1 = [0, 0, 1, 1];
 
                 for (let i = 0; i < 16; i++) {
-                    expect(instanceData[20 + i]!).toBeCloseTo(expectedMatrix1[i]!, 5);
+                    expect(instanceData[24 + i]!).toBeCloseTo(expectedMatrix1[i]!, 5);
                 }
                 for (let i = 0; i < 4; i++) {
-                    expect(instanceData[36 + i]!).toBeCloseTo(expectedColor1[i]!, 5);
+                    expect(instanceData[40 + i]!).toBeCloseTo(expectedColor1[i]!, 5);
                 }
             }
         }
@@ -196,10 +196,10 @@ describe('Direct WASM Buffer Tests', () => {
             const transformsOffset = physicsBridge.getEntityTransformsOffsetSafe();
 
             if (wasmMemory) {
-                const instanceData = new Float32Array(wasmMemory, transformsOffset, 5 * 20);
+                const instanceData = new Float32Array(wasmMemory, transformsOffset, 5 * 24);
 
                 for (let i = 0; i < 5; i++) {
-                    const offset = i * 20;
+                    const offset = i * 24;
                     const transform = Array.from(instanceData.slice(offset, offset + 16));
                     const color = Array.from(instanceData.slice(offset + 16, offset + 20));
 
