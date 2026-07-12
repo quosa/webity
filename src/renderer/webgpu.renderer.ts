@@ -55,7 +55,9 @@ export class WebGPURendererV2 {
     private trianglePipeline!: GPURenderPipeline; // triangle-list pipeline (solid meshes)
     private linePipeline!: GPURenderPipeline; // line-list pipeline (grids/wireframes)
     private uniformBuffer!: GPUBuffer;
+    private bindGroupLayout!: GPUBindGroupLayout;
     private bindGroup!: GPUBindGroup;
+    private boundInstanceBuffer: GPUBuffer | null = null; // buffer the bind group was built over
 
     private textureRegistry = new Map<string, Texture>();
 
@@ -98,25 +100,29 @@ export class WebGPURendererV2 {
     }
 
     private createRenderPipeline(): void {
-        // Vertex shader: transforms vertices from model space to screen space
+        // Vertex shader (B5): per-instance data is a read-only STORAGE buffer indexed by
+        // @builtin(instance_index) — which INCLUDES firstInstance, so the per-mesh draw
+        // table's bucket ranges index the global array directly, no remapping. Storage
+        // buffers are extensible (Stage-C fields already present) and compute-readable
+        // (future GPU culling / redirection).
         const vertexShader = `
       struct Uniforms {
         viewProjectionMatrix: mat4x4<f32>,
       }
+
+      // Mirrors WASM's 96 B extern RenderingComponent (asserted in entity_abi_test.zig):
+      // mat4x4 @0, color @64, anim_time @80, variant @84, lod_flags @88, bones @92.
+      struct InstanceData {
+        model: mat4x4<f32>,
+        color: vec4<f32>,
+        anim_time: f32,
+        variant_tex_index: u32,
+        lod_flags: u32,
+        bone_palette_off: u32,
+      }
+
       @binding(0) @group(0) var<uniform> uniforms: Uniforms;
-
-      struct VertexInput {
-        @builtin(vertex_index) vertexIndex: u32,
-        @location(0) position: vec3<f32>,
-      }
-
-      struct InstanceInput {
-        @location(1) transform_0: vec4<f32>, // Transform matrix row 0
-        @location(2) transform_1: vec4<f32>, // Transform matrix row 1
-        @location(3) transform_2: vec4<f32>, // Transform matrix row 2
-        @location(4) transform_3: vec4<f32>, // Transform matrix row 3
-        @location(5) color: vec4<f32>,       // Instance color
-      }
+      @binding(1) @group(0) var<storage, read> instanceData: array<InstanceData>;
 
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
@@ -124,26 +130,15 @@ export class WebGPURendererV2 {
       }
 
       @vertex
-      fn main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
-        let vertexPosition = vertex.position;
+      fn main(@builtin(instance_index) instanceIndex: u32, @location(0) position: vec3<f32>) -> VertexOutput {
+        let inst = instanceData[instanceIndex];
 
-        // Reconstruct transform matrix from instance data
-        let transformMatrix = mat4x4<f32>(
-          instance.transform_0,
-          instance.transform_1,
-          instance.transform_2,
-          instance.transform_3
-        );
-
-        // Apply transform matrix
-        let worldPosition = transformMatrix * vec4<f32>(vertexPosition, 1.0);
-
-        // Apply view-projection matrix
+        let worldPosition = inst.model * vec4<f32>(position, 1.0);
         let clipPosition = uniforms.viewProjectionMatrix * worldPosition;
 
         var output: VertexOutput;
         output.position = clipPosition;
-        output.color = instance.color;
+        output.color = inst.color;
 
         return output;
       }
@@ -188,47 +183,37 @@ export class WebGPURendererV2 {
             ],
         };
 
-        // Define instance buffer layout (transform matrix + color) - back to slot 1.
-        // Stride matches WASM's 96 B extern RenderingComponent (B4/B6); the trailing
-        // 16 B (anim_time/variant/lod_flags/bone_palette) are Stage-C fields the
-        // shader does not consume yet — attributes may cover less than arrayStride.
-        const instanceBufferLayout = {
-            arrayStride: 96, // 24 floats: 16 matrix + 4 color + 4 Stage-C
-            stepMode: 'instance',
-            attributes: [
-                // Transform matrix (4 vec4s)
-                { format: 'float32x4', offset: 0, shaderLocation: 1 }, // transform row 0
-                { format: 'float32x4', offset: 16, shaderLocation: 2 }, // transform row 1
-                { format: 'float32x4', offset: 32, shaderLocation: 3 }, // transform row 2
-                { format: 'float32x4', offset: 48, shaderLocation: 4 }, // transform row 3
-                // Color
-                { format: 'float32x4', offset: 64, shaderLocation: 5 }, // color
-            ],
-        };
-
-        // Create bind group layout for uniforms
-        const bindGroupLayout = this.device.createBindGroupLayout({
+        // Bind group layout: camera uniform + the per-instance storage buffer (B5).
+        // Kept as a field because the bind group is rebuilt whenever the instance
+        // buffer is reallocated (it grows with the entity count).
+        this.bindGroupLayout = this.device.createBindGroupLayout({
             entries: [
                 {
                     binding: 0,
                     visibility: GPUShaderStage.VERTEX,
                     buffer: { type: 'uniform' },
                 },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: { type: 'read-only-storage' },
+                },
             ],
         });
 
         // Create pipeline layout
         const pipelineLayout = this.device.createPipelineLayout({
-            bindGroupLayouts: [bindGroupLayout],
+            bindGroupLayouts: [this.bindGroupLayout],
         });
 
-        // Create triangle render pipeline (vertex buffer + instance buffer)
+        // Create triangle render pipeline (geometry stream only — instances come
+        // from the storage buffer)
         this.trianglePipeline = this.device.createRenderPipeline({
             layout: pipelineLayout,
             vertex: {
                 module: vertexModule,
                 entryPoint: 'main',
-                buffers: [vertexBufferLayout, instanceBufferLayout] as any,
+                buffers: [vertexBufferLayout] as any,
             },
             fragment: {
                 module: fragmentModule,
@@ -254,7 +239,7 @@ export class WebGPURendererV2 {
             vertex: {
                 module: vertexModule,
                 entryPoint: 'main',
-                buffers: [vertexBufferLayout, instanceBufferLayout] as any,
+                buffers: [vertexBufferLayout] as any,
             },
             fragment: {
                 module: fragmentModule,
@@ -291,16 +276,21 @@ export class WebGPURendererV2 {
         ]);
         this.device.queue.writeBuffer(this.uniformBuffer, 0, identityMatrix.buffer);
 
-        // Create bind group
+        // Initial bind group over the (freshly ensured) instance storage buffer
+        this.refreshBindGroup(this.bufferManager.ensureInstanceBuffer());
+    }
+
+    // (Re)build the bind group over the current instance storage buffer. Called at init
+    // and whenever mapInstanceDataFromWasm had to reallocate a larger buffer.
+    private refreshBindGroup(instanceBuffer: GPUBuffer): void {
         this.bindGroup = this.device.createBindGroup({
-            layout: this.trianglePipeline.getBindGroupLayout(0),
+            layout: this.bindGroupLayout,
             entries: [
-                {
-                    binding: 0,
-                    resource: { buffer: this.uniformBuffer },
-                },
+                { binding: 0, resource: { buffer: this.uniformBuffer } },
+                { binding: 1, resource: { buffer: instanceBuffer } },
             ],
         });
+        this.boundInstanceBuffer = instanceBuffer;
     }
 
     // Set view-projection matrix from external camera
@@ -380,9 +370,11 @@ export class WebGPURendererV2 {
         // rebinding the shared buffers at byte offsets.
         renderPass.setVertexBuffer(0, sharedVertexBuffer);
         renderPass.setIndexBuffer(sharedIndexBuffer, 'uint16');
-        // B3: the bulk-uploaded instance buffer is bound once too; per-mesh draws select
-        // their contiguous slice via firstInstance (instance-step attributes honor it).
-        renderPass.setVertexBuffer(1, instanceBuffer);
+        // B5: instances live in a storage buffer in the bind group (no slot-1 vertex
+        // stream). Rebuild the bind group if the buffer was reallocated to grow.
+        if (instanceBuffer !== this.boundInstanceBuffer) {
+            this.refreshBindGroup(instanceBuffer);
+        }
 
         // Matches WASM MAX_ENTITIES; counts beyond this indicate a corrupt read, not a big scene.
         const maxSafeInstanceCount = 10000;

@@ -114,21 +114,29 @@ export class GPUBufferManager {
         // Track entity count for rendering (only after validation)
         this.setWasmEntityCount(count);
 
-        // Create or update instance buffer with WASM data
-        if (!this.instanceBuffer || this.instanceBuffer.size < wasmInstanceData.byteLength) {
-            // Recreate buffer if too small
-            this.instanceBuffer?.destroy();
-            this.instanceBuffer = this.device.createBuffer({
-                label: 'WASM Instance Data Buffer',
-                size: Math.max(wasmInstanceData.byteLength, 1024), // Minimum 1KB
-                usage: 0x20 | 0x08, // GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-            });
-        }
+        // Grow the instance storage buffer if needed (the renderer rebuilds its bind
+        // group when the buffer identity changes), then one bulk write.
+        this.ensureInstanceBuffer(wasmInstanceData.byteLength);
 
         // Write WASM data directly to GPU buffer
         // This is a necessary copy because WebGPU cannot directly access WASM memory. :-(
         // https://toji.dev/webgpu-best-practices/buffer-uploads.html
-        this.device.queue.writeBuffer(this.instanceBuffer, 0, wasmInstanceData);
+        this.device.queue.writeBuffer(this.instanceBuffer!, 0, wasmInstanceData);
+    }
+
+    // B5: the per-instance data is a STORAGE buffer (read in the vertex stage via
+    // instanceData[instance_index]) — extensible and compute-readable, not a vertex stream.
+    // Returns the current buffer, reallocating a larger one when minBytes outgrows it.
+    ensureInstanceBuffer(minBytes: number = 1024): GPUBuffer {
+        if (!this.instanceBuffer || this.instanceBuffer.size < minBytes) {
+            this.instanceBuffer?.destroy();
+            this.instanceBuffer = this.device.createBuffer({
+                label: 'WASM Instance Data Buffer',
+                size: Math.max(minBytes, 1024), // Minimum 1KB
+                usage: 0x80 | 0x08, // GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+        }
+        return this.instanceBuffer;
     }
 
     // Phase 5: Get or create instance buffer for WASM data

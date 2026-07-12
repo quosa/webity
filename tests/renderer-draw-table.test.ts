@@ -64,12 +64,16 @@ describe('B3 per-mesh draw table', () => {
         expect(device.createBuffer.mock.calls.length).toBe(buffersBefore);
     });
 
-    test('binds the atlas and instance buffer once per frame, not per mesh', () => {
+    test('binds the atlas once per frame; instances ride the bind group (B5), not a vertex slot', () => {
         renderer.render(wasmModule);
 
-        // slot 0 (shared vertex atlas) + slot 1 (shared instance buffer), once each
-        expect(renderPass.setVertexBuffer).toHaveBeenCalledTimes(2);
+        // Only slot 0 (shared vertex atlas) is a vertex stream now — per-instance data
+        // is a storage buffer inside the bind group, fetched via instance_index.
+        expect(renderPass.setVertexBuffer).toHaveBeenCalledTimes(1);
+        expect(renderPass.setVertexBuffer).toHaveBeenCalledWith(0, expect.anything());
         expect(renderPass.setIndexBuffer).toHaveBeenCalledTimes(1);
+        // One bind group set per pass (triangles + lines)
+        expect(renderPass.setBindGroup).toHaveBeenCalledTimes(2);
     });
 
     test('skips meshes whose bucket is empty', () => {

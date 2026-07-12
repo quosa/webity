@@ -22,6 +22,7 @@
     "GPUCanvasContext": "readonly",
     "GPURenderPipeline": "readonly",
     "GPUBindGroup": "readonly",
+    "GPUBindGroupLayout": "readonly",
     "GPUFeatureName": "readonly",
     "GPUTextureFormat": "readonly",
     "WebAssembly": "readonly"
