@@ -9,10 +9,9 @@
 import { Engine } from '../src/engine/engine';
 import { GameObject } from '../src/engine/gameobject';
 import { RigidBody, CollisionShape } from '../src/engine/components';
-import { WasmPhysicsBridge } from '../src/engine/wasm-physics-bridge';
+import { WasmPhysicsBridge, type WasmPhysicsInterface } from '../src/engine/wasm-physics-bridge';
 import type { WebGPURendererV2 } from '../src/renderer/webgpu.renderer';
 import type { Scene } from '../src/engine/scene-system';
-import type { WasmPhysicsInterface } from '../src/engine/wasm-physics-bridge';
 
 // A bridge stub whose render-facing getters report one entity with valid WASM memory.
 function makeBridgeStub(calls?: string[]) {
@@ -60,7 +59,7 @@ describe('Engine.tick() pipeline (moved from Scene in #11)', () => {
         const renderer = makeRendererStub(calls);
         const engine = engineWith(scene, bridge, renderer);
 
-        (engine as unknown as { tick(dt: number): void }).tick(0.016);
+        (engine as unknown as { tick(_dt: number): void }).tick(0.016);
 
         expect(calls).toEqual(['components', 'physics', 'map', 'camera', 'render']);
         expect(scene.updateComponents).toHaveBeenCalledWith(0.016);
@@ -93,12 +92,12 @@ describe('Engine.tick() pipeline (moved from Scene in #11)', () => {
 });
 
 describe('Engine rAF loop body (delta clamping + clock)', () => {
-    let rafCb: FrameRequestCallback | undefined;
+    let rafCb: ((_t: number) => void) | undefined;
 
     beforeEach(() => {
         document.body.innerHTML = '<canvas id="webgpu-canvas"></canvas>';
         rafCb = undefined;
-        global.requestAnimationFrame = jest.fn((cb: FrameRequestCallback) => {
+        global.requestAnimationFrame = jest.fn((cb: (_t: number) => void) => {
             rafCb = cb; // capture, do not auto-run
             return 1;
         }) as unknown as typeof requestAnimationFrame;

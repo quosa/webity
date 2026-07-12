@@ -146,7 +146,7 @@ describe('CameraComponent Movement', () => {
         });
 
         test('should throw on a partial scalar call (guards against NaN target)', () => {
-            expect(() => (camera.lookAt as (x: number) => void)(5)).toThrow();
+            expect(() => (camera.lookAt as (_x: number) => void)(5)).toThrow();
         });
 
         test('should handle looking at same position as camera', () => {
