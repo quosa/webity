@@ -161,8 +161,8 @@ export class GPUBufferManager {
             return false;
         }
 
-        if (count > 100) { // Sanity check for reasonable entity count
-            console.warn(`⚠️ Suspicious entity count: ${count} (over 100 entities - possible corruption?)`);
+        if (count > 10000) { // Matches WASM MAX_ENTITIES — beyond it means a corrupt read
+            console.warn(`⚠️ Suspicious entity count: ${count} (over WASM MAX_ENTITIES - possible corruption?)`);
         }
 
         if (offset < 0 || offset >= wasmMemory.byteLength) {
@@ -184,6 +184,13 @@ export class GPUBufferManager {
 
     getMeshAllocation(meshId: string): MeshAllocation | undefined {
         return this.meshRegistry.get(meshId);
+    }
+
+    // All registered meshes with their allocations — drives the per-mesh draw table (B3).
+    // Returns the live map as a read-only view: the render loop iterates this twice per frame,
+    // so it must NOT copy (a fresh Map per pass would reintroduce per-frame allocation).
+    getMeshAllocations(): ReadonlyMap<string, MeshAllocation> {
+        return this.meshRegistry.getAllocationsView();
     }
 
     getVertexBufferOffset(meshId: string): number {

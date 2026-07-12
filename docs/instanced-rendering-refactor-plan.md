@@ -37,17 +37,33 @@ Most of **Stage A** landed — but via the separate **A3 scene-first engine API*
   mode via `MeshRegistry`, killing the hard-coded name lists.
 - ✅ **A6** camera unified (`CameraComponent` single source) **and** v1 browser-snapshot parity
   confirmed — the Playwright snapshots pass against the original references.
-- ◑ **A5** is the only Stage A item left: bridge TODOs still open (`wasm-physics-bridge.ts:35` vec3
-  getter, `:179` material id, `:318` kinematic-state).
+- ✅ **A5** done (2026-07-12): vec3 getters added bridge-side (`getEntityPosition`/`getEntityVelocity` —
+  the scalar WASM exports stay, the wasm32 C ABI can't return structs); material id annotated as
+  Phase 9; kinematic-state TODO scoped to the B4/B6 ABI window (bridge `setKinematic` now warns
+  honestly that runtime toggling isn't applied WASM-side). **Stage A complete.**
 - Also since this plan was written: the `Engine` gained restart/scene-switch lifecycle (PR #11), and the
   `Engine`-owns-the-runtime refactor landed (PR #14) — the `Engine` now owns the renderer + physics
   bridge and drives `tick()` (components → physics → render), so **A3 is complete**. This is the clean
   base Stage B builds on: B3/B8 (kill the per-frame hot loop, trim the sync round-trip) now touch the
   Engine's `render()`/`tick()`, not a Scene method.
 
-**Not started: Stage B proper (B1–B8)** — the instanced-rendering perf refactor (bind-once atlas,
-bucket-aware removal, per-mesh draw table, storage-buffer instances, widened structs, lighting). This is
-the remaining substance of this plan.
+**Stage B progress (2026-07-12): B1 ✅, B2 ✅, B3 ✅** — the hot-loop fix is in:
+- **B1**: geometry atlas bound once per pass; per-mesh geometry via
+  `drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance)`
+  (`MeshAllocation` gained `baseVertex`/`firstIndex`).
+- **B2**: bucket-aware entity storage in `game_engine.zig` — same-mesh entities contiguous across
+  mixed add/remove (O(#buckets) moves); stable-id resolution via an O(1) id→index table for all
+  id-taking exports (they used to index arrays directly — only ever correct while nothing moved);
+  `spawn_entity*` now return stable ids; fixed rotator-not-moved + stale-rotator-on-reuse bugs;
+  new `get_mesh_bucket_start/count` exports; `entity_buckets_test.zig` (6 tests).
+- **B3**: per-mesh draw table — one `drawIndexed` per mesh over its bucket range, **zero per-frame
+  `createBuffer`**, instance buffer bound once; 1000-instance cap lifted to WASM MAX_ENTITIES;
+  `renderer-draw-table.test.ts` instruments the frame.
+- ⚠️ Snapshot parity (`browser-tests`) still needs a run on real hardware — WebGPU can't
+  initialize in the headless dev container.
+
+**Remaining: B4–B8** (extern-struct layout + the folded-in WASM-ABI cluster, storage-buffer
+instances, 96 B instance struct, normals/uv + lambert, sync-round-trip trim).
 
 ## Agreed sequencing (decided 2026-07-12)
 

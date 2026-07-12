@@ -99,13 +99,109 @@ const RotatorComponent = struct {
     axis_mask: u8, // Bitmask: 1=X, 2=Y, 4=Z rotation axes
 };
 
-// Four component arrays for ECS
-var physics_components: [MAX_ENTITIES]PhysicsComponent = undefined;
-var rendering_components: [MAX_ENTITIES]RenderingComponent = undefined;
-var entity_metadata: [MAX_ENTITIES]EntityMetadata = undefined;
-var rotator_components: [MAX_ENTITIES]RotatorComponent = undefined;
+// Four component arrays for ECS (pub so the Zig unit tests can assert the
+// bucket-layout invariants directly)
+pub var physics_components: [MAX_ENTITIES]PhysicsComponent = undefined;
+pub var rendering_components: [MAX_ENTITIES]RenderingComponent = undefined;
+pub var entity_metadata: [MAX_ENTITIES]EntityMetadata = undefined;
+pub var rotator_components: [MAX_ENTITIES]RotatorComponent = undefined;
 
 pub var entity_count: u32 = 0; // Now tracks ECS entities
+
+// =============================================================================
+// Mesh-bucket bookkeeping (B2)
+// =============================================================================
+// Entities are stored grouped by mesh bucket (ascending mesh_index), so all
+// instances of one mesh are CONTIGUOUS in the component arrays. This is the
+// invariant the instanced draw table (B3) relies on: one draw call per mesh
+// over a [bucketStart, bucketStart+count) range of the shared instance buffer.
+// add/remove maintain the invariant with O(#buckets) component moves.
+//
+// Because add/remove MOVE entities, an entity's array index is not stable.
+// External callers identify entities by their (stable) id; id_to_index gives
+// O(1) resolution for ids < MAX_ENTITIES (a linear scan covers larger ids).
+const MAX_MESH_BUCKETS: u32 = 64; // mesh_index >= 63 shares the last bucket (documented limit)
+const INVALID_INDEX: u32 = 0xFFFF_FFFF;
+var mesh_bucket_counts: [MAX_MESH_BUCKETS]u32 = undefined; // zeroed in initEntities
+var id_to_index: [MAX_ENTITIES]u32 = undefined; // filled with INVALID_INDEX in initEntities
+var next_spawn_id: u32 = 0; // unique ids for the spawn_entity* convenience paths
+
+fn bucketOf(mesh_index: u32) u32 {
+    return @min(mesh_index, MAX_MESH_BUCKETS - 1);
+}
+
+fn bucketStart(bucket: u32) u32 {
+    var start: u32 = 0;
+    for (mesh_bucket_counts[0..bucket]) |c| start += c;
+    return start;
+}
+
+fn rememberEntityIndex(id: u32, index: u32) void {
+    if (id < MAX_ENTITIES) id_to_index[id] = index;
+}
+
+// Move ALL FOUR component arrays together (physics, rendering, metadata, rotator)
+// and keep the id lookup in sync. (The old swap-remove forgot rotator_components,
+// so a moved entity left its rotator animating the wrong slot.)
+fn moveEntityComponents(dst: u32, src: u32) void {
+    if (dst == src) return;
+    physics_components[dst] = physics_components[src];
+    rendering_components[dst] = rendering_components[src];
+    entity_metadata[dst] = entity_metadata[src];
+    rotator_components[dst] = rotator_components[src];
+    rememberEntityIndex(entity_metadata[dst].id, dst);
+}
+
+// Open a slot at the END of the mesh's bucket, shifting each later bucket right
+// by one (move its first element to one past its end). Returns null when full.
+fn allocateEntitySlot(mesh_index: u32) ?u32 {
+    if (entity_count >= MAX_ENTITIES) return null;
+    const bucket = bucketOf(mesh_index);
+    var hole: u32 = entity_count;
+    var b: u32 = MAX_MESH_BUCKETS - 1;
+    while (b > bucket) : (b -= 1) {
+        if (mesh_bucket_counts[b] > 0) {
+            const first = bucketStart(b);
+            moveEntityComponents(hole, first);
+            hole = first;
+        }
+    }
+    mesh_bucket_counts[bucket] += 1;
+    entity_count += 1;
+    // Fresh slot: never inherit a stale rotator from a previous occupant.
+    rotator_components[hole] = RotatorComponent{
+        .enabled = false,
+        .angular_velocity = .{ .x = 0, .y = 0, .z = 0 },
+        .axis_mask = 0,
+    };
+    return hole;
+}
+
+// Remove the entity at `index`, closing the gap while keeping every bucket
+// contiguous: swap-remove within its own bucket, then shift each later bucket
+// left by one (move its last element into the hole at its left edge).
+fn removeEntityAt(index: u32) void {
+    const removed_id = entity_metadata[index].id;
+    const bucket = bucketOf(entity_metadata[index].mesh_index);
+    if (removed_id < MAX_ENTITIES) id_to_index[removed_id] = INVALID_INDEX;
+
+    const last_in_bucket = bucketStart(bucket) + mesh_bucket_counts[bucket] - 1;
+    moveEntityComponents(index, last_in_bucket);
+    var hole = last_in_bucket;
+    var b: u32 = bucket + 1;
+    while (b < MAX_MESH_BUCKETS) : (b += 1) {
+        if (mesh_bucket_counts[b] > 0) {
+            const last = bucketStart(b) + mesh_bucket_counts[b] - 1;
+            moveEntityComponents(hole, last);
+            hole = last;
+        }
+    }
+    mesh_bucket_counts[bucket] -= 1;
+    entity_count -= 1;
+    // Deactivate the vacated tail slot.
+    entity_metadata[hole].active = false;
+    rotator_components[hole].enabled = false;
+}
 
 // Note: Separate mesh entity arrays removed - using main entities array with mesh_type field
 
@@ -123,6 +219,9 @@ var collision_log_count: u32 = 0; // Limit collision logging
 
 fn initEntities() void {
     entity_count = 0;
+    next_spawn_id = 0;
+    @memset(&mesh_bucket_counts, 0);
+    @memset(&id_to_index, INVALID_INDEX);
 
     // Initialize physics components
     for (&physics_components) |*phys| {
@@ -277,6 +376,18 @@ fn updateRotators(delta_time: f32) void {
 
 // Find entity by ID in ECS system
 fn findECSEntityById(id: u32) ?u32 {
+    // O(1) fast path via the id lookup table (kept in sync by add/move/remove).
+    if (id < MAX_ENTITIES) {
+        const index = id_to_index[id];
+        if (index != INVALID_INDEX and index < entity_count and
+            entity_metadata[index].active and entity_metadata[index].id == id)
+        {
+            return index;
+        }
+        return null;
+    }
+    // Ids beyond the table (e.g. a long-running session's ever-increasing TS ids)
+    // fall back to a linear scan.
     for (0..entity_count) |i| {
         if (entity_metadata[i].active and entity_metadata[i].id == id) {
             return @intCast(i);
@@ -417,12 +528,13 @@ fn applyECSWorldBoundaryConstraintsWithShape(position: *core.Vec3, velocity: *co
     return collision_flags;
 }
 
-// ECS version of entity spawning
+// ECS version of entity spawning. Returns the new entity's ID (stable handle for
+// the id-based exports), or MAX_ENTITIES when full.
 fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType) u32 {
-    if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
-
-    const index = entity_count;
     const mesh_id = @intFromEnum(mesh_type);
+    const index = allocateEntitySlot(mesh_id) orelse return MAX_ENTITIES; // Full
+    const id = next_spawn_id;
+    next_spawn_id += 1;
 
     // Auto-detect collision shape from mesh type
     const collision_shape = switch (mesh_type) {
@@ -471,7 +583,7 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
 
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
-        .id = index,
+        .id = id,
         .active = true,
         .physics_enabled = true, // TODO: here we assume physics enabled by default! (needs wasm api revamp!)
         .rendering_enabled = true,
@@ -479,9 +591,8 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .mesh_index = mesh_id,
         .material_id = 0,
     };
-
-    entity_count += 1;
-    return index;
+    rememberEntityIndex(id, index);
+    return id;
 }
 
 // WASM exports - thin wrappers around core functionality
@@ -959,11 +1070,12 @@ pub export fn set_position(x: f32, y: f32, z: f32) void {
 }
 
 pub export fn apply_force(entity_id: u32, x: f32, y: f32, z: f32) void {
-    // Apply force to specified entity
-    if (entity_id < entity_count and entity_metadata[entity_id].active) {
-        physics_components[entity_id].velocity.x += x;
-        physics_components[entity_id].velocity.y += y;
-        physics_components[entity_id].velocity.z += z;
+    // Apply force to specified entity. Resolves the STABLE entity id to the current
+    // array index — indices move as the bucketed arrays compact (B2).
+    if (findECSEntityById(entity_id)) |index| {
+        physics_components[index].velocity.x += x;
+        physics_components[index].velocity.y += y;
+        physics_components[index].velocity.z += z;
     }
 }
 
@@ -1054,52 +1166,59 @@ pub export fn get_cube_count() u32 {
 pub export fn despawn_all_entities() void {
     for (entity_metadata[0..entity_count]) |*meta| {
         meta.active = false;
+        if (meta.id < MAX_ENTITIES) id_to_index[meta.id] = INVALID_INDEX;
     }
+    @memset(&mesh_bucket_counts, 0);
     entity_count = 0;
 }
 
-pub export fn get_entity_position_x(index: u32) f32 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0;
+// The entity accessors below take the STABLE entity id (as handed out by
+// add_entity/spawn_entity*) and resolve it to the current array index. They used
+// to index the arrays directly, which was only correct while entities never
+// moved — the B2 bucketed layout moves entities on add/remove.
+
+pub export fn get_entity_position_x(id: u32) f32 {
+    const index = findECSEntityById(id) orelse return 0;
     return physics_components[index].position.x;
 }
 
-pub export fn get_entity_position_y(index: u32) f32 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0;
+pub export fn get_entity_position_y(id: u32) f32 {
+    const index = findECSEntityById(id) orelse return 0;
     return physics_components[index].position.y;
 }
 
-pub export fn get_entity_position_z(index: u32) f32 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0;
+pub export fn get_entity_position_z(id: u32) f32 {
+    const index = findECSEntityById(id) orelse return 0;
     return physics_components[index].position.z;
 }
 
 // Note: ECS version - entity positions from physics components
 
-pub export fn set_entity_position(index: u32, x: f32, y: f32, z: f32) void {
-    if (index >= entity_count or !entity_metadata[index].active) return;
+pub export fn set_entity_position(id: u32, x: f32, y: f32, z: f32) void {
+    const index = findECSEntityById(id) orelse return;
     physics_components[index].position = .{ .x = x, .y = y, .z = z };
     entity_metadata[index].transform_dirty = true;
 }
 
-pub export fn set_entity_velocity(index: u32, x: f32, y: f32, z: f32) void {
-    if (index >= entity_count or !entity_metadata[index].active) return;
+pub export fn set_entity_velocity(id: u32, x: f32, y: f32, z: f32) void {
+    const index = findECSEntityById(id) orelse return;
     physics_components[index].velocity = .{ .x = x, .y = y, .z = z };
 }
 
-pub export fn set_entity_rotation(index: u32, x: f32, y: f32, z: f32) void {
-    if (index >= entity_count or !entity_metadata[index].active) return;
+pub export fn set_entity_rotation(id: u32, x: f32, y: f32, z: f32) void {
+    const index = findECSEntityById(id) orelse return;
     physics_components[index].rotation = .{ .x = x, .y = y, .z = z };
     entity_metadata[index].transform_dirty = true;
 }
 
-pub export fn set_entity_scale(index: u32, x: f32, y: f32, z: f32) void {
-    if (index >= entity_count or !entity_metadata[index].active) return;
+pub export fn set_entity_scale(id: u32, x: f32, y: f32, z: f32) void {
+    const index = findECSEntityById(id) orelse return;
     physics_components[index].scale = .{ .x = x, .y = y, .z = z };
     entity_metadata[index].transform_dirty = true;
 }
 
-pub export fn get_entity_mesh_type(index: u32) u8 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0; // Default to SPHERE
+pub export fn get_entity_mesh_type(id: u32) u8 {
+    const index = findECSEntityById(id) orelse return 0; // Default to SPHERE
     return @intCast(entity_metadata[index].mesh_index);
 }
 
@@ -1108,18 +1227,18 @@ pub export fn get_debug_floating_entity_index() u32 {
     return debug_floating_entity_index;
 }
 
-pub export fn get_entity_velocity_y(index: u32) f32 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0;
+pub export fn get_entity_velocity_y(id: u32) f32 {
+    const index = findECSEntityById(id) orelse return 0;
     return physics_components[index].velocity.y;
 }
 
-pub export fn get_entity_velocity_x(index: u32) f32 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0;
+pub export fn get_entity_velocity_x(id: u32) f32 {
+    const index = findECSEntityById(id) orelse return 0;
     return physics_components[index].velocity.x;
 }
 
-pub export fn get_entity_velocity_z(index: u32) f32 {
-    if (index >= entity_count or !entity_metadata[index].active) return 0;
+pub export fn get_entity_velocity_z(id: u32) f32 {
+    const index = findECSEntityById(id) orelse return 0;
     return physics_components[index].velocity.z;
 }
 
@@ -1133,9 +1252,7 @@ pub export fn clear_debug_floating_entity() void {
 
 // V2 API: Add entity with ECS structure
 pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshIndex: u32, materialId: u32, mass: f32, radius: f32, isKinematic: bool) void {
-    if (entity_count >= MAX_ENTITIES) return;
-
-    const index = entity_count;
+    const index = allocateEntitySlot(meshIndex) orelse return; // full
 
     // 🔍 RADIUS TRACING: Log all add_entity parameters (disabled for production)
     // std.debug.print("🔍 ADD_ENTITY: id={d}, pos=({d:.3},{d:.3},{d:.3}), scale=({d:.3},{d:.3},{d:.3}), radius={d:.3}, mesh={d}\n",
@@ -1197,22 +1314,14 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .mesh_index = meshIndex,
         .material_id = materialId,
     };
-
-    entity_count += 1;
+    rememberEntityIndex(id, index);
 }
 
 pub export fn remove_entity(id: u32) void {
+    // Bucket-aware removal (B2): keeps same-mesh entities contiguous, unlike the
+    // old global swap-remove that landed an arbitrary mesh into another mesh's range.
     if (findECSEntityById(id)) |index| {
-        entity_metadata[index].active = false;
-
-        // Compact arrays by moving last entity to this position
-        if (index < entity_count - 1) {
-            physics_components[index] = physics_components[entity_count - 1];
-            rendering_components[index] = rendering_components[entity_count - 1];
-            entity_metadata[index] = entity_metadata[entity_count - 1];
-        }
-
-        entity_count -= 1;
+        removeEntityAt(index);
     }
 }
 
@@ -1258,6 +1367,17 @@ pub export fn get_entity_metadata_offset() u32 {
 
 pub export fn get_entity_metadata_size() u32 {
     return @sizeOf(EntityMetadata);
+}
+
+// Mesh-bucket draw-table exports (B2/B3): each mesh's instances occupy the
+// contiguous range [start, start+count) of the component arrays, so the renderer
+// can issue one instanced draw per mesh with firstInstance = start.
+pub export fn get_mesh_bucket_start(mesh_index: u32) u32 {
+    return bucketStart(bucketOf(mesh_index));
+}
+
+pub export fn get_mesh_bucket_count(mesh_index: u32) u32 {
+    return mesh_bucket_counts[bucketOf(mesh_index)];
 }
 
 // Debug functions for buffer layout investigation
@@ -1355,10 +1475,10 @@ pub export fn spawn_entity_with_collider(
     extent_z: f32, // unused for sphere, half-depth for box, normal.z for plane
     mesh_type_id: u8,
 ) u32 {
-    if (entity_count >= MAX_ENTITIES) return MAX_ENTITIES; // Full
-
-    const index = entity_count;
     const mesh_id = mesh_type_id;
+    const index = allocateEntitySlot(mesh_id) orelse return MAX_ENTITIES; // Full
+    const id = next_spawn_id;
+    next_spawn_id += 1;
 
     // Convert collision shape ID to enum
     const shape: core.CollisionShape = switch (collision_shape) {
@@ -1402,7 +1522,7 @@ pub export fn spawn_entity_with_collider(
 
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
-        .id = index, // Use array index as ID for compatibility
+        .id = id,
         .active = true,
         .physics_enabled = true,
         .rendering_enabled = true,
@@ -1410,9 +1530,8 @@ pub export fn spawn_entity_with_collider(
         .mesh_index = mesh_id,
         .material_id = 0,
     };
-
-    entity_count += 1;
-    return index;
+    rememberEntityIndex(id, index);
+    return id;
 }
 
 /// Update collision shape for existing entity

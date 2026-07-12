@@ -302,14 +302,17 @@ export class RigidBody extends Component {
         }
     }
 
-    // Make this body kinematic (not affected by physics forces)
+    // Make this body kinematic (not affected by physics forces).
+    // Effective when called before mount (the flag is passed to WASM at add_entity).
+    // TODO(Stage B4/B6 ABI window — docs/instanced-rendering-refactor-plan.md "Agreed sequencing"):
+    // toggling AFTER mount only changes the TS-side flag; WASM keeps the registration-time
+    // kinematic state until the entity-flags ABI rework adds a set_entity_kinematic export.
     public setKinematic(kinematic: boolean): void {
         this.isKinematic = kinematic;
         console.log(`🎮 RigidBody.setKinematic(${kinematic}) for "${this.gameObject?.name}"`);
 
         if (this.physicsBridge && this.wasmEntityId !== undefined) {
-            // TODO: Update kinematic state in WASM
-            // this.physicsBridge.setKinematic(this.wasmEntityId, kinematic);
+            this.physicsBridge.setKinematic(this.wasmEntityId, kinematic);
         }
     }
 
