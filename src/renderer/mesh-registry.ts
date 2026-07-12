@@ -117,8 +117,15 @@ export class MeshRegistry {
         return reverseMap;
     }
 
+    // Defensive copy — for one-off callers (buffer build, reverse-map). NOT for the render hot
+    // loop; use getAllocationsView() there to avoid a per-frame Map allocation.
     getAllocations(): Map<string, MeshAllocation> {
         return new Map(this.allocations);
+    }
+
+    // Non-copying read-only view of the live allocations, for hot-path iteration (draw table).
+    getAllocationsView(): ReadonlyMap<string, MeshAllocation> {
+        return this.allocations;
     }
 
     getTotalVertexBytes(): number {

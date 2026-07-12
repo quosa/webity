@@ -16,6 +16,13 @@ interface GPUTexture { createView(_descriptor?: any): any; destroy(): void; }
 import { GPUBufferManager } from './gpu-buffer-manager';
 import { MeshData, RenderMode } from './mesh-registry';
 
+// The only WASM surface the render path needs: the per-mesh draw table (B3). Narrow on purpose —
+// render() no longer reads wasm memory, so it must not require `memory` (keeps mocking simple).
+interface MeshBucketSource {
+    get_mesh_bucket_start(_meshIndex: number): number;
+    get_mesh_bucket_count(_meshIndex: number): number;
+}
+
 // Types
 export type TextureData = {
     image: HTMLImageElement | ImageBitmap;
@@ -336,7 +343,7 @@ export class WebGPURendererV2 {
     // WASM keeps same-mesh entities contiguous (B2 mesh buckets), so each mesh is one
     // drawIndexed over [bucketStart, bucketStart+count) of the shared instance buffer —
     // no per-frame regrouping, no per-frame buffer creation.
-    render(wasmModule?: { memory: WebAssembly.Memory, get_mesh_bucket_start(_meshIndex: number): number, get_mesh_bucket_count(_meshIndex: number): number }): void {
+    render(wasmModule?: MeshBucketSource): void {
         const sharedVertexBuffer = this.bufferManager.getSharedVertexBuffer();
         const sharedIndexBuffer = this.bufferManager.getSharedIndexBuffer();
         const instanceBuffer = this.bufferManager.getInstanceBuffer();
@@ -404,7 +411,7 @@ export class WebGPURendererV2 {
         renderPass: any, // GPURenderPassEncoder
         pipeline: GPURenderPipeline,
         renderMode: RenderMode,
-        wasmModule: { get_mesh_bucket_start(_meshIndex: number): number, get_mesh_bucket_count(_meshIndex: number): number }
+        wasmModule: MeshBucketSource
     ): void {
         renderPass.setPipeline(pipeline);
         renderPass.setBindGroup(0, this.bindGroup);

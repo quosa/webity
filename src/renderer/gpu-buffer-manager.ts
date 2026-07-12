@@ -186,9 +186,11 @@ export class GPUBufferManager {
         return this.meshRegistry.get(meshId);
     }
 
-    // All registered meshes with their allocations — drives the per-mesh draw table (B3)
-    getMeshAllocations(): Map<string, MeshAllocation> {
-        return this.meshRegistry.getAllocations();
+    // All registered meshes with their allocations — drives the per-mesh draw table (B3).
+    // Returns the live map as a read-only view: the render loop iterates this twice per frame,
+    // so it must NOT copy (a fresh Map per pass would reintroduce per-frame allocation).
+    getMeshAllocations(): ReadonlyMap<string, MeshAllocation> {
+        return this.meshRegistry.getAllocationsView();
     }
 
     getVertexBufferOffset(meshId: string): number {
