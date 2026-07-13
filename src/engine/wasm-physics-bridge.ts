@@ -240,7 +240,12 @@ export class WasmPhysicsBridge {
         return true;
     }
 
-    // Update physics simulation (called each frame by Scene)
+    // Update physics simulation (called each frame by the Engine).
+    // B8: physics results are NOT copied back into GameObjects here — the renderer
+    // reads transforms straight from the WASM instance buffer (B3/B5), so the
+    // per-frame WASM->TS round-trip was redundant. Game logic that needs the
+    // simulated state pulls it explicitly: RigidBody.syncFromWasm() for one entity,
+    // or syncAllGameObjectsFromWasm() for a bulk snapshot (debug/analysis).
     public update(deltaTime: number): void {
         if (!this.isInitialized || !this.wasm) {
             return;
@@ -248,9 +253,6 @@ export class WasmPhysicsBridge {
 
         // Run WASM physics simulation step
         this.wasm.update(deltaTime);
-
-        // Sync physics results back to GameObjects
-        this.syncPhysicsResults();
     }
 
     // Apply force to physics entity (overloaded method)
@@ -442,15 +444,17 @@ export class WasmPhysicsBridge {
         this.wasm?.clear_collision_event_counter();
     }
 
-    // Sync physics simulation results back to GameObjects
-    private syncPhysicsResults(): void {
+    // Bulk pull: copy the simulated state of every registered dynamic body back into
+    // its GameObject. NOT called per frame (B8) — use it for one-shot snapshots
+    // (debug prints, analysis) or tests that assert on TS-side transforms.
+    public syncAllGameObjectsFromWasm(): void {
         if (!this.wasm) return;
 
         // Read updated transforms from WASM memory buffers
         for (const [wasmEntityId, gameObject] of this.gameObjectMap) {
             const rigidBody = gameObject.getComponent(RigidBody);
             if (!rigidBody || rigidBody.isKinematic) {
-                continue; // Skip kinematic bodies
+                continue; // Kinematic/static bodies: the TS transform is the source of truth
             }
 
             // Read actual position from WASM physics simulation

@@ -174,6 +174,38 @@ describe('RigidBody Component', () => {
             }).not.toThrow();
         });
 
+        test('syncFromWasm pulls position/velocity into the GameObject (B8 explicit pull)', () => {
+            const mockBridge = {
+                getEntityPosition: jest.fn(() => ({ x: 1, y: -12, z: 3 })),
+                getEntityVelocity: jest.fn(() => ({ x: 0, y: -9, z: 0 })),
+                setBodyType: jest.fn()
+            };
+            rigidBody.setWasmEntityId(5);
+            rigidBody.setPhysicsBridge(mockBridge);
+
+            rigidBody.syncFromWasm();
+
+            expect(gameObject.transform.position).toEqual({ x: 1, y: -12, z: 3 });
+            expect(rigidBody.velocity).toEqual({ x: 0, y: -9, z: 0 });
+        });
+
+        test('syncFromWasm is a no-op for kinematic bodies (TS transform is source of truth)', () => {
+            const mockBridge = {
+                getEntityPosition: jest.fn(() => ({ x: 1, y: 2, z: 3 })),
+                getEntityVelocity: jest.fn(() => ({ x: 4, y: 5, z: 6 })),
+                setBodyType: jest.fn()
+            };
+            gameObject.transform.setPosition(9, 9, 9);
+            rigidBody.setWasmEntityId(5);
+            rigidBody.setPhysicsBridge(mockBridge);
+            rigidBody.setKinematic(true);
+
+            rigidBody.syncFromWasm();
+
+            expect(gameObject.transform.position).toEqual({ x: 9, y: 9, z: 9 });
+            expect(mockBridge.getEntityPosition).not.toHaveBeenCalled();
+        });
+
         test('should handle sync from WASM', () => {
             const mockEntityData = {
                 position: { x: 10, y: 20, z: 30 }

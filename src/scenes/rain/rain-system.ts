@@ -4,7 +4,7 @@
 import { Scene } from '../../engine/scene-system';
 import { GameObject } from '../../engine/gameobject';
 import { RainEntityFactory, RainEntityType, RainEntityConfig } from './rain-entity-factory';
-import { Vector3 } from '../../engine/components';
+import { RigidBody, Vector3 } from '../../engine/components';
 
 export interface RainSystemConfig {
     spawnRate: number;        // entities per second
@@ -210,6 +210,10 @@ export class RainSystemV2 {
                 entitiesToRemove.push(entityId);
                 continue;
             }
+
+            // B8: no automatic per-frame WASM->TS sync — pull the drop's simulated
+            // position before the recycle check
+            entity.getComponent(RigidBody)?.syncFromWasm();
 
             // Check if entity has fallen too far
             if (entity.transform.position.y < (this.config.cleanupY || -20)) {
