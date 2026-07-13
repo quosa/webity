@@ -251,7 +251,8 @@ export class RigidBody extends Component {
     }
 
     public set isKinematic(kinematic: boolean) {
-        this.bodyType = kinematic ? BodyType.KINEMATIC : BodyType.DYNAMIC;
+        // Route through setBodyType so post-mount writes reach WASM too
+        this.setBodyType(kinematic ? BodyType.KINEMATIC : BodyType.DYNAMIC);
     }
 
     // Legacy bool surface on top of the float scale: gravity is now gravityScale
@@ -261,7 +262,8 @@ export class RigidBody extends Component {
     }
 
     public set useGravity(use: boolean) {
-        this.gravityScale = use ? 1.0 : 0.0;
+        // Route through setGravityScale so post-mount writes reach WASM too
+        this.setGravityScale(use ? 1.0 : 0.0);
     }
 
     // A fixed, collidable surface that never moves: a true STATIC body.

@@ -1126,9 +1126,12 @@ pub export fn set_position(x: f32, y: f32, z: f32) void {
 }
 
 pub export fn apply_force(entity_id: u32, x: f32, y: f32, z: f32) void {
-    // Apply force to specified entity. Resolves the STABLE entity id to the current
-    // array index — indices move as the bucketed arrays compact (B2).
+    // Direct velocity impulse (mass-independent by design — see apply_force_to_entity
+    // for the force/mass variant). Resolves the STABLE entity id to the current array
+    // index (B2), and only DYNAMIC bodies respond: KINEMATIC/STATIC velocity is
+    // script-owned/zero and must never accumulate solver-visible shove from forces.
     if (findECSEntityById(entity_id)) |index| {
+        if (physics_components[index].body_type != .DYNAMIC) return;
         physics_components[index].velocity.x += x;
         physics_components[index].velocity.y += y;
         physics_components[index].velocity.z += z;

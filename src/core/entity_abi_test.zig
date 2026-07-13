@@ -80,9 +80,15 @@ test "KINEMATIC and STATIC bodies are immovable to the solver (inv_mass = 0)" {
     try testing.expectEqual(@as(f32, 0), engine.get_entity_velocity_y(0)); // no gravity integration
     try testing.expectEqual(@as(f32, 0), engine.get_entity_velocity_y(1));
 
-    // Forces do not move them either
+    // Forces do not move them either — via the force/mass variant...
     engine.apply_force_to_entity(0, 0, 3.0, 0);
     try testing.expectEqual(@as(f32, 0), engine.get_entity_velocity_y(0));
+    // ...NOR via the direct velocity-impulse export (kinematic shove velocity is
+    // script-owned; forces must never leak into it)
+    engine.apply_force(0, 0, 3.0, 0);
+    engine.apply_force(1, 0, 3.0, 0);
+    try testing.expectEqual(@as(f32, 0), engine.get_entity_velocity_y(0));
+    try testing.expectEqual(@as(f32, 0), engine.get_entity_velocity_y(1));
 }
 
 test "DYNAMIC body with mass <= 0 is clamped to mass 1 (never a poisoned inv_mass)" {
