@@ -12,8 +12,8 @@ import { GamepadInputManager, GamepadConfiguration, GAMEPAD_PRESETS } from './ga
 // data + lifecycle; it delegates entity registration for runtime spawns/removals to the Engine,
 // which owns the renderer and physics bridge.
 export interface SceneRuntime {
-    registerRuntimeEntity(_gameObject: GameObject): void;
-    unregisterRuntimeEntity(_gameObject: GameObject): void;
+    registerRuntimeEntity(gameObject: GameObject): void;
+    unregisterRuntimeEntity(gameObject: GameObject): void;
 }
 
 export class Scene {

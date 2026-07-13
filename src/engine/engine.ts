@@ -19,7 +19,7 @@
 import { WebGPURendererV2 } from '../renderer/webgpu.renderer';
 import { RenderMode } from '../renderer/mesh-registry';
 import { Scene, SceneRuntime } from './scene-system';
-import { MeshRenderer, RigidBody } from './components';
+import { BodyType, MeshRenderer, RigidBody } from './components';
 import { Mesh } from './mesh';
 import { GameObject } from './gameobject';
 import { WasmLoader } from './wasm-loader';
@@ -164,15 +164,17 @@ export class Engine implements SceneRuntime {
         meshRenderer.meshIndex = meshIndex;
     }
 
-    // Warn about a RigidBody that will be inert: the engine gates simulation/collision on
-    // `physics_enabled = mass != 0`, so a mass-0 RigidBody is silently skipped and never collides.
+    // Warn about an invalid DYNAMIC mass: the solver rejects mass <= 0 on DYNAMIC bodies
+    // (WASM clamps it to 1 so a poisoned inv_mass can never NaN a simulation island).
+    // KINEMATIC/STATIC bodies are immovable colliders regardless of mass — the old
+    // "mass-0 RigidBody is silently inert" footgun is gone with the entity-flags ABI.
     private warnIfInertRigidBody(gameObject: GameObject): void {
         const rigidBody = gameObject.getComponent(RigidBody);
-        if (rigidBody && rigidBody.mass === 0) {
+        if (rigidBody && rigidBody.bodyType === BodyType.DYNAMIC && rigidBody.mass <= 0) {
             console.warn(
-                `⚠️ "${gameObject.name}": RigidBody has mass 0 — physics & collision are DISABLED for it ` +
-                '(the engine only simulates entities with mass != 0). For a fixed, collidable surface use a ' +
-                'non-zero mass together with isKinematic (RigidBody.staticBody).',
+                `⚠️ "${gameObject.name}": DYNAMIC RigidBody has mass ${rigidBody.mass} — invalid, ` +
+                'the engine clamps it to mass = 1. Set a positive mass, or use BodyType.STATIC / ' +
+                'RigidBody.staticBody(...) for an immovable collider.',
             );
         }
     }

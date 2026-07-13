@@ -15,6 +15,11 @@ export class GPUBufferManager {
     private static readonly INITIAL_VERTEX_SIZE = 10 * 1024 * 1024; // 10MB for vertices
     private static readonly INITIAL_INDEX_SIZE = 5 * 1024 * 1024;   // 5MB for indices
 
+    // Per-instance data mirrors WASM's 96 B extern RenderingComponent (B4/B6):
+    // 16 transform + 4 color + anim_time/variant/lod_flags/bone_palette (Stage C fields).
+    // Must match game_engine.zig — asserted there by entity_abi_test.zig.
+    private static readonly INSTANCE_FLOATS = 24; // 96 B / 4
+
     constructor(device: GPUDevice) {
         this.device = device;
     }
@@ -102,29 +107,36 @@ export class GPUBufferManager {
             return;
         }
 
-        // Direct zero-copy mapping from WASM entity transforms
-        // 20 floats per instance: 16 (transform matrix) + 4 (color)
-        // This is a typed array view into the WASM memory, not a copy!
-        const wasmInstanceData = new Float32Array(wasmMemory, offset, count * 20);
+        // Direct zero-copy mapping from WASM entity transforms (96 B / 24 floats per
+        // instance — see INSTANCE_FLOATS). This is a typed array view, not a copy!
+        const wasmInstanceData = new Float32Array(wasmMemory, offset, count * GPUBufferManager.INSTANCE_FLOATS);
 
         // Track entity count for rendering (only after validation)
         this.setWasmEntityCount(count);
 
-        // Create or update instance buffer with WASM data
-        if (!this.instanceBuffer || this.instanceBuffer.size < wasmInstanceData.byteLength) {
-            // Recreate buffer if too small
-            this.instanceBuffer?.destroy();
-            this.instanceBuffer = this.device.createBuffer({
-                label: 'WASM Instance Data Buffer',
-                size: Math.max(wasmInstanceData.byteLength, 1024), // Minimum 1KB
-                usage: 0x20 | 0x08, // GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-            });
-        }
+        // Grow the instance storage buffer if needed (the renderer rebuilds its bind
+        // group when the buffer identity changes), then one bulk write.
+        this.ensureInstanceBuffer(wasmInstanceData.byteLength);
 
         // Write WASM data directly to GPU buffer
         // This is a necessary copy because WebGPU cannot directly access WASM memory. :-(
         // https://toji.dev/webgpu-best-practices/buffer-uploads.html
-        this.device.queue.writeBuffer(this.instanceBuffer, 0, wasmInstanceData);
+        this.device.queue.writeBuffer(this.instanceBuffer!, 0, wasmInstanceData);
+    }
+
+    // B5: the per-instance data is a STORAGE buffer (read in the vertex stage via
+    // instanceData[instance_index]) — extensible and compute-readable, not a vertex stream.
+    // Returns the current buffer, reallocating a larger one when minBytes outgrows it.
+    ensureInstanceBuffer(minBytes: number = 1024): GPUBuffer {
+        if (!this.instanceBuffer || this.instanceBuffer.size < minBytes) {
+            this.instanceBuffer?.destroy();
+            this.instanceBuffer = this.device.createBuffer({
+                label: 'WASM Instance Data Buffer',
+                size: Math.max(minBytes, 1024), // Minimum 1KB
+                usage: 0x80 | 0x08, // GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+        }
+        return this.instanceBuffer;
     }
 
     // Phase 5: Get or create instance buffer for WASM data
@@ -145,7 +157,7 @@ export class GPUBufferManager {
     }
 
     validateWasmBufferAccess(wasmMemory: ArrayBuffer, offset: number, count: number): boolean {
-        const requiredBytes = count * 20 * 4; // 20 floats * 4 bytes per float
+        const requiredBytes = count * GPUBufferManager.INSTANCE_FLOATS * 4;
         const availableBytes = wasmMemory.byteLength - offset;
 
         // Enhanced validation with detailed logging

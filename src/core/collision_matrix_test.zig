@@ -1155,8 +1155,8 @@ test "WASM integration debug: verify entity configuration" {
 
     // Add entities exactly as integration test does
     std.debug.print("📦 Adding entities exactly as collision_test.zig does...\n", .{});
-    game_engine.add_entity(0, 0, 0, 0, 1, 1, 1, 0.5, 0.5, 0.5, 1.0, 1, 0, 5.0, 1.0, true); // Platform
-    game_engine.add_entity(1, 0, 3, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 1.0, false); // Ball
+    game_engine.add_entity(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0.5, 0.5, 0.5, 1.0, 1, 0, 1, 5.0, 1.0, 1.0, true); // Platform
+    game_engine.add_entity(1, 0, 3, 0, 0, 0, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 0, 1.0, 1.0, 1.0, true); // Ball
 
     // Debug: Check actual entity configuration
     std.debug.print("\n🔍 Entity 0 (Platform) configuration:\n", .{});

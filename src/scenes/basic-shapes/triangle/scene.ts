@@ -63,7 +63,7 @@ async function main(): Promise<void> {
                 if (wasmMemory && transformsOffset !== undefined) {
                     const entityCount = stats.entityCount;
                     const instanceData = new Float32Array(wasmMemory, transformsOffset, entityCount * 20);
-                    console.log('WASM Instance Data (20 floats per entity):');
+                    console.log('WASM Instance Data (24 floats / 96 B per entity):');
                     for (let i = 0; i < entityCount; i++) {
                         const offset = i * 20;
                         console.log(`Entity ${i}:`);

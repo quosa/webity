@@ -39,13 +39,16 @@ fn runFloorBoundaryTest() !SettlingData {
     game_engine.add_entity(
         1,          // id
         0.0, 5.0, 0.0,  // position: high above floor boundary (-8)
+        0.0, 0.0, 0.0,  // rotation
         1.0, 1.0, 1.0,  // scale
         1.0, 0.2, 1.0, 1.0,  // color
         2,          // mesh: sphere
         0,          // material
+        0,          // bodyType: DYNAMIC
         1.0,        // mass
+        1.0,        // gravityScale
         1.0,        // radius
-        false       // kinematic: false (dynamic)
+        true        // physicsEnabled
     );
     const sphere_id: u32 = 1;
 
@@ -158,26 +161,32 @@ fn runKinematicBoxTest() !SettlingData {
     game_engine.add_entity(
         0,          // id
         0.0, -7.0, 0.0,  // position: platform
+        0.0, 0.0, 0.0,   // rotation
         2.0, 2.0, 2.0,   // scale: 2x2x2 visual
         0.5, 0.5, 0.5, 1.0,  // color: gray
         1,          // mesh: box
         0,          // material
-        5.0,        // mass
+        1,          // bodyType: KINEMATIC (immovable)
+        5.0,        // mass (stored, inert while kinematic)
+        1.0,        // gravityScale
         1.0,        // extents (collision size)
-        true        // kinematic: true (immovable)
+        true        // physicsEnabled
     );
 
     // Add sphere at same relative height as floor test
     game_engine.add_entity(
         1,          // id
         0.0, 5.0, 0.0,   // position: high above platform (-7 + 12 = 5, same drop height)
+        0.0, 0.0, 0.0,   // rotation
         1.0, 1.0, 1.0,   // scale
         1.0, 0.2, 1.0, 1.0,  // color
         2,          // mesh: sphere
         0,          // material
+        0,          // bodyType: DYNAMIC
         1.0,        // mass
+        1.0,        // gravityScale
         1.0,        // radius
-        false       // kinematic: false (dynamic)
+        true        // physicsEnabled
     );
     const sphere_id: u32 = 1;
 

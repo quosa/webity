@@ -174,9 +174,9 @@ test "integration: falling ball vs kinematic platform (scene-like)" {
 
     std.debug.print("📦 Adding entities to WASM engine...\n", .{});
 
-    // add_entity(id, x, y, z, scaleX, scaleY, scaleZ, colorR, colorG, colorB, colorA, meshIndex, materialId, mass, radius, isKinematic)
-    game_engine.add_entity(0, 0, 0, 0, 1, 1, 1, 0.5, 0.5, 0.5, 1.0, 1, 0, 5.0, 1.0, true); // Platform (kinematic, BOX mesh, extents=1.0)
-    game_engine.add_entity(1, 0, 3, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 1.0, false); // Ball (dynamic, SPHERE mesh, radius=1.0)
+    // add_entity(id, x,y,z, rotX,rotY,rotZ, scaleX,scaleY,scaleZ, colorR,colorG,colorB,colorA, meshIndex, materialId, bodyType, mass, gravityScale, radius, physicsEnabled)
+    game_engine.add_entity(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0.5, 0.5, 0.5, 1.0, 1, 0, 1, 5.0, 1.0, 1.0, true); // Platform (kinematic, BOX mesh, extents=1.0)
+    game_engine.add_entity(1, 0, 3, 0, 0, 0, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 0, 1.0, 1.0, 1.0, true); // Ball (dynamic, SPHERE mesh, radius=1.0)
 
     std.debug.print("✅ Added platform (id=0, kinematic=true) and ball (id=1, kinematic=false)\n", .{});
 
@@ -334,8 +334,8 @@ test "debug: collision detection step-by-step analysis" {
 
     // Initialize engine and add same entities
     game_engine.init();
-    game_engine.add_entity(0, 0, -2, 0, 4, 1, 4, 0.5, 0.5, 0.5, 1.0, 1, 0, 5.0, 2.0, true); // Platform (BOX mesh)
-    game_engine.add_entity(1, 0, 3, 0, 0.8, 0.8, 0.8, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 0.8, false); // Ball (SPHERE mesh)
+    game_engine.add_entity(0, 0, -2, 0, 0, 0, 0, 4, 1, 4, 0.5, 0.5, 0.5, 1.0, 1, 0, 1, 5.0, 1.0, 2.0, true); // Platform (BOX mesh)
+    game_engine.add_entity(1, 0, 3, 0, 0, 0, 0, 0.8, 0.8, 0.8, 1.0, 0.2, 0.2, 1.0, 2, 0, 0, 1.0, 1.0, 0.8, true); // Ball (SPHERE mesh)
 
     // Verify entity count and active flags
     const entity_count = game_engine.get_entity_count();
@@ -745,11 +745,11 @@ test "sphere-box bounce height decay - energy conservation" {
     game_engine.init();
 
     // Create kinematic box platform at Y=0
-    // add_entity(id, x, y, z, scaleX, scaleY, scaleZ, colorR, colorG, colorB, colorA, meshIndex, materialId, mass, radius, isKinematic)
-    game_engine.add_entity(0, 0, 0, 0, 1, 1, 1, 0.5, 0.5, 0.5, 1.0, 1, 0, 5.0, 1.0, true); // Platform (kinematic, BOX mesh)
+    // add_entity(id, x,y,z, rotX,rotY,rotZ, scaleX,scaleY,scaleZ, colorR,colorG,colorB,colorA, meshIndex, materialId, bodyType, mass, gravityScale, radius, physicsEnabled)
+    game_engine.add_entity(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0.5, 0.5, 0.5, 1.0, 1, 0, 1, 5.0, 1.0, 1.0, true); // Platform (kinematic, BOX mesh)
 
     // Drop sphere from height Y=5.0 (should give us several clear bounces)
-    game_engine.add_entity(1, 0, 5, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 1.0, false); // Sphere (dynamic, SPHERE mesh)
+    game_engine.add_entity(1, 0, 5, 0, 0, 0, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 0, 1.0, 1.0, 1.0, true); // Sphere (dynamic, SPHERE mesh)
     const sphere_id: u32 = 1;
 
     std.debug.print("📦 Setup: Platform at Y=0.0, Sphere dropped from Y=5.0\n", .{});
@@ -859,7 +859,7 @@ test "simple floor bounce - energy conservation baseline" {
 
     // Drop sphere from Y=5.0 onto floor boundary at Y=-8 (no kinematic objects involved)
     // Floor collision is handled by world boundaries, not entity collision resolution
-    game_engine.add_entity(0, 0, 5, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 1.0, 1.0, false); // Sphere (dynamic, SPHERE mesh)
+    game_engine.add_entity(0, 0, 5, 0, 0, 0, 0, 1, 1, 1, 1.0, 0.2, 0.2, 1.0, 2, 0, 0, 1.0, 1.0, 1.0, true); // Sphere (dynamic, SPHERE mesh)
     const sphere_id: u32 = 0;
 
     std.debug.print("📦 Setup: Sphere dropped from Y=5.0 onto floor boundary at Y=-8.0\n", .{});

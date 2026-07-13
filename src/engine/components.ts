@@ -193,12 +193,32 @@ export enum CollisionShape {
     PLANE = 2,
 }
 
+// Body type — the whole motion model, mirrors WASM BodyType (game_engine.zig):
+// - DYNAMIC: full simulation — mass (> 0), gravityScale, damping, forces
+// - KINEMATIC: script-driven — you set position/velocity; the solver never pushes it back
+// - STATIC: never moves, baked once — absorbs everything
+// Internally the solver uses inverse mass: DYNAMIC -> 1/mass, KINEMATIC/STATIC -> 0
+// (infinite mass — same representation as PhysX/Jolt/Rapier).
+export enum BodyType {
+    // eslint-disable-next-line no-unused-vars
+    DYNAMIC = 0,
+    // eslint-disable-next-line no-unused-vars
+    KINEMATIC = 1,
+    // eslint-disable-next-line no-unused-vars
+    STATIC = 2,
+}
+
 // RigidBody component - handles physics simulation
 export class RigidBody extends Component {
+    // Stored mass. ACTIVE only while DYNAMIC (must be > 0 — WASM clamps invalid values
+    // to 1 and warns). Stored-but-inert on KINEMATIC (kept for type transitions, e.g.
+    // an elevator whose cable snaps, and for gameplay reads); ignored on STATIC.
     public mass: number;
     public velocity: Vector3;
-    public isKinematic: boolean;
-    public useGravity: boolean;
+    public bodyType: BodyType;
+    // Gravity multiplier, DYNAMIC only: 1.0 normal, 0.0 space (still simulated,
+    // still collides, responds to forces — just doesn't fall), 0.16 moon, -1.0 reverse.
+    public gravityScale: number;
 
     // Physics shape (enhanced collision system)
     public collisionShape: CollisionShape;
@@ -210,24 +230,46 @@ export class RigidBody extends Component {
 
     constructor(
         mass: number = 1.0,
-        useGravity: boolean = true,
+        useGravity: boolean = true, // kept positional for compatibility; sets gravityScale 1/0
         collisionShape: CollisionShape = CollisionShape.SPHERE,
         extents: Vector3 = { x: 0.5, y: 0.5, z: 0.5 }, // Default sphere radius 0.5
-        opts: { kinematic?: boolean } = {}
+        opts: { kinematic?: boolean; bodyType?: BodyType; gravityScale?: number } = {}
     ) {
         super();
         this.mass = mass;
         this.velocity = { x: 0, y: 0, z: 0 };
-        this.isKinematic = opts.kinematic ?? false; // Default: affected by physics forces
-        this.useGravity = useGravity;
+        this.bodyType = opts.bodyType ?? (opts.kinematic ? BodyType.KINEMATIC : BodyType.DYNAMIC);
+        this.gravityScale = opts.gravityScale ?? (useGravity ? 1.0 : 0.0);
         this.collisionShape = collisionShape;
         this.extents = extents;
     }
 
-    // A fixed, collidable surface: kinematic (won't move) with a non-zero mass so it actually
-    // participates in collision, and no gravity. Avoids the mass-0 inert-collider footgun.
+    // Immovable/unpushable to the solver (KINEMATIC or STATIC). Kept as an accessor so
+    // existing `isKinematic` reads/writes keep working on top of bodyType.
+    public get isKinematic(): boolean {
+        return this.bodyType !== BodyType.DYNAMIC;
+    }
+
+    public set isKinematic(kinematic: boolean) {
+        // Route through setBodyType so post-mount writes reach WASM too
+        this.setBodyType(kinematic ? BodyType.KINEMATIC : BodyType.DYNAMIC);
+    }
+
+    // Legacy bool surface on top of the float scale: gravity is now gravityScale
+    // (1.0 normal, 0.0 space, 0.16 moon, ...). Setting the bool maps to 1/0.
+    public get useGravity(): boolean {
+        return this.gravityScale !== 0;
+    }
+
+    public set useGravity(use: boolean) {
+        // Route through setGravityScale so post-mount writes reach WASM too
+        this.setGravityScale(use ? 1.0 : 0.0);
+    }
+
+    // A fixed, collidable surface that never moves: a true STATIC body.
+    // (mass is ignored on STATIC bodies — the solver sees infinite mass.)
     static staticBody(collisionShape: CollisionShape, extents: Vector3): RigidBody {
-        return new RigidBody(1.0, false, collisionShape, extents, { kinematic: true });
+        return new RigidBody(1.0, false, collisionShape, extents, { bodyType: BodyType.STATIC });
     }
 
     override awake(): void {
@@ -302,17 +344,26 @@ export class RigidBody extends Component {
         }
     }
 
-    // Make this body kinematic (not affected by physics forces).
-    // Effective when called before mount (the flag is passed to WASM at add_entity).
-    // TODO(Stage B4/B6 ABI window — docs/instanced-rendering-refactor-plan.md "Agreed sequencing"):
-    // toggling AFTER mount only changes the TS-side flag; WASM keeps the registration-time
-    // kinematic state until the entity-flags ABI rework adds a set_entity_kinematic export.
-    public setKinematic(kinematic: boolean): void {
-        this.isKinematic = kinematic;
-        console.log(`🎮 RigidBody.setKinematic(${kinematic}) for "${this.gameObject?.name}"`);
-
+    // Runtime body-type transition, applied WASM-side too (e.g. a KINEMATIC elevator
+    // whose cable snaps -> DYNAMIC and falls; the stored mass becomes live).
+    public setBodyType(bodyType: BodyType): void {
+        this.bodyType = bodyType;
         if (this.physicsBridge && this.wasmEntityId !== undefined) {
-            this.physicsBridge.setKinematic(this.wasmEntityId, kinematic);
+            this.physicsBridge.setBodyType(this.wasmEntityId, bodyType);
+        }
+    }
+
+    // Legacy convenience: kinematic <-> dynamic toggle on top of setBodyType.
+    public setKinematic(kinematic: boolean): void {
+        console.log(`🎮 RigidBody.setKinematic(${kinematic}) for "${this.gameObject?.name}"`);
+        this.setBodyType(kinematic ? BodyType.KINEMATIC : BodyType.DYNAMIC);
+    }
+
+    // Runtime gravity-scale change (DYNAMIC bodies), applied WASM-side.
+    public setGravityScale(scale: number): void {
+        this.gravityScale = scale;
+        if (this.physicsBridge && this.wasmEntityId !== undefined) {
+            this.physicsBridge.setGravityScale(this.wasmEntityId, scale);
         }
     }
 

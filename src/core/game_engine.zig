@@ -60,36 +60,79 @@ const MeshType = enum(u8) {
 // ECS Component System - Hot/Cold Data Separation
 // =============================================================================
 
+// Body type: the whole motion model (single enum + mass + gravity_scale).
+// - DYNAMIC: full simulation (mass > 0, gravity_scale, damping, forces)
+// - KINEMATIC: script-driven; the solver never pushes it back (elevators, doors)
+// - STATIC: never moves, baked once (houses, rocks); absorbs everything
+pub const BodyType = enum(u8) {
+    DYNAMIC = 0,
+    KINEMATIC = 1,
+    STATIC = 2,
+};
+
 // Physics-only component (hot data - cache-friendly)
-const PhysicsComponent = struct {
+pub const PhysicsComponent = struct {
     position: core.Vec3, // World position
-    velocity: core.Vec3, // Movement velocity
+    velocity: core.Vec3, // Movement velocity (DYNAMIC: simulated; KINEMATIC: script-set; STATIC: 0)
     force: core.Vec3, // Accumulated forces
     rotation: core.Vec3, // Rotation in radians (x, y, z)
     scale: core.Vec3, // Scale values (x, y, z)
-    mass: f32, // Physics mass
+    mass: f32, // Stored mass. Only ACTIVE on DYNAMIC bodies; stored-but-inert on
+    // KINEMATIC (kept for type transitions, e.g. elevator cable snaps -> DYNAMIC,
+    // and for gameplay reads); ignored on STATIC.
+    inv_mass: f32, // What the solver actually uses: DYNAMIC -> 1/mass, KINEMATIC/STATIC -> 0
+    // (inv_mass == 0 IS the representation of infinite mass / immovable — same as
+    // PhysX/Jolt/Rapier). Derived, never set directly: see deriveInvMass().
+    gravity_scale: f32, // DYNAMIC only: 1.0 normal, 0.0 space, 0.16 moon, -1.0 reverse
     radius: f32, // Collision radius/size (legacy - use extents.x for spheres)
-    is_kinematic: bool, // Kinematic vs dynamic
+    body_type: BodyType,
     collision_shape: core.CollisionShape, // Shape type for collision detection
     extents: core.Vec3, // Half-extents for boxes, radius in .x for spheres, normal for planes
+
+    // Immovable/unpushable to the solver (infinite effective mass).
+    pub fn isImmovable(self: *const PhysicsComponent) bool {
+        return self.inv_mass == 0;
+    }
 };
 
-// Rendering-only component (GPU buffer layout - exactly 20 floats)
-const RenderingComponent = struct {
-    transform_matrix: [16]f32, // 4x4 world transform matrix (64 bytes)
-    color: [4]f32, // RGBA color (16 bytes)
-    // Total: exactly 80 bytes (20 floats) for zero-copy GPU mapping
+// Solver mass from (body_type, mass). Rejects mass <= 0 on DYNAMIC bodies by
+// falling back to mass = 1 — a negative/inf inv_mass reaching the solver can
+// NaN an entire simulation island. Returns .{ effective mass, inv_mass }.
+fn deriveInvMass(body_type: BodyType, mass: f32) struct { mass: f32, inv_mass: f32 } {
+    if (body_type != .DYNAMIC) return .{ .mass = mass, .inv_mass = 0 };
+    if (mass <= 0) {
+        const msg = "WARN: DYNAMIC body with mass <= 0 clamped to mass = 1";
+        log(msg.ptr, msg.len);
+        return .{ .mass = 1.0, .inv_mass = 1.0 };
+    }
+    return .{ .mass = mass, .inv_mass = 1.0 / mass };
+}
+
+// Rendering-only component — GPU instance data, mapped 1:1 into the GPU instance
+// buffer. `extern struct` so the layout is GUARANTEED (B4), not incidental; widened
+// to 96 bytes (24 floats, std430 16-byte-friendly) so future workloads (crowd
+// animation, vegetation tint/wind/LOD) extend per-instance data without a re-layout (B6).
+pub const RenderingComponent = extern struct {
+    transform_matrix: [16]f32, // 64 B @ 0  — 4x4 world transform (column-major)
+    color: [4]f32, //             16 B @ 64 — RGBA tint
+    anim_time: f32, //             4 B @ 80 — march/wind/VAT time (Stage C; WASM-written)
+    variant_tex_index: u32, //     4 B @ 84 — texture/variant selector, set at spawn (Stage C)
+    lod_flags: u32, //             4 B @ 88 — lod (low bits) + flags (high bits) (Stage C)
+    bone_palette_off: u32, //      4 B @ 92 — reserved for future GPU skinning; unused
+    // Total: exactly 96 bytes — asserted in entity_abi_test.zig
 };
 
-// Entity metadata (lifecycle and dirty flags)
-const EntityMetadata = struct {
-    id: u32, // Entity ID for TypeScript mapping
-    active: bool, // Entity active flag
-    physics_enabled: bool, // Has physics simulation
-    rendering_enabled: bool, // Has rendering data
-    transform_dirty: bool, // Transform matrix needs recalculation
-    mesh_index: u32, // Mesh type identifier (moved from RenderingComponent)
-    material_id: u32, // Material identifier (moved from RenderingComponent)
+// Entity metadata (lifecycle and dirty flags). `extern struct` (B4): TypeScript reads
+// this array via get_entity_metadata_offset/size, so field offsets are ABI
+// (id @0, mesh_index @4, material_id @8, flags @12..15 — size 16).
+pub const EntityMetadata = extern struct {
+    id: u32, // @0  Entity ID for TypeScript mapping
+    mesh_index: u32, // @4  Mesh type identifier (offset read by TS/tests)
+    material_id: u32, // @8  Material identifier
+    active: bool, // @12 Entity active flag
+    physics_enabled: bool, // @13 Participates in physics & collision
+    rendering_enabled: bool, // @14 Has rendering data
+    transform_dirty: bool, // @15 Transform matrix needs recalculation
 };
 
 // Rotator component for animation behavior
@@ -232,8 +275,10 @@ fn initEntities() void {
             .rotation = .{ .x = 0, .y = 0, .z = 0 },
             .scale = .{ .x = 1, .y = 1, .z = 1 },
             .mass = 1.0,
+            .inv_mass = 1.0,
+            .gravity_scale = 1.0,
             .radius = 0.5, // Legacy field
-            .is_kinematic = false,
+            .body_type = .DYNAMIC,
             .collision_shape = core.CollisionShape.SPHERE, // Default to sphere
             .extents = .{ .x = 0.5, .y = 0.5, .z = 0.5 }, // Default sphere radius in .x
         };
@@ -249,6 +294,10 @@ fn initEntities() void {
                 0.0, 0.0, 0.0, 1.0,
             },
             .color = [_]f32{ 1.0, 1.0, 1.0, 1.0 }, // Default white
+            .anim_time = 0,
+            .variant_tex_index = 0,
+            .lod_flags = 0,
+            .bone_palette_off = 0,
         };
     }
 
@@ -404,13 +453,14 @@ fn updateECSPhysics(delta_time: f32) void {
     for (physics_components[0..entity_count], 0..) |*phys, i| {
         if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
 
-        // Skip physics updates for kinematic bodies (they participate in collision detection but not physics integration)
-        if (phys.is_kinematic) continue;
+        // Only DYNAMIC bodies integrate (KINEMATIC/STATIC participate in collision
+        // detection but the solver never moves them)
+        if (phys.body_type != .DYNAMIC) continue;
 
-        // Apply gravity and forces
-        phys.velocity.x += force.x * delta_time;
-        phys.velocity.y += force.y * delta_time;
-        phys.velocity.z += force.z * delta_time;
+        // Apply gravity scaled per body (1.0 normal, 0.0 space, 0.16 moon, -1.0 reverse)
+        phys.velocity.x += force.x * phys.gravity_scale * delta_time;
+        phys.velocity.y += force.y * phys.gravity_scale * delta_time;
+        phys.velocity.z += force.z * phys.gravity_scale * delta_time;
 
         // Apply damping (X and Z only - preserve Y velocity for gravity/collisions)
         phys.velocity.x *= physics_damping;
@@ -427,7 +477,7 @@ fn updateECSPhysics(delta_time: f32) void {
     const VELOCITY_THRESHOLD = 0.01; // 0.01 m/s as suggested by GPT-5
     for (physics_components[0..entity_count], 0..) |*phys, i| {
         if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
-        if (phys.is_kinematic) continue;
+        if (phys.body_type != .DYNAMIC) continue;
 
         // Clamp linear velocity components
         if (@abs(phys.velocity.x) < VELOCITY_THRESHOLD) phys.velocity.x = 0.0;
@@ -438,7 +488,7 @@ fn updateECSPhysics(delta_time: f32) void {
     // Step 3: Update positions using collision-corrected velocities
     for (physics_components[0..entity_count], 0..) |*phys, i| {
         if (!entity_metadata[i].physics_enabled or !entity_metadata[i].active) continue;
-        if (phys.is_kinematic) continue;
+        if (phys.body_type != .DYNAMIC) continue;
 
         // Update position with corrected velocity
         phys.position.x += phys.velocity.x * delta_time;
@@ -558,8 +608,10 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
         .rotation = .{ .x = 0, .y = 0, .z = 0 },
         .scale = .{ .x = 1, .y = 1, .z = 1 },
         .mass = 1.0,
+        .inv_mass = 1.0,
+        .gravity_scale = 1.0,
         .radius = radius, // Legacy field
-        .is_kinematic = false,
+        .body_type = .DYNAMIC,
         .collision_shape = collision_shape,
         .extents = extents,
     };
@@ -579,6 +631,10 @@ fn spawnEntityInternal(x: f32, y: f32, z: f32, radius: f32, mesh_type: MeshType)
             .PYRAMID => [_]f32{ 1.0, 0.0, 1.0, 1.0 }, // Purple for pyramids
             .GRID => [_]f32{ 0.3, 0.3, 0.3, 1.0 }, // Gray for grid
         },
+        .anim_time = 0,
+        .variant_tex_index = 0,
+        .lod_flags = 0,
+        .bone_palette_off = 0,
     };
 
     // Initialize entity metadata
@@ -707,7 +763,7 @@ fn checkEntityCollisions(delta_time: f32) void {
                 if (!entity_metadata[j].active or !entity_metadata[j].physics_enabled) continue;
 
                 // Skip collision if both entities are kinematic
-                if (physics_components[i].is_kinematic and physics_components[j].is_kinematic) continue;
+                if (physics_components[i].isImmovable() and physics_components[j].isImmovable()) continue;
 
                 const phys1 = &physics_components[i];
                 const phys2 = &physics_components[j];
@@ -738,7 +794,7 @@ fn checkEntityCollisions(delta_time: f32) void {
                         log(log_msg.ptr, log_msg.len);
 
                         // Debug: Log collision details
-                        if (phys1.is_kinematic or phys2.is_kinematic) {
+                        if (phys1.isImmovable() or phys2.isImmovable()) {
                             collision_state |= 0x20; // Kinematic collision flag
                         }
 
@@ -748,7 +804,7 @@ fn checkEntityCollisions(delta_time: f32) void {
                         const vel1_before = core.Vec3{ .x = phys1.velocity.x, .y = phys1.velocity.y, .z = phys1.velocity.z };
                         const vel2_before = core.Vec3{ .x = phys2.velocity.x, .y = phys2.velocity.y, .z = phys2.velocity.z };
 
-                        core.resolveSphereCollisionWithKinematic(&phys1.position, &phys1.velocity, phys1.mass, phys1.extents.x, phys1.is_kinematic, &phys2.position, &phys2.velocity, phys2.mass, phys2.extents.x, phys2.is_kinematic, physics_restitution);
+                        core.resolveSphereCollisionWithKinematic(&phys1.position, &phys1.velocity, phys1.mass, phys1.extents.x, phys1.isImmovable(), &phys2.position, &phys2.velocity, phys2.mass, phys2.extents.x, phys2.isImmovable(), physics_restitution);
 
                         // 📊 LOG COLLISION RESOLUTION DETAILS
                         var res_log_buffer: [512]u8 = undefined;
@@ -799,7 +855,7 @@ fn checkEntityCollisions(delta_time: f32) void {
 
                         // Debug: Log collision details (stored in collision_state bits for inspection)
                         // Bit pattern: 0x10 = collision detected, 0x20 = kinematic involved
-                        if (phys1.is_kinematic or phys2.is_kinematic) {
+                        if (phys1.isImmovable() or phys2.isImmovable()) {
                             collision_state |= 0x20; // Kinematic collision flag
                         }
 
@@ -810,7 +866,7 @@ fn checkEntityCollisions(delta_time: f32) void {
                         const vel2_before = core.Vec3{ .x = phys2.velocity.x, .y = phys2.velocity.y, .z = phys2.velocity.z };
 
                         // Use the collision_info from the detection call above (no double-call needed)
-                        core.resolveCollision(&phys1.position, &phys1.velocity, phys1.collision_shape, phys1.extents, phys1.mass, phys1.is_kinematic, &phys2.position, &phys2.velocity, phys2.collision_shape, phys2.extents, phys2.mass, phys2.is_kinematic, physics_restitution, collision_info);
+                        core.resolveCollision(&phys1.position, &phys1.velocity, phys1.collision_shape, phys1.extents, phys1.mass, phys1.isImmovable(), &phys2.position, &phys2.velocity, phys2.collision_shape, phys2.extents, phys2.mass, phys2.isImmovable(), physics_restitution, collision_info);
 
                         // 📊 LOG BOX COLLISION RESOLUTION DETAILS (very limited - only first 3 collisions)
                         if (collision_log_count <= 3) {
@@ -1070,9 +1126,12 @@ pub export fn set_position(x: f32, y: f32, z: f32) void {
 }
 
 pub export fn apply_force(entity_id: u32, x: f32, y: f32, z: f32) void {
-    // Apply force to specified entity. Resolves the STABLE entity id to the current
-    // array index — indices move as the bucketed arrays compact (B2).
+    // Direct velocity impulse (mass-independent by design — see apply_force_to_entity
+    // for the force/mass variant). Resolves the STABLE entity id to the current array
+    // index (B2), and only DYNAMIC bodies respond: KINEMATIC/STATIC velocity is
+    // script-owned/zero and must never accumulate solver-visible shove from forces.
     if (findECSEntityById(entity_id)) |index| {
+        if (physics_components[index].body_type != .DYNAMIC) return;
         physics_components[index].velocity.x += x;
         physics_components[index].velocity.y += y;
         physics_components[index].velocity.z += z;
@@ -1250,13 +1309,23 @@ pub export fn clear_debug_floating_entity() void {
 // ECS API Functions
 // =============================================================================
 
-// V2 API: Add entity with ECS structure
-pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshIndex: u32, materialId: u32, mass: f32, radius: f32, isKinematic: bool) void {
+// V2 API: Add entity with ECS structure.
+// Entity-flags ABI (B4/B6 window):
+// - rotX/Y/Z (radians) are baked into the transform at add time, so STATIC
+//   entities keep their initial rotation without needing a per-frame sync
+// - bodyType: 0 = DYNAMIC, 1 = KINEMATIC, 2 = STATIC (invalid -> STATIC, the safe immovable)
+// - gravityScale: DYNAMIC only (1.0 normal, 0.0 space, 0.16 moon, -1.0 reverse)
+// - physicsEnabled: false for mesh-only decorative entities (no collision at all);
+//   replaces the old `mass != 0` inference that made zero-mass colliders silently inert
+pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, rotX: f32, rotY: f32, rotZ: f32, scaleX: f32, scaleY: f32, scaleZ: f32, colorR: f32, colorG: f32, colorB: f32, colorA: f32, meshIndex: u32, materialId: u32, bodyType: u8, mass: f32, gravityScale: f32, radius: f32, physicsEnabled: bool) void {
     const index = allocateEntitySlot(meshIndex) orelse return; // full
 
-    // 🔍 RADIUS TRACING: Log all add_entity parameters (disabled for production)
-    // std.debug.print("🔍 ADD_ENTITY: id={d}, pos=({d:.3},{d:.3},{d:.3}), scale=({d:.3},{d:.3},{d:.3}), radius={d:.3}, mesh={d}\n",
-    //     .{id, x, y, z, scaleX, scaleY, scaleZ, radius, meshIndex});
+    const body_type: BodyType = switch (bodyType) {
+        0 => .DYNAMIC,
+        1 => .KINEMATIC,
+        else => .STATIC,
+    };
+    const solver_mass = deriveInvMass(body_type, mass);
 
     // Auto-detect collision shape from mesh index
     const collision_shape = switch (meshIndex) {
@@ -1272,49 +1341,78 @@ pub export fn add_entity(id: u32, x: f32, y: f32, z: f32, scaleX: f32, scaleY: f
         .PLANE => core.Vec3{ .x = 0, .y = 1, .z = 0 }, // Default upward normal
     };
 
-    // std.debug.print("🔍 ADD_ENTITY: collision_shape={d}, calculated extents=({d:.3},{d:.3},{d:.3})\n",
-    //     .{@intFromEnum(collision_shape), extents.x, extents.y, extents.z});
-
     // Initialize physics component
     physics_components[index] = PhysicsComponent{
         .position = .{ .x = x, .y = y, .z = z },
         .velocity = .{ .x = 0, .y = 0, .z = 0 },
         .force = .{ .x = 0, .y = 0, .z = 0 },
-        .rotation = .{ .x = 0, .y = 0, .z = 0 },
+        .rotation = .{ .x = rotX, .y = rotY, .z = rotZ },
         .scale = .{ .x = scaleX, .y = scaleY, .z = scaleZ },
-        .mass = mass,
+        .mass = solver_mass.mass,
+        .inv_mass = solver_mass.inv_mass,
+        .gravity_scale = gravityScale,
         .radius = radius, // Legacy field
-        .is_kinematic = isKinematic,
+        .body_type = body_type,
         .collision_shape = collision_shape,
         .extents = extents,
     };
 
-    // Initialize rendering component
+    // Rendering component: color now; the transform matrix (incl. rotation) is
+    // built below by updateECSTransformMatrix from the physics component.
     rendering_components[index] = RenderingComponent{
         .transform_matrix = [_]f32{
-            // Column 0: Scale X axis
-            scaleX, 0.0,    0.0,    0.0,
-            // Column 1: Scale Y axis
-            0.0,    scaleY, 0.0,    0.0,
-            // Column 2: Scale Z axis
-            0.0,    0.0,    scaleZ, 0.0,
-            // Column 3: Translation (position)
-            x,      y,      z,      1.0,
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
         },
         .color = [_]f32{ colorR, colorG, colorB, colorA },
+        .anim_time = 0,
+        .variant_tex_index = 0,
+        .lod_flags = 0,
+        .bone_palette_off = 0,
     };
 
     // Initialize entity metadata
     entity_metadata[index] = EntityMetadata{
         .id = id, // index,
         .active = true,
-        .physics_enabled = mass != 0, // <-- Only enable physics if mass > 0 (temporary workaround before WASM API revamp)
+        .physics_enabled = physicsEnabled,
         .rendering_enabled = true,
         .transform_dirty = false,
         .mesh_index = meshIndex,
         .material_id = materialId,
     };
     rememberEntityIndex(id, index);
+
+    // Bake position + rotation + scale into the render matrix at add time (fixes the
+    // "static entities silently drop their initial rotation" bug — previously rotation
+    // only reached the matrix via a kinematic RigidBody's per-frame sync).
+    updateECSTransformMatrix(index);
+}
+
+// Runtime body-type transition (e.g. a KINEMATIC elevator whose cable snaps -> DYNAMIC
+// and falls). The stored mass survives transitions; inv_mass is re-derived, with the
+// same mass <= 0 fallback for DYNAMIC.
+pub export fn set_entity_body_type(id: u32, bodyType: u8) void {
+    if (findECSEntityById(id)) |index| {
+        const body_type: BodyType = switch (bodyType) {
+            0 => .DYNAMIC,
+            1 => .KINEMATIC,
+            else => .STATIC,
+        };
+        const solver_mass = deriveInvMass(body_type, physics_components[index].mass);
+        physics_components[index].body_type = body_type;
+        physics_components[index].mass = solver_mass.mass;
+        physics_components[index].inv_mass = solver_mass.inv_mass;
+    }
+}
+
+// Runtime gravity-scale change (DYNAMIC bodies; a no-op for the solver on others).
+pub export fn set_entity_gravity_scale(id: u32, scale: f32) void {
+    if (findECSEntityById(id)) |index| {
+        physics_components[index].gravity_scale = scale;
+    }
 }
 
 pub export fn remove_entity(id: u32) void {
@@ -1331,11 +1429,12 @@ pub export fn get_entity_count() u32 {
 
 pub export fn apply_force_to_entity(id: u32, fx: f32, fy: f32, fz: f32) void {
     if (findECSEntityById(id)) |index| {
-        if (!physics_components[index].is_kinematic) {
-            // Apply force to velocity (simple integration)
-            physics_components[index].velocity.x += fx / physics_components[index].mass;
-            physics_components[index].velocity.y += fy / physics_components[index].mass;
-            physics_components[index].velocity.z += fz / physics_components[index].mass;
+        // Only DYNAMIC bodies respond to forces; inv_mass multiply (never divides by zero)
+        const inv_mass = physics_components[index].inv_mass;
+        if (physics_components[index].body_type == .DYNAMIC) {
+            physics_components[index].velocity.x += fx * inv_mass;
+            physics_components[index].velocity.y += fy * inv_mass;
+            physics_components[index].velocity.z += fz * inv_mass;
         }
     }
 }
@@ -1499,8 +1598,10 @@ pub export fn spawn_entity_with_collider(
         .rotation = .{ .x = 0, .y = 0, .z = 0 },
         .scale = .{ .x = 1, .y = 1, .z = 1 },
         .mass = 1.0,
+        .inv_mass = 1.0,
+        .gravity_scale = 1.0,
         .radius = extent_x, // Legacy field - use extent_x as radius
-        .is_kinematic = false,
+        .body_type = .DYNAMIC,
         .collision_shape = shape,
         .extents = extents,
     };
@@ -1518,6 +1619,10 @@ pub export fn spawn_entity_with_collider(
             .BOX => [_]f32{ 0.2, 0.8, 1.0, 1.0 }, // Sky blue for boxes
             .PLANE => [_]f32{ 0.3, 0.7, 0.3, 1.0 }, // Green for planes
         },
+        .anim_time = 0,
+        .variant_tex_index = 0,
+        .lod_flags = 0,
+        .bone_palette_off = 0,
     };
 
     // Initialize entity metadata
@@ -1611,7 +1716,7 @@ pub export fn debug_get_entity_physics_info(id: u32, info_type: u8) f32 {
             5 => phys.velocity.z,
             6 => phys.mass,
             7 => phys.radius,
-            8 => if (phys.is_kinematic) 1.0 else 0.0,
+            8 => if (phys.isImmovable()) 1.0 else 0.0,
             9 => if (entity_metadata[index].physics_enabled) 1.0 else 0.0,
             10 => @as(f32, @floatFromInt(@intFromEnum(phys.collision_shape))),
             else => -999.0, // Invalid info_type marker

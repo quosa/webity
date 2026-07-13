@@ -103,7 +103,7 @@ describe('RigidBody Component', () => {
             // Mock physics bridge to test force application
             const mockBridge = {
                 applyForce: jest.fn(),
-                setKinematic: jest.fn()
+                setBodyType: jest.fn()
             };
             rigidBody.setWasmEntityId(42);
             rigidBody.setPhysicsBridge(mockBridge);
@@ -180,7 +180,7 @@ describe('RigidBody Component', () => {
             };
             const mockBridge = {
                 getEntityData: jest.fn(() => mockEntityData),
-                setKinematic: jest.fn()
+                setBodyType: jest.fn()
             };
             rigidBody.setWasmEntityId(789);
             rigidBody.setPhysicsBridge(mockBridge);
@@ -215,7 +215,7 @@ describe('RigidBody Component', () => {
 
         test('should handle kinematic state changes', () => {
             const mockBridge = {
-                setKinematic: jest.fn()
+                setBodyType: jest.fn()
             };
             rigidBody.setWasmEntityId(321);
             rigidBody.setPhysicsBridge(mockBridge);

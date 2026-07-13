@@ -142,8 +142,8 @@ function captureWasmBufferData(bridge: WasmPhysicsBridge) {
         const transformsOffset = bridge.getEntityTransformsOffsetSafe();
 
         if (wasmMemory) {
-            // Read instance data: 20 floats per instance (16 transform + 4 color)
-            const instanceData = new Float32Array(wasmMemory, transformsOffset, stats.entityCount * 20);
+            // Read instance data: 24 floats / 96 B per instance (16 transform + 4 color + 4 Stage-C fields)
+            const instanceData = new Float32Array(wasmMemory, transformsOffset, stats.entityCount * 24);
 
             // Extract transform matrix (first 16 floats)
             transforms = Array.from(instanceData.slice(0, 16));
