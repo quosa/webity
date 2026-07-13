@@ -1634,6 +1634,12 @@ The plan's "Tracked follow-up tasks" + "Backlog" sections hold the full detail; 
     table made per-mesh mode the aligned choice; per-entity mode would need (mesh × mode)
     buckets. Revisit only if a real "same mesh drawn both ways" need appears.
 - (#4) shared `runScene()` bootstrap helper, adopted across the ~15 demo scenes.
+- **Core API signature cleanup (from PR #19 review, 2026-07-12):** all implementations live in
+  this repo, so legacy-compat surfaces can be broken outright in a dedicated cleanup pass.
+  Prime candidate: `RigidBody` — drop the positional `useGravity: boolean` + `opts.kinematic`
+  constructor form in favor of a BodyType-first API (e.g.
+  `new RigidBody({ bodyType, mass, gravityScale, shape, extents })`), and retire the
+  `isKinematic`/`useGravity` accessors once call sites migrate (~62 `new RigidBody(` sites).
 - (#7) coverage refinement — `engine.ts` (~24%), `scene-system.ts` `setCamera`/`camera` getter,
   `camera-object.ts` `OrthographicCamera` branch, `components.ts` RigidBody lifecycle branches; Zig
   `test:wasm:coverage` top-up.

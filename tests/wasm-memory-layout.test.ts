@@ -46,20 +46,15 @@ describe('WASM Memory Layout Debug', () => {
         console.log('🧮 WASM Entity Layout Analysis:');
         console.log('  Entity struct size:', wasm.get_entity_size(), 'bytes');
         console.log('  Entity stride:', wasm.get_entity_stride(), 'bytes');
-        console.log('  Expected GPU data size per entity:', 20 * 4, 'bytes (20 floats)');
+        console.log('  Expected GPU data size per entity:', 24 * 4, 'bytes (24 floats)');
 
         const entityStride = wasm.get_entity_stride();
-        const expectedGpuSize = 20 * 4; // 20 floats * 4 bytes per float
+        const expectedGpuSize = 24 * 4; // 96 B extern RenderingComponent (B4/B6)
 
-        console.log('📊 Layout Analysis:');
-        if (entityStride === expectedGpuSize) {
-            console.log('  ✅ Entity stride matches expected GPU data size');
-        } else {
-            console.log('  ❌ Entity stride mismatch!');
-            console.log('    Expected:', expectedGpuSize, 'bytes');
-            console.log('    Actual:', entityStride, 'bytes');
-            console.log('    Extra bytes per entity:', entityStride - expectedGpuSize);
-        }
+        // The stride IS the ABI contract between WASM and the GPU instance buffer —
+        // assert it (this used to be a log-only check that stayed green on mismatch).
+        expect(entityStride).toBe(expectedGpuSize);
+        expect(wasm.get_entity_size()).toBe(expectedGpuSize);
 
         // Check if transform matrices are at correct positions
         const wasmMemory = physicsBridge.getWasmMemory();
@@ -77,8 +72,8 @@ describe('WASM Memory Layout Debug', () => {
                 const actualOffset = transformsOffset + (i * entityStride);
 
                 // Check if this offset is within bounds
-                if (actualOffset + 80 <= wasmMemory.byteLength) { // 80 bytes = 20 floats
-                    const entityData = new Float32Array(wasmMemory, actualOffset, 20);
+                if (actualOffset + 96 <= wasmMemory.byteLength) { // 96 bytes = 24 floats
+                    const entityData = new Float32Array(wasmMemory, actualOffset, 24);
 
                     console.log(`  Entity ${i} (stride-based):`);
                     console.log('    Transform:', Array.from(entityData.slice(0, 16)));
