@@ -81,8 +81,13 @@ bool accessor); `set_entity_body_type` (runtime transitions, stored mass becomes
 instance vertex stream deleted; bind group rebuilt only on buffer growth; compute-readable for
 Stage C culling/redirection.
 
-**Remaining: B7, B8** (normals/uv + lambert — intentionally changes visuals, needs a snapshot
-refresh on real hardware; sync-round-trip trim).
+**B8 ✅ (2026-07-13):** the per-frame WASM→TS `syncPhysicsResults` round-trip is gone —
+`bridge.update()` only steps the simulation; the renderer reads transforms straight from WASM
+(B3/B5). Game logic pulls state explicitly: `RigidBody.syncFromWasm()` (e.g. the rain recycler)
+or `bridge.syncAllGameObjectsFromWasm()` for one-shot debug snapshots (stack-test scenes).
+
+**Remaining: B7 only** (normals/uv + lambert — intentionally changes visuals, needs a snapshot
+refresh on real hardware). Stage B is otherwise complete.
 
 ## Agreed sequencing (decided 2026-07-12)
 

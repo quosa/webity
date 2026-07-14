@@ -151,15 +151,21 @@ new MeshRenderer(mesh, material?, renderMode?)
 // renderMode: 'triangles' (default) or 'lines' (wireframe)
 ```
 
-**RigidBody** (physics simulation):
+**RigidBody** (physics simulation) — BodyType model (DYNAMIC/KINEMATIC/STATIC):
 ```typescript
 new RigidBody(mass, useGravity, collisionShape?, extents?, opts?)
-// mass:           physics mass — MUST be non-zero to simulate/collide (mass 0 is inert!)
-// useGravity:     true = affected by gravity
+// mass:           ACTIVE on DYNAMIC bodies (must be > 0; invalid values clamp to 1 with a
+//                 warning); stored-but-inert on KINEMATIC; ignored on STATIC
+// useGravity:     legacy bool -> gravityScale 1/0; prefer opts.gravityScale
+//                 (1.0 normal, 0.0 space — still simulated/collides, 0.16 moon)
 // collisionShape: CollisionShape.SPHERE (default) | BOX | PLANE
 // extents:        half-extents (box) / radius in .x (sphere)
-// opts:           { kinematic?: boolean } — kinematic bodies ignore forces (won't move)
-// For a fixed, collidable surface use RigidBody.staticBody(shape, extents).
+// opts:           { bodyType?: BodyType, gravityScale?: number, kinematic?: boolean }
+// KINEMATIC/STATIC bodies are immovable colliders regardless of mass.
+// For a fixed, collidable surface use RigidBody.staticBody(shape, extents) (STATIC).
+// Runtime transitions: rb.setBodyType(BodyType.DYNAMIC) — stored mass goes live.
+// NOTE (B8): TS transforms of dynamic bodies are NOT auto-synced from physics each
+// frame; call rb.syncFromWasm() when game logic needs the simulated position/velocity.
 ```
 
 ### Scene Lifecycle
@@ -247,14 +253,15 @@ After creating a scene:
 6. ❌ **Mounting by hand**: calling `scene.start()` without `await engine.loadScene(scene)`
    ✅ **Correct**: `await engine.loadScene(scene)` (uploads meshes + registers entities) then `engine.start()`
 
-7. ❌ **Inert collider**: a `RigidBody` with `mass = 0` is silently non-colliding
-   ✅ **Correct**: use a non-zero mass, or `RigidBody.staticBody(shape, extents)` for fixed surfaces
+7. ❌ **Reading simulated positions without a pull**: `entity.transform.position` of a dynamic
+   body is NOT auto-updated from physics each frame (B8)
+   ✅ **Correct**: call `rigidBody.syncFromWasm()` first (or `bridge.syncAllGameObjectsFromWasm()`)
 
 ## Current Engine Status
 
 - ✅ **ECS Physics Engine** - 19.6KB optimized WASM with 4-component architecture
 - ✅ **GameObject/Component System** - Unity-style architecture fully implemented
 - ✅ **WebGPU Rendering** - Modern GPU pipeline with copy-based WASM integration
-- 🎯 **Current Priority** - Physics collision system improvements (see main game plan)
+- 🎯 **Current Priority** - Stage B instanced rendering (see docs/instanced-rendering-refactor-plan.md)
 
 **Performance Baseline**: 6,598+ entity rendering at 60fps with all 38+ tests passing

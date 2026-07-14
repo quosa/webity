@@ -305,6 +305,26 @@ export class RigidBody extends Component {
         console.log(`🔵 RigidBody.initializePhysics() for "${this.gameObject.name}"`);
     }
 
+    // Pull the simulated position/velocity from WASM into this GameObject.
+    // B8: there is no automatic per-frame WASM->TS copy anymore (the renderer reads
+    // transforms straight from WASM) — call this when game logic needs the fresh
+    // physics state of a dynamic body (e.g. despawn checks, gameplay triggers).
+    public syncFromWasm(): void {
+        if (!this.gameObject || !this.physicsBridge || this.wasmEntityId === undefined) return;
+        if (this.isKinematic) return; // TS transform is the source of truth for immovable bodies
+
+        const position = this.physicsBridge.getEntityPosition(this.wasmEntityId);
+        const velocity = this.physicsBridge.getEntityVelocity(this.wasmEntityId);
+        if (position) {
+            this.gameObject.transform.setPosition(position.x, position.y, position.z);
+        }
+        if (velocity) {
+            this.velocity.x = velocity.x;
+            this.velocity.y = velocity.y;
+            this.velocity.z = velocity.z;
+        }
+    }
+
     // Sync current state to WASM physics system
     public syncToWasm(): void {
         if (!this.gameObject || !this.physicsBridge || this.wasmEntityId === undefined) return;

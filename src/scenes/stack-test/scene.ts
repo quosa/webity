@@ -288,7 +288,9 @@ function checkForNewCollisions() {
         console.log('   No collision events logged yet');
     }
 
-    // Check entity positions and compare radius values between TypeScript and WASM
+    // Check entity positions and compare radius values between TypeScript and WASM.
+    // B8: TS transforms are no longer auto-synced each frame — pull a fresh snapshot first.
+    physicsBridge.syncAllGameObjectsFromWasm();
     const entities = scene.getAllGameObjects().filter(e => e.name !== 'Floor');
     entities.forEach((entity) => {
         const rigidBody = entity.getComponent(RigidBody);

@@ -162,24 +162,37 @@ describe('WasmPhysicsBridge.update() sync-back', () => {
         return bridge;
     }
 
-    it('writes WASM position/velocity back into a dynamic body', async () => {
+    it('update() alone does NOT copy WASM state into GameObjects (B8: renderer reads WASM directly)', async () => {
         const go = new GameObject('dynamic');
+        go.transform.setPosition(7, 7, 7);
         go.addComponent(new RigidBody(1, true, CollisionShape.SPHERE, { x: 0.5, y: 0.5, z: 0.5 }));
         const bridge = await bridgeWith([0, go]);
 
         bridge.update(0.016);
 
+        expect(go.transform.position).toEqual({ x: 7, y: 7, z: 7 }); // untouched
+    });
+
+    it('syncAllGameObjectsFromWasm pulls position/velocity into a dynamic body on demand', async () => {
+        const go = new GameObject('dynamic');
+        go.addComponent(new RigidBody(1, true, CollisionShape.SPHERE, { x: 0.5, y: 0.5, z: 0.5 }));
+        const bridge = await bridgeWith([0, go]);
+
+        bridge.update(0.016);
+        bridge.syncAllGameObjectsFromWasm();
+
         expect(go.transform.position).toEqual({ x: 1, y: 2, z: 3 });
         expect(go.getComponent(RigidBody)?.velocity).toEqual({ x: 4, y: 5, z: 6 });
     });
 
-    it('skips kinematic bodies (their transform is author/WASM-driven, not synced back)', async () => {
+    it('sync skips kinematic bodies (their transform is author/WASM-driven, not synced back)', async () => {
         const go = new GameObject('kinematic');
         go.transform.setPosition(9, 9, 9);
         go.addComponent(new RigidBody(1, false, CollisionShape.BOX, { x: 1, y: 1, z: 1 }, { kinematic: true }));
         const bridge = await bridgeWith([0, go]);
 
         bridge.update(0.016);
+        bridge.syncAllGameObjectsFromWasm();
 
         expect(go.transform.position).toEqual({ x: 9, y: 9, z: 9 });
     });
